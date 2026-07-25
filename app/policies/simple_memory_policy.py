@@ -9,4 +9,10 @@ class SimpleMemoryPolicy(BaseMemoryPolicy):
     }
 
     def should_remember(self, key: str, value: str) -> bool:
-        return key in self.ALLOWED_KEYS
+        if key not in self.ALLOWED_KEYS:
+            return False
+
+        if not value.strip():
+            return False
+
+        return True

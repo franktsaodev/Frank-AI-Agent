@@ -21,3 +21,25 @@ def test_should_remember_returns_false_for_unknown_key():
     )
 
     assert result is False
+
+
+def test_should_not_remember_allowed_key_with_empty_value() -> None:
+    policy = SimpleMemoryPolicy()
+
+    result = policy.should_remember(
+        "user_name",
+        "",
+    )
+
+    assert result is False
+
+
+def test_should_not_remember_allowed_key_with_whitespace_value() -> None:
+    policy = SimpleMemoryPolicy()
+
+    result = policy.should_remember(
+        "user_name",
+        "   ",
+    )
+
+    assert result is False
