@@ -8,6 +8,7 @@ from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.prompts.base_prompt_template import BasePromptTemplate
 from app.policies.base_memory_policy import BaseMemoryPolicy
+from app.prompts.prompt_composer import PromptComposer
 
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ class ChatAgent:
         fact_memory: BaseFactMemory,
         fact_extractor: BaseFactExtractor,
         memory_policy: BaseMemoryPolicy,
+        prompt_composer: PromptComposer,
     ) -> None:
         logger.info("ChatAgent initialized")
 
@@ -31,6 +33,7 @@ class ChatAgent:
         self.fact_memory = fact_memory
         self.fact_extractor = fact_extractor
         self.memory_policy = memory_policy
+        self.prompt_composer = prompt_composer
 
         rendered_prompt = self.prompt_template.render()
 
@@ -70,47 +73,6 @@ class ChatAgent:
                 value,
             )
 
-    def _format_facts(
-        self,
-        facts: dict[str, str],
-    ) -> str | None:
-        if not facts:
-            return None
-
-        formatted_facts = "\n".join(f"- {key}: {value}" for key, value in facts.items())
-
-        return f"Known user facts:\n{formatted_facts}"
-
-    def _build_messages(
-        self,
-        user_message: Message,
-    ) -> list[Message]:
-        history_messages = self.memory.get_messages()
-        facts = self.fact_memory.get_all()
-
-        system_content = self.system_message.content
-        facts_content = self._format_facts(facts)
-
-        if facts_content is not None:
-            system_content = f"{system_content}\n\n{facts_content}"
-
-        system_message = Message(
-            role=MessageRole.SYSTEM,
-            content=system_content,
-        )
-
-        logger.debug(
-            "Building messages with %d memory items and %d facts",
-            len(history_messages),
-            len(facts),
-        )
-
-        return [
-            system_message,
-            *history_messages,
-            user_message,
-        ]
-
     def remember_fact(
         self,
         key: str,
@@ -147,15 +109,24 @@ class ChatAgent:
             content=message,
         )
 
-        facts = self.fact_extractor.extract(
+        extracted_facts = self.fact_extractor.extract(
             user_message.content,
         )
 
         self._remember_extracted_facts(
-            facts,
+            extracted_facts,
         )
 
-        messages = self._build_messages(user_message)
+        history_messages = self.memory.get_messages()
+        known_facts = self.fact_memory.get_all()
+
+        messages = self.prompt_composer.compose(
+            system_message=self.system_message,
+            history_messages=history_messages,
+            facts=known_facts,
+            user_message=user_message,
+        )
+
         response = self.client.chat(messages)
 
         assistant_message = Message(

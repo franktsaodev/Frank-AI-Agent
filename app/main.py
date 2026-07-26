@@ -17,6 +17,7 @@ from app.prompts.prompt_template import PromptTemplate
 from app.memory.in_memory_fact_memory import InMemoryFactMemory
 from app.extractors.regex_fact_extractor import RegexFactExtractor
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
+from app.prompts.prompt_composer import PromptComposer
 
 
 def run_demo(agent: ChatAgent) -> None:
@@ -81,6 +82,8 @@ def create_agent() -> ChatAgent:
 
     memory_policy = SimpleMemoryPolicy()
 
+    prompt_composer = PromptComposer()
+
     return ChatAgent(
         prompt_template=prompt_template,
         client=client,
@@ -88,6 +91,7 @@ def create_agent() -> ChatAgent:
         fact_memory=fact_memory,
         fact_extractor=fact_extractor,
         memory_policy=memory_policy,
+        prompt_composer=prompt_composer,
     )
 
 
