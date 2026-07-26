@@ -1,0 +1,186 @@
+from app.models.message import Message
+from app.models.message_role import MessageRole
+from app.prompts.prompt_composer import PromptComposer
+
+
+def test_compose_returns_system_and_user_messages_without_history_or_facts() -> None:
+    system_message = Message(
+        role=MessageRole.SYSTEM,
+        content="You are a helpful assistant.",
+    )
+
+    user_message = Message(
+        role=MessageRole.USER,
+        content="Hello.",
+    )
+
+    composer = PromptComposer()
+
+    result = composer.compose(
+        system_message=system_message,
+        history_messages=[],
+        facts={},
+        user_message=user_message,
+    )
+
+    assert result == [
+        system_message,
+        user_message,
+    ]
+
+
+def test_compose_includes_history_messages_between_system_and_user() -> None:
+    system_message = Message(
+        role=MessageRole.SYSTEM,
+        content="You are a helpful assistant.",
+    )
+
+    previous_user_message = Message(
+        role=MessageRole.USER,
+        content="What is Python?",
+    )
+
+    assistant_message = Message(
+        role=MessageRole.ASSISTANT,
+        content="Python is a programming language.",
+    )
+
+    user_message = Message(
+        role=MessageRole.USER,
+        content="Who created it?",
+    )
+
+    composer = PromptComposer()
+
+    result = composer.compose(
+        system_message=system_message,
+        history_messages=[
+            previous_user_message,
+            assistant_message,
+        ],
+        facts={},
+        user_message=user_message,
+    )
+
+    assert result == [
+        system_message,
+        previous_user_message,
+        assistant_message,
+        user_message,
+    ]
+
+
+def test_compose_appends_facts_to_system_message_when_facts_exist() -> None:
+    system_message = Message(
+        role=MessageRole.SYSTEM,
+        content="You are a helpful assistant.",
+    )
+
+    user_message = Message(
+        role=MessageRole.USER,
+        content="Hello.",
+    )
+
+    facts = {
+        "user_name": "Frank",
+    }
+
+    composer = PromptComposer()
+
+    result = composer.compose(
+        system_message=system_message,
+        history_messages=[],
+        facts=facts,
+        user_message=user_message,
+    )
+
+    assert result[0].role == MessageRole.SYSTEM
+    assert result[0].content == (
+        "You are a helpful assistant.\n\nUser facts:\n- user_name: Frank"
+    )
+
+    assert result[1] == user_message
+
+
+def test_compose_includes_facts_and_preserves_history_order() -> None:
+    system_message = Message(
+        role=MessageRole.SYSTEM,
+        content="You are a helpful assistant.",
+    )
+
+    previous_user_message = Message(
+        role=MessageRole.USER,
+        content="What is my name?",
+    )
+
+    assistant_message = Message(
+        role=MessageRole.ASSISTANT,
+        content="Your name is Frank.",
+    )
+
+    user_message = Message(
+        role=MessageRole.USER,
+        content="What music do I like?",
+    )
+
+    facts = {
+        "user_name": "Frank",
+        "favorite_music": "Jazz",
+    }
+
+    composer = PromptComposer()
+
+    result = composer.compose(
+        system_message=system_message,
+        history_messages=[
+            previous_user_message,
+            assistant_message,
+        ],
+        facts=facts,
+        user_message=user_message,
+    )
+
+    assert result == [
+        Message(
+            role=MessageRole.SYSTEM,
+            content=(
+                "You are a helpful assistant.\n\n"
+                "User facts:\n"
+                "- user_name: Frank\n"
+                "- favorite_music: Jazz"
+            ),
+        ),
+        previous_user_message,
+        assistant_message,
+        user_message,
+    ]
+
+
+def test_compose_does_not_modify_original_system_message() -> None:
+    system_message = Message(
+        role=MessageRole.SYSTEM,
+        content="You are a helpful assistant.",
+    )
+
+    original_system_message = Message(
+        role=MessageRole.SYSTEM,
+        content="You are a helpful assistant.",
+    )
+
+    user_message = Message(
+        role=MessageRole.USER,
+        content="Hello.",
+    )
+
+    composer = PromptComposer()
+
+    composer.compose(
+        system_message=system_message,
+        history_messages=[],
+        facts={
+            "user_name": "Frank",
+        },
+        user_message=user_message,
+    )
+
+    assert system_message == original_system_message
