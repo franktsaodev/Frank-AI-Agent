@@ -2,6 +2,7 @@ import pytest
 
 from app.tools.tool_executor import ToolExecutor
 from app.tools.tool_registry import ToolRegistry
+from app.tools.tool_call import ToolCall
 
 from tests.fakes.fake_tool import FakeTool
 from tests.fakes.failing_tool import FailingTool
@@ -13,13 +14,15 @@ def test_execute_calls_tool_with_arguments() -> None:
     registry.register(fake_tool)
     executor = ToolExecutor(registry)
 
-    result = executor.execute(
-        tool_name="fake",
+    tool_call = ToolCall(
+        name="fake",
         arguments={
             "message": "hello",
             "count": 3,
         },
     )
+
+    result = executor.execute(tool_call)
 
     assert result == "fake result"
     assert fake_tool.received_arguments == {
@@ -37,8 +40,10 @@ def test_execute_raises_error_when_tool_does_not_exist() -> None:
         match="Tool not found: weather",
     ):
         executor.execute(
-            tool_name="weather",
-            arguments={},
+            ToolCall(
+                name="weather",
+                arguments={},
+            )
         )
 
 
@@ -52,6 +57,8 @@ def test_execute_propagates_tool_error() -> None:
         match="Tool execution failed",
     ):
         executor.execute(
-            tool_name="failing",
-            arguments={},
+            ToolCall(
+                name="failing",
+                arguments={},
+            )
         )
