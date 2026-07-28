@@ -18,10 +18,15 @@ from app.exceptions.client_exceptions import (
 )
 from app.models.message import Message
 from app.models.message_role import MessageRole
+from app.tools.calculator_tool import CalculatorTool
+from app.tools.tool_provider import ToolProvider
+from app.tools.tool_registry import ToolRegistry
+from app.tools.tool_schema_adapter import ToolSchemaAdapter
 
 
 def create_groq_client(
     *,
+    tool_provider: ToolProvider | None = None,
     max_attempts: int = 3,
     initial_delay_seconds: float = 1.0,
     backoff_multiplier: float = 2.0,
@@ -38,9 +43,19 @@ def create_groq_client(
         backoff_multiplier=backoff_multiplier,
     )
 
+    if tool_provider is None:
+        registry = ToolRegistry()
+        adapter = ToolSchemaAdapter()
+
+        tool_provider = ToolProvider(
+            registry=registry,
+            adapter=adapter,
+        )
+
     return GroqClient(
         groq_config=groq_config,
         retry_config=retry_config,
+        tool_provider=tool_provider,
     )
 
 
@@ -255,3 +270,73 @@ def test_chat_raises_rate_limit_error_after_max_attempts(
         call(1.0),
         call(2.0),
     ]
+
+
+def test_chat_includes_tool_schemas_when_tools_registered(
+    messages: list[Message],
+) -> None:
+    registry = ToolRegistry()
+    registry.register(CalculatorTool())
+
+    adapter = ToolSchemaAdapter()
+
+    provider = ToolProvider(
+        registry=registry,
+        adapter=adapter,
+    )
+
+    groq_client = create_groq_client(
+        tool_provider=provider,
+    )
+
+    successful_response = MagicMock()
+    successful_response.choices[0].message.content = "好的"
+    successful_response.choices[0].finish_reason = "stop"
+
+    mock_create = MagicMock(
+        return_value=successful_response,
+    )
+
+    groq_client.client.chat.completions.create = mock_create
+
+    result = groq_client.chat(messages)
+
+    kwargs = mock_create.call_args.kwargs
+
+    assert result == "好的"
+    assert "tools" in kwargs
+    assert len(kwargs["tools"]) == 1
+    assert kwargs["tools"][0]["function"]["name"] == "calculator"
+
+
+def test_chat_omits_tools_when_no_tools_registered(
+    messages: list[Message],
+) -> None:
+    registry = ToolRegistry()
+    adapter = ToolSchemaAdapter()
+
+    provider = ToolProvider(
+        registry=registry,
+        adapter=adapter,
+    )
+
+    groq_client = create_groq_client(
+        tool_provider=provider,
+    )
+
+    successful_response = MagicMock()
+    successful_response.choices[0].message.content = "好的"
+    successful_response.choices[0].finish_reason = "stop"
+
+    mock_create = MagicMock(
+        return_value=successful_response,
+    )
+
+    groq_client.client.chat.completions.create = mock_create
+
+    result = groq_client.chat(messages)
+
+    kwargs = mock_create.call_args.kwargs
+
+    assert result == "好的"
+    assert "tools" not in kwargs

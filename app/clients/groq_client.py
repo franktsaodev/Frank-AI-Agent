@@ -20,18 +20,25 @@ from app.exceptions.client_exceptions import (
     ClientTimeoutError,
 )
 from app.models.message import Message
+from app.tools.tool_provider import ToolProvider
 
 logger = logging.getLogger(__name__)
 
 
 class GroqClient(BaseClient):
-    def __init__(self, groq_config: GroqConfig, retry_config: RetryConfig) -> None:
+    def __init__(
+        self,
+        groq_config: GroqConfig,
+        retry_config: RetryConfig,
+        tool_provider: ToolProvider,
+    ) -> None:
         self.client = Groq(
             api_key=groq_config.api_key,
             max_retries=0,
         )
         self.groq_config = groq_config
         self.retry_config = retry_config
+        self.tool_provider = tool_provider
 
     def _calculate_delay(self, attempt: int) -> float:
         return (
@@ -174,11 +181,20 @@ class GroqClient(BaseClient):
                     max_attempts,
                 )
 
+                tool_schemas = self.tool_provider.get_tool_schemas()
+
+                request_kwargs = {
+                    "messages": formatted_messages,
+                    "model": self.groq_config.model,
+                    "temperature": self.groq_config.temperature,
+                    "max_completion_tokens": self.groq_config.max_completion_tokens,
+                }
+
+                if tool_schemas:
+                    request_kwargs["tools"] = tool_schemas
+
                 response = self.client.chat.completions.create(
-                    messages=formatted_messages,
-                    model=self.groq_config.model,
-                    temperature=self.groq_config.temperature,
-                    max_completion_tokens=self.groq_config.max_completion_tokens,
+                    **request_kwargs,
                 )
 
                 choice = response.choices[0]
