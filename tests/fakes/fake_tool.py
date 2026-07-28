@@ -15,6 +15,14 @@ class FakeTool(BaseTool):
     def description(self) -> str:
         return "A fake tool for testing."
 
+    @property
+    def input_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": True,
+        }
+
     def execute(self, **kwargs: Any) -> str:
         self.received_arguments = dict(kwargs)
         return "fake result"

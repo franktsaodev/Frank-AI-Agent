@@ -96,3 +96,52 @@ def test_execute_raises_error_when_operation_is_missing() -> None:
             a=10,
             b=20,
         )
+
+
+def test_input_schema_describes_calculator_arguments() -> None:
+    tool = CalculatorTool()
+
+    assert tool.input_schema == {
+        "type": "object",
+        "properties": {
+            "operation": {
+                "type": "string",
+                "description": "The arithmetic operation to perform.",
+                "enum": [
+                    "add",
+                    "subtract",
+                    "multiply",
+                    "divide",
+                ],
+            },
+            "a": {
+                "type": "number",
+                "description": "The first number.",
+            },
+            "b": {
+                "type": "number",
+                "description": "The second number.",
+            },
+        },
+        "required": [
+            "operation",
+            "a",
+            "b",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def test_input_schema_returns_independent_dictionary() -> None:
+    tool = CalculatorTool()
+
+    first_schema = tool.input_schema
+    second_schema = tool.input_schema
+
+    first_schema["required"].clear()
+
+    assert second_schema["required"] == [
+        "operation",
+        "a",
+        "b",
+    ]

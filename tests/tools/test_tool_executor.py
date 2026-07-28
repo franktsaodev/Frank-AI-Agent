@@ -1,11 +1,10 @@
 import pytest
 
+from app.tools.tool_call import ToolCall
 from app.tools.tool_executor import ToolExecutor
 from app.tools.tool_registry import ToolRegistry
-from app.tools.tool_call import ToolCall
-
-from tests.fakes.fake_tool import FakeTool
 from tests.fakes.failing_tool import FailingTool
+from tests.fakes.fake_tool import FakeTool
 
 
 def test_execute_calls_tool_with_arguments() -> None:

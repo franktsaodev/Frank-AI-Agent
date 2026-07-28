@@ -12,6 +12,38 @@ class CalculatorTool(BaseTool):
     def description(self) -> str:
         return "Perform basic arithmetic calculations."
 
+    @property
+    def input_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "description": "The arithmetic operation to perform.",
+                    "enum": [
+                        "add",
+                        "subtract",
+                        "multiply",
+                        "divide",
+                    ],
+                },
+                "a": {
+                    "type": "number",
+                    "description": "The first number.",
+                },
+                "b": {
+                    "type": "number",
+                    "description": "The second number.",
+                },
+            },
+            "required": [
+                "operation",
+                "a",
+                "b",
+            ],
+            "additionalProperties": False,
+        }
+
     def execute(self, **kwargs: Any) -> float:
         operation = kwargs.get("operation")
         a = kwargs.get("a")

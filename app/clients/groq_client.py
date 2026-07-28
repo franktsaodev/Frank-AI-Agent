@@ -15,8 +15,8 @@ from app.config_models.retry_config import RetryConfig
 from app.exceptions.client_exceptions import (
     ClientAuthenticationError,
     ClientConnectionError,
-    ClientRateLimitError,
     ClientInvalidResponseError,
+    ClientRateLimitError,
     ClientTimeoutError,
 )
 from app.models.message import Message
@@ -106,10 +106,7 @@ class GroqClient(BaseClient):
         if not any(character.isalnum() for character in cleaned_content):
             return False
 
-        if not self._contains_chinese(cleaned_content):
-            return False
-
-        return True
+        return self._contains_chinese(cleaned_content)
 
     def _validate_messages(
         self,

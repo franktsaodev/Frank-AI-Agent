@@ -13,6 +13,11 @@ class BaseTool(ABC):
     def description(self) -> str:
         raise NotImplementedError
 
+    @property
+    @abstractmethod
+    def input_schema(self) -> dict[str, Any]:
+        raise NotImplementedError
+
     @abstractmethod
     def execute(self, **kwargs: Any) -> Any:
         raise NotImplementedError

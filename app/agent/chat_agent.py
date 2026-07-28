@@ -6,10 +6,9 @@ from app.memory.base_fact_memory import BaseFactMemory
 from app.memory.base_memory import BaseMemory
 from app.models.message import Message
 from app.models.message_role import MessageRole
-from app.prompts.base_prompt_template import BasePromptTemplate
 from app.policies.base_memory_policy import BaseMemoryPolicy
+from app.prompts.base_prompt_template import BasePromptTemplate
 from app.prompts.prompt_composer import PromptComposer
-
 
 logger = logging.getLogger(__name__)
 
