@@ -14,6 +14,7 @@ def test_execute_calls_tool_with_arguments() -> None:
     executor = ToolExecutor(registry)
 
     tool_call = ToolCall(
+        call_id="",
         name="fake",
         arguments={
             "message": "hello",
@@ -40,6 +41,7 @@ def test_execute_raises_error_when_tool_does_not_exist() -> None:
     ):
         executor.execute(
             ToolCall(
+                call_id="",
                 name="weather",
                 arguments={},
             )
@@ -57,6 +59,7 @@ def test_execute_propagates_tool_error() -> None:
     ):
         executor.execute(
             ToolCall(
+                call_id="",
                 name="failing",
                 arguments={},
             )

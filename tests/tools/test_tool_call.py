@@ -7,6 +7,7 @@ from app.tools.tool_call import ToolCall
 
 def test_create_tool_call() -> None:
     tool_call = ToolCall(
+        call_id="",
         name="calculator",
         arguments={
             "operation": "add",
@@ -25,6 +26,7 @@ def test_create_tool_call() -> None:
 
 def test_tool_calls_with_same_values_are_equal() -> None:
     first = ToolCall(
+        call_id="",
         name="calculator",
         arguments={
             "operation": "add",
@@ -33,6 +35,7 @@ def test_tool_calls_with_same_values_are_equal() -> None:
         },
     )
     second = ToolCall(
+        call_id="",
         name="calculator",
         arguments={
             "operation": "add",
@@ -46,6 +49,7 @@ def test_tool_calls_with_same_values_are_equal() -> None:
 
 def test_tool_call_is_frozen() -> None:
     tool_call = ToolCall(
+        call_id="",
         name="calculator",
         arguments={},
     )
@@ -62,6 +66,7 @@ def test_tool_call_copies_arguments() -> None:
     }
 
     tool_call = ToolCall(
+        call_id="",
         name="calculator",
         arguments=arguments,
     )
@@ -77,6 +82,7 @@ def test_tool_call_rejects_empty_name() -> None:
         match="Tool name cannot be empty",
     ):
         ToolCall(
+            call_id="",
             name="",
             arguments={},
         )
@@ -88,6 +94,7 @@ def test_tool_call_rejects_whitespace_name() -> None:
         match="Tool name cannot be empty",
     ):
         ToolCall(
+            call_id="",
             name="   ",
             arguments={},
         )

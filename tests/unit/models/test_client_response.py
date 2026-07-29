@@ -14,6 +14,7 @@ def test_text_response_has_no_tool_calls() -> None:
 
 def test_response_reports_when_tool_calls_exist() -> None:
     tool_call = ToolCall(
+        call_id="",
         name="calculator",
         arguments={
             "expression": "2 + 3",
