@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from app.clients.base_client import BaseClient
 from app.extractors.base_fact_extractor import BaseFactExtractor
@@ -9,6 +10,8 @@ from app.models.message_role import MessageRole
 from app.policies.base_memory_policy import BaseMemoryPolicy
 from app.prompts.base_prompt_template import BasePromptTemplate
 from app.prompts.prompt_composer import PromptComposer
+from app.tools.tool_call import ToolCall
+from app.tools.tool_executor import ToolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +21,7 @@ class ChatAgent:
         self,
         prompt_template: BasePromptTemplate,
         client: BaseClient,
+        tool_executor: ToolExecutor,
         memory: BaseMemory,
         fact_memory: BaseFactMemory,
         fact_extractor: BaseFactExtractor,
@@ -28,6 +32,7 @@ class ChatAgent:
 
         self.prompt_template = prompt_template
         self.client = client
+        self.tool_executor = tool_executor
         self.memory = memory
         self.fact_memory = fact_memory
         self.fact_extractor = fact_extractor
@@ -71,6 +76,12 @@ class ChatAgent:
                 key,
                 value,
             )
+
+    def _execute_tool_calls(
+        self,
+        tool_calls: tuple[ToolCall, ...],
+    ) -> list[Any]:
+        return [self.tool_executor.execute(tool_call) for tool_call in tool_calls]
 
     def remember_fact(
         self,
@@ -127,6 +138,13 @@ class ChatAgent:
         )
 
         response = self.client.chat(messages)
+
+        if response.has_tool_calls:
+            tool_results = self._execute_tool_calls(
+                response.tool_calls,
+            )
+
+            return str(tool_results[-1])
 
         if response.content is None:
             raise ValueError("Client response does not contain text content.")

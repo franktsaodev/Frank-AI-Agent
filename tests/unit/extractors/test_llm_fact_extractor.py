@@ -3,6 +3,7 @@ import json
 import pytest
 
 from app.extractors.llm_fact_extractor import LLMFactExtractor
+from app.models.client_response import ClientResponse
 from app.models.message_role import MessageRole
 from tests.fakes.fake_client import FakeClient
 
@@ -10,7 +11,9 @@ from tests.fakes.fake_client import FakeClient
 @pytest.fixture
 def extractor() -> LLMFactExtractor:
     return LLMFactExtractor(
-        client=FakeClient(),
+        client=FakeClient(
+            response=ClientResponse(),
+        ),
     )
 
 
@@ -30,7 +33,9 @@ def test_build_messages_contains_system_and_user_messages(
 
 def test_extract_calls_client_and_returns_parsed_facts() -> None:
     client = FakeClient(
-        response='{"user_name": "Frank"}',
+        response=ClientResponse(
+            content='{"user_name": "Frank"}',
+        ),
     )
 
     extractor = LLMFactExtractor(
@@ -150,7 +155,9 @@ def test_clean_response_keeps_clean_json(
 
 def test_extract_cleans_markdown_and_returns_parsed_facts() -> None:
     client = FakeClient(
-        response=('```json\n{"user_name": "Frank"}\n```'),
+        response=ClientResponse(
+            content=('```json\n{"user_name": "Frank"}\n```'),
+        ),
     )
 
     extractor = LLMFactExtractor(

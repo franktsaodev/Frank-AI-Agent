@@ -6,6 +6,7 @@ from app.config_models.prompt_config import PromptConfig
 from app.extractors.regex_fact_extractor import RegexFactExtractor
 from app.memory.in_memory_fact_memory import InMemoryFactMemory
 from app.memory.sliding_window_memory import SlidingWindowMemory
+from app.models.client_response import ClientResponse
 from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
@@ -14,18 +15,27 @@ from app.prompts.prompt_template import PromptTemplate
 from tests.fakes.fake_client import FakeClient
 from tests.fakes.fake_memory_policy import FakeMemoryPolicy
 from tests.fakes.fake_prompt_composer import FakePromptComposer
+from tests.fakes.fake_tool_executor import FakeToolExecutor
 
 
 @pytest.fixture
 def fake_client() -> FakeClient:
     return FakeClient(
-        response="測試回覆",
+        response=ClientResponse(
+            content="測試回覆",
+        ),
     )
+
+
+@pytest.fixture
+def fake_tool_executor() -> FakeToolExecutor:
+    return FakeToolExecutor()
 
 
 @pytest.fixture
 def agent(
     fake_client: FakeClient,
+    fake_tool_executor: FakeToolExecutor,
 ) -> ChatAgent:
     prompt_config = PromptConfig(
         prompt_name="system_prompt.txt",
@@ -48,6 +58,7 @@ def agent(
     return ChatAgent(
         prompt_template=prompt_template,
         client=fake_client,
+        tool_executor=fake_tool_executor,
         memory=memory,
         fact_memory=InMemoryFactMemory(),
         fact_extractor=RegexFactExtractor(),
@@ -128,7 +139,12 @@ def test_chat_agent_stores_memory_policy() -> None:
         prompt_template=PromptTemplate(
             config=prompt_config,
         ),
-        client=FakeClient(),
+        client=FakeClient(
+            response=ClientResponse(
+                content="測試回覆",
+            ),
+        ),
+        tool_executor=FakeToolExecutor(),
         memory=SlidingWindowMemory(
             max_rounds=10,
         ),
@@ -156,7 +172,12 @@ def test_chat_does_not_store_fact_when_memory_policy_rejects_it() -> None:
         prompt_template=PromptTemplate(
             config=prompt_config,
         ),
-        client=FakeClient(),
+        client=FakeClient(
+            response=ClientResponse(
+                content="測試回覆",
+            ),
+        ),
+        tool_executor=FakeToolExecutor(),
         memory=SlidingWindowMemory(
             max_rounds=10,
         ),
@@ -186,7 +207,12 @@ def test_chat_stores_fact_when_memory_policy_allows_it() -> None:
         prompt_template=PromptTemplate(
             config=prompt_config,
         ),
-        client=FakeClient(),
+        client=FakeClient(
+            response=ClientResponse(
+                content="測試回覆",
+            ),
+        ),
+        tool_executor=FakeToolExecutor(),
         memory=SlidingWindowMemory(
             max_rounds=10,
         ),
@@ -218,7 +244,9 @@ def test_chat_passes_context_to_prompt_composer_and_sends_composed_messages_to_c
     ]
 
     fake_client = FakeClient(
-        response="測試回覆",
+        response=ClientResponse(
+            content="測試回覆",
+        ),
     )
 
     memory = SlidingWindowMemory(
@@ -262,6 +290,7 @@ def test_chat_passes_context_to_prompt_composer_and_sends_composed_messages_to_c
             config=prompt_config,
         ),
         client=fake_client,
+        tool_executor=FakeToolExecutor(),
         memory=memory,
         fact_memory=fact_memory,
         fact_extractor=RegexFactExtractor(),
