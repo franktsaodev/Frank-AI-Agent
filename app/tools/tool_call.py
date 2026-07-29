@@ -4,6 +4,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class ToolCall:
+    call_id: str
     name: str
     arguments: dict[str, Any]
 
