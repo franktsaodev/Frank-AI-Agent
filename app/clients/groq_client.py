@@ -19,6 +19,7 @@ from app.exceptions.client_exceptions import (
     ClientRateLimitError,
     ClientTimeoutError,
 )
+from app.models.client_response import ClientResponse
 from app.models.message import Message
 from app.tools.tool_provider import ToolProvider
 
@@ -168,7 +169,7 @@ class GroqClient(BaseClient):
 
         time.sleep(delay_seconds)
 
-    def chat(self, messages: list[Message]) -> str:
+    def chat(self, messages: list[Message]) -> ClientResponse:
         formatted_messages = self._format_messages(messages)
 
         max_attempts = self.retry_config.max_attempts
@@ -235,7 +236,9 @@ class GroqClient(BaseClient):
                     max_attempts,
                 )
 
-                return content
+                return ClientResponse(
+                    content=content,
+                )
             except AuthenticationError as error:
                 logger.exception("Groq authentication failed")
 

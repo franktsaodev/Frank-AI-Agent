@@ -9,8 +9,8 @@ from app.memory.sliding_window_memory import SlidingWindowMemory
 from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
-from app.prompts.prompt_template import PromptTemplate
 from app.prompts.prompt_composer import PromptComposer
+from app.prompts.prompt_template import PromptTemplate
 from tests.fakes.fake_client import FakeClient
 from tests.fakes.fake_memory_policy import FakeMemoryPolicy
 from tests.fakes.fake_prompt_composer import FakePromptComposer

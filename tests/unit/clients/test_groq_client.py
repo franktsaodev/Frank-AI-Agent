@@ -105,7 +105,7 @@ def test_chat_retries_connection_error_then_succeeds(
 
     result = groq_client.chat(messages)
 
-    assert result == "你好, Frank!"
+    assert result.content == "你好, Frank!"
     assert mock_create.call_count == 3
 
     assert mock_sleep.call_count == 2
@@ -224,7 +224,7 @@ def test_chat_retries_rate_limit_error_then_succeeds(
 
     result = groq_client.chat(messages)
 
-    assert result == "你好, Frank!"
+    assert result.content == "你好, Frank!"
     assert mock_create.call_count == 3
 
     assert mock_sleep.call_args_list == [
@@ -303,7 +303,8 @@ def test_chat_includes_tool_schemas_when_tools_registered(
 
     kwargs = mock_create.call_args.kwargs
 
-    assert result == "好的"
+    assert result.content == "好的"
+    assert result.tool_calls == ()
     assert "tools" in kwargs
     assert len(kwargs["tools"]) == 1
     assert kwargs["tools"][0]["function"]["name"] == "calculator"
@@ -338,5 +339,6 @@ def test_chat_omits_tools_when_no_tools_registered(
 
     kwargs = mock_create.call_args.kwargs
 
-    assert result == "好的"
+    assert result.content == "好的"
+    assert result.tool_calls == ()
     assert "tools" not in kwargs

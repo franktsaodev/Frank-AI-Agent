@@ -128,9 +128,12 @@ class ChatAgent:
 
         response = self.client.chat(messages)
 
+        if response.content is None:
+            raise ValueError("Client response does not contain text content.")
+
         assistant_message = Message(
             role=MessageRole.ASSISTANT,
-            content=response,
+            content=response.content,
         )
 
         self.memory.add_turn(
@@ -140,4 +143,4 @@ class ChatAgent:
 
         logger.info("Chat request completed")
 
-        return response
+        return response.content

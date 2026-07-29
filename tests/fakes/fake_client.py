@@ -1,4 +1,5 @@
 from app.clients.base_client import BaseClient
+from app.models.client_response import ClientResponse
 from app.models.message import Message
 
 
@@ -18,4 +19,6 @@ class FakeClient(BaseClient):
         self.received_messages = list(messages)
         self.call_count += 1
 
-        return self.response
+        return ClientResponse(
+            content=self.response,
+        )

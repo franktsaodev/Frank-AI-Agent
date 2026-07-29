@@ -84,14 +84,14 @@ Output:
         parsed = json.loads(response)
 
         if not isinstance(parsed, dict):
-            raise ValueError("Fact extraction response must be a JSON object.")
+            raise ValueError("Fact extraction response must be a JSON object.")  # noqa: TRY004
 
         for key, value in parsed.items():
             if not isinstance(key, str):
-                raise ValueError("Fact keys must be strings.")
+                raise ValueError("Fact keys must be strings.")  # noqa: TRY004
 
             if not isinstance(value, str):
-                raise ValueError("Fact values must be strings.")
+                raise ValueError("Fact values must be strings.")  # noqa: TRY004
 
         return parsed
 
@@ -103,10 +103,15 @@ Output:
             user_message,
         )
 
-        response = self.client.chat(messages)
+        client_response = self.client.chat(messages)
 
-        response = self._clean_response(response)
+        if client_response.content is None:
+            raise ValueError("Fact extraction response does not contain text content.")
+
+        cleaned_response = self._clean_response(
+            client_response.content,
+        )
 
         return self._parse_response(
-            response,
+            cleaned_response,
         )
