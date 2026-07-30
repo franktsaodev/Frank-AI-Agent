@@ -1,6 +1,9 @@
+from unittest.mock import MagicMock
+
 import pytest
 
 from app.agent.agent_runner import AgentRunner
+from app.clients.base_client import BaseClient
 from app.exceptions.max_iterations_exceeded_error import (
     MaxIterationsExceededError,
 )
@@ -8,6 +11,9 @@ from app.models.client_response import ClientResponse
 from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.tools.tool_call import ToolCall
+from app.tools.tool_executor import ToolExecutor
+from app.tracing.base_tracer import BaseTracer
+from app.tracing.trace_event_type import TraceEventType
 from tests.fakes.fake_client import FakeClient
 from tests.fakes.fake_tool_executor import FakeToolExecutor
 
@@ -21,9 +27,12 @@ def test_run_returns_text_response_when_client_returns_content() -> None:
 
     tool_executor = FakeToolExecutor()
 
-    runner = AgentRunner(
+    tracer = MagicMock(spec=BaseTracer)
+
+    agent_runner = AgentRunner(
         client=client,
         tool_executor=tool_executor,
+        tracer=tracer,
     )
 
     messages = [
@@ -33,7 +42,7 @@ def test_run_returns_text_response_when_client_returns_content() -> None:
         ),
     ]
 
-    response = runner.run(messages)
+    response = agent_runner.run(messages)
 
     assert response == ClientResponse(
         content="Hello!",
@@ -67,9 +76,12 @@ def test_run_executes_tool_call_and_returns_follow_up_response() -> None:
         result=3,
     )
 
-    runner = AgentRunner(
+    tracer = MagicMock(spec=BaseTracer)
+
+    agent_runner = AgentRunner(
         client=client,
         tool_executor=tool_executor,
+        tracer=tracer,
     )
 
     messages = [
@@ -79,7 +91,7 @@ def test_run_executes_tool_call_and_returns_follow_up_response() -> None:
         ),
     ]
 
-    response = runner.run(messages)
+    response = agent_runner.run(messages)
 
     assert tool_executor.received_tool_calls == [
         tool_call,
@@ -116,9 +128,12 @@ def test_run_sends_tool_result_message_to_client() -> None:
         result=3,
     )
 
-    runner = AgentRunner(
+    tracer = MagicMock(spec=BaseTracer)
+
+    agent_runner = AgentRunner(
         client=client,
         tool_executor=tool_executor,
+        tracer=tracer,
     )
 
     messages = [
@@ -128,7 +143,7 @@ def test_run_sends_tool_result_message_to_client() -> None:
         ),
     ]
 
-    runner.run(messages)
+    agent_runner.run(messages)
 
     second_request_messages = client.received_message_batches[1]
 
@@ -177,12 +192,15 @@ def test_run_executes_all_tool_calls() -> None:
         result=3,
     )
 
-    runner = AgentRunner(
+    tracer = MagicMock(spec=BaseTracer)
+
+    agent_runner = AgentRunner(
         client=client,
         tool_executor=tool_executor,
+        tracer=tracer,
     )
 
-    runner.run(
+    agent_runner.run(
         [
             Message(
                 role=MessageRole.USER,
@@ -235,12 +253,15 @@ def test_run_continues_until_client_returns_text_response() -> None:
         ],
     )
 
-    runner = AgentRunner(
+    tracer = MagicMock(spec=BaseTracer)
+
+    agent_runner = AgentRunner(
         client=client,
         tool_executor=tool_executor,
+        tracer=tracer,
     )
 
-    response = runner.run(
+    response = agent_runner.run(
         [
             Message(
                 role=MessageRole.USER,
@@ -299,12 +320,15 @@ def test_run_accumulates_tool_messages_across_iterations() -> None:
         ],
     )
 
-    runner = AgentRunner(
+    tracer = MagicMock(spec=BaseTracer)
+
+    agent_runner = AgentRunner(
         client=client,
         tool_executor=tool_executor,
+        tracer=tracer,
     )
 
-    runner.run(
+    agent_runner.run(
         [
             Message(
                 role=MessageRole.USER,
@@ -343,6 +367,8 @@ def test_init_raises_when_max_iterations_is_less_than_one() -> None:
 
     tool_executor = FakeToolExecutor()
 
+    tracer = MagicMock(spec=BaseTracer)
+
     with pytest.raises(
         ValueError,
         match="max_iterations must be at least 1",
@@ -350,6 +376,7 @@ def test_init_raises_when_max_iterations_is_less_than_one() -> None:
         AgentRunner(
             client=client,
             tool_executor=tool_executor,
+            tracer=tracer,
             max_iterations=0,
         )
 
@@ -385,9 +412,12 @@ def test_run_raises_when_max_iterations_is_exceeded() -> None:
         ],
     )
 
-    runner = AgentRunner(
+    tracer = MagicMock(spec=BaseTracer)
+
+    agent_runner = AgentRunner(
         client=client,
         tool_executor=tool_executor,
+        tracer=tracer,
         max_iterations=3,
     )
 
@@ -402,7 +432,7 @@ def test_run_raises_when_max_iterations_is_exceeded() -> None:
         MaxIterationsExceededError,
         match="maximum number of iterations: 3",
     ):
-        runner.run(messages)
+        agent_runner.run(messages)
 
     assert client.call_count == 3
 
@@ -450,13 +480,16 @@ def test_run_returns_response_on_last_allowed_iteration() -> None:
         ],
     )
 
-    runner = AgentRunner(
+    tracer = MagicMock(spec=BaseTracer)
+
+    agent_runner = AgentRunner(
         client=client,
         tool_executor=tool_executor,
+        tracer=tracer,
         max_iterations=3,
     )
 
-    response = runner.run(
+    response = agent_runner.run(
         [
             Message(
                 role=MessageRole.USER,
@@ -496,12 +529,15 @@ def test_run_sends_assistant_tool_call_message_before_tool_result() -> None:
         result=3,
     )
 
-    runner = AgentRunner(
+    tracer = MagicMock(spec=BaseTracer)
+
+    agent_runner = AgentRunner(
         client=client,
         tool_executor=tool_executor,
+        tracer=tracer,
     )
 
-    runner.run(
+    agent_runner.run(
         [
             Message(
                 role=MessageRole.USER,
@@ -570,9 +606,12 @@ def test_run_preserves_tool_call_conversation_order() -> None:
         ],
     )
 
-    runner = AgentRunner(
+    tracer = MagicMock(spec=BaseTracer)
+
+    agent_runner = AgentRunner(
         client=client,
         tool_executor=tool_executor,
+        tracer=tracer,
     )
 
     user_message = Message(
@@ -580,7 +619,7 @@ def test_run_preserves_tool_call_conversation_order() -> None:
         content="Calculate it.",
     )
 
-    runner.run([user_message])
+    agent_runner.run([user_message])
 
     third_request_messages = client.received_message_batches[2]
 
@@ -607,3 +646,95 @@ def test_run_preserves_tool_call_conversation_order() -> None:
             tool_call_id="call_2",
         ),
     ]
+
+
+def test_run_should_trace_agent_lifecycle() -> None:
+    client = MagicMock(spec=BaseClient)
+    tool_executor = MagicMock(spec=ToolExecutor)
+    tracer = MagicMock(spec=BaseTracer)
+
+    client.chat.return_value = ClientResponse(
+        content="完成",
+        tool_calls=(),
+    )
+
+    runner = AgentRunner(
+        client=client,
+        tool_executor=tool_executor,
+        tracer=tracer,
+    )
+
+    messages = [
+        Message(
+            role=MessageRole.USER,
+            content="你好",
+        )
+    ]
+
+    runner.run(messages)
+
+    events = [call.args[0] for call in tracer.trace.call_args_list]
+
+    assert [event.event_type for event in events] == [
+        TraceEventType.AGENT_STARTED,
+        TraceEventType.AGENT_FINISHED,
+    ]
+
+    assert events[0].metadata == {
+        "message_count": 1,
+        "max_iterations": 10,
+    }
+
+    assert events[1].metadata == {
+        "iterations": 1,
+        "final_message_count": 1,
+    }
+
+
+def test_run_should_trace_agent_failed_when_max_iterations_exceeded() -> None:
+    client = MagicMock(spec=BaseClient)
+    tool_executor = MagicMock(spec=ToolExecutor)
+    tracer = MagicMock(spec=BaseTracer)
+
+    client.chat.return_value = ClientResponse(
+        content=None,
+        tool_calls=(
+            ToolCall(
+                call_id="call-1",
+                name="calculator",
+                arguments={"expression": "1 + 1"},
+            ),
+        ),
+    )
+
+    runner = AgentRunner(
+        client=client,
+        tool_executor=tool_executor,
+        tracer=tracer,
+        max_iterations=1,
+    )
+
+    messages = [
+        Message(
+            role=MessageRole.USER,
+            content="幫我計算 1 + 1",
+        )
+    ]
+
+    with pytest.raises(MaxIterationsExceededError) as exception_info:
+        runner.run(messages)
+
+    events = [
+        call.args[0]
+        for call in tracer.trace.call_args_list
+    ]
+
+    assert [event.event_type for event in events] == [
+        TraceEventType.AGENT_STARTED,
+        TraceEventType.AGENT_FAILED,
+    ]
+
+    assert events[1].metadata == {
+        "error_type": "MaxIterationsExceededError",
+        "error_message": str(exception_info.value),
+    }

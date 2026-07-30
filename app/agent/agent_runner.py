@@ -7,6 +7,9 @@ from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.tools.tool_call import ToolCall
 from app.tools.tool_executor import ToolExecutor
+from app.tracing.base_tracer import BaseTracer
+from app.tracing.trace_event import TraceEvent
+from app.tracing.trace_event_type import TraceEventType
 
 
 class AgentRunner:
@@ -14,6 +17,7 @@ class AgentRunner:
         self,
         client: BaseClient,
         tool_executor: ToolExecutor,
+        tracer: BaseTracer,
         max_iterations: int = 10,
     ) -> None:
         if max_iterations < 1:
@@ -21,6 +25,7 @@ class AgentRunner:
 
         self._client = client
         self._tool_executor = tool_executor
+        self._tracer = tracer
         self._max_iterations = max_iterations
 
     def run(
@@ -29,22 +34,60 @@ class AgentRunner:
     ) -> ClientResponse:
         current_messages = list(messages)
 
-        for iteration in range(self._max_iterations):
-            response = self._client.chat(current_messages)
+        self._tracer.trace(
+            TraceEvent(
+                event_type=TraceEventType.AGENT_STARTED,
+                metadata={
+                    "message_count": len(current_messages),
+                    "max_iterations": self._max_iterations,
+                },
+            )
+        )
 
-            if not response.has_tool_calls:
-                return response
+        try:
+            for iteration in range(self._max_iterations):
+                response = self._client.chat(current_messages)
 
-            is_last_iteration = iteration == self._max_iterations - 1
+                if not response.has_tool_calls:
+                    self._tracer.trace(
+                        TraceEvent(
+                            event_type=TraceEventType.AGENT_FINISHED,
+                            metadata={
+                                "iterations": iteration + 1,
+                                "final_message_count": len(current_messages),
+                            },
+                        )
+                    )
 
-            if is_last_iteration:
-                raise MaxIterationsExceededError(
-                    max_iterations=self._max_iterations,
+                    return response
+
+                is_last_iteration = iteration == self._max_iterations - 1
+
+                if is_last_iteration:
+                    raise MaxIterationsExceededError(
+                        max_iterations=self._max_iterations,
+                    )
+
+                current_messages.append(
+                    self._create_assistant_tool_call_message(response)
                 )
 
-            current_messages.append(self._create_assistant_tool_call_message(response))
+                current_messages.extend(
+                    self._execute_tool_calls(response.tool_calls)
+                )
 
-            current_messages.extend(self._execute_tool_calls(response.tool_calls))
+        except Exception as error:
+            self._tracer.trace(
+                TraceEvent(
+                    event_type=TraceEventType.AGENT_FAILED,
+                    metadata={
+                        "error_type": type(error).__name__,
+                        "error_message": str(error),
+                    },
+                )
+            )
+
+            raise
 
         raise AssertionError("AgentRunner reached an unreachable state.")
 

@@ -25,6 +25,9 @@ from app.models.client_response import ClientResponse
 from app.models.message import Message
 from app.tools.tool_call import ToolCall
 from app.tools.tool_provider import ToolProvider
+from app.tracing.base_tracer import BaseTracer
+from app.tracing.trace_event import TraceEvent
+from app.tracing.trace_event_type import TraceEventType
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,7 @@ class GroqClient(BaseClient):
         groq_config: GroqConfig,
         retry_config: RetryConfig,
         tool_provider: ToolProvider,
+        tracer: BaseTracer,
     ) -> None:
         self.client = Groq(
             api_key=groq_config.api_key,
@@ -43,10 +47,58 @@ class GroqClient(BaseClient):
         self.groq_config = groq_config
         self.retry_config = retry_config
         self.tool_provider = tool_provider
+        self.tracer = tracer
 
-    def chat(self, messages: list[Message]) -> ClientResponse:
+    def chat(
+        self,
+        messages: list[Message],
+    ) -> ClientResponse:
         formatted_messages = self._format_messages(messages)
 
+        self.tracer.trace(
+            TraceEvent(
+                event_type=TraceEventType.LLM_STARTED,
+                metadata={
+                    "model": self.groq_config.model,
+                    "message_count": len(messages),
+                },
+            )
+        )
+
+        try:
+            client_response, attempt = self._chat_with_retry(formatted_messages)
+        except Exception as error:
+            self.tracer.trace(
+                TraceEvent(
+                    event_type=TraceEventType.LLM_FAILED,
+                    metadata={
+                        "model": self.groq_config.model,
+                        "error_type": type(error).__name__,
+                        "error_message": str(error),
+                    },
+                )
+            )
+
+            raise
+
+        self.tracer.trace(
+            TraceEvent(
+                event_type=TraceEventType.LLM_FINISHED,
+                metadata={
+                    "model": self.groq_config.model,
+                    "attempt": attempt,
+                    "has_tool_calls": client_response.has_tool_calls,
+                    "tool_call_count": len(client_response.tool_calls),
+                },
+            )
+        )
+
+        return client_response
+
+    def _chat_with_retry(
+        self,
+        formatted_messages: list[dict[str, object]],
+    ) -> tuple[ClientResponse, int]:
         max_attempts = self.retry_config.max_attempts
 
         for attempt in range(1, max_attempts + 1):
@@ -63,7 +115,7 @@ class GroqClient(BaseClient):
                     "messages": formatted_messages,
                     "model": self.groq_config.model,
                     "temperature": self.groq_config.temperature,
-                    "max_completion_tokens": self.groq_config.max_completion_tokens,
+                    "max_completion_tokens": (self.groq_config.max_completion_tokens),
                 }
 
                 if tool_schemas:
@@ -111,10 +163,13 @@ class GroqClient(BaseClient):
                     max_attempts,
                 )
 
-                return ClientResponse(
+                client_response = ClientResponse(
                     content=content,
                     tool_calls=tool_calls,
                 )
+
+                return client_response, attempt
+
             except AuthenticationError as error:
                 logger.exception("Groq authentication failed")
 

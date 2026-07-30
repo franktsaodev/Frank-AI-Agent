@@ -25,6 +25,8 @@ from app.tools.tool_call import ToolCall
 from app.tools.tool_provider import ToolProvider
 from app.tools.tool_registry import ToolRegistry
 from app.tools.tool_schema_adapter import ToolSchemaAdapter
+from app.tracing.base_tracer import BaseTracer
+from app.tracing.trace_event_type import TraceEventType
 
 
 def create_groq_client(
@@ -34,6 +36,7 @@ def create_groq_client(
     initial_delay_seconds: float = 1.0,
     backoff_multiplier: float = 2.0,
     model: str = "test-model",
+    tracer: BaseTracer,
 ) -> GroqClient:
     groq_config = GroqConfig(
         api_key="test-api-key",
@@ -59,6 +62,7 @@ def create_groq_client(
         groq_config=groq_config,
         retry_config=retry_config,
         tool_provider=tool_provider,
+        tracer=tracer,
     )
 
 
@@ -87,8 +91,17 @@ def create_tool_call_response(
 
 
 @pytest.fixture
-def groq_client() -> GroqClient:
-    return create_groq_client()
+def tracer() -> MagicMock:
+    return MagicMock(spec=BaseTracer)
+
+
+@pytest.fixture
+def groq_client(
+    tracer: MagicMock,
+) -> GroqClient:
+    return create_groq_client(
+        tracer=tracer,
+    )
 
 
 @pytest.fixture
@@ -298,6 +311,7 @@ def test_chat_raises_rate_limit_error_after_max_attempts(
 
 def test_chat_includes_tool_schemas_when_tools_registered(
     messages: list[Message],
+    tracer: MagicMock,
 ) -> None:
     registry = ToolRegistry()
     registry.register(CalculatorTool())
@@ -311,6 +325,7 @@ def test_chat_includes_tool_schemas_when_tools_registered(
 
     groq_client = create_groq_client(
         tool_provider=provider,
+        tracer=tracer,
     )
 
     successful_response = create_success_response("好的")
@@ -334,6 +349,7 @@ def test_chat_includes_tool_schemas_when_tools_registered(
 
 def test_chat_omits_tools_when_no_tools_registered(
     messages: list[Message],
+    tracer: MagicMock,
 ) -> None:
     registry = ToolRegistry()
     adapter = ToolSchemaAdapter()
@@ -345,6 +361,7 @@ def test_chat_omits_tools_when_no_tools_registered(
 
     groq_client = create_groq_client(
         tool_provider=provider,
+        tracer=tracer,
     )
 
     successful_response = create_success_response("好的")
@@ -549,3 +566,172 @@ def test_chat_sends_tool_call_conversation_to_groq(
     assert result == ClientResponse(
         content="答案是 3。",
     )
+
+
+def test_chat_should_trace_llm_lifecycle(
+    groq_client: GroqClient,
+    tracer: MagicMock,
+) -> None:
+    mock_groq_response = create_success_response("你好")
+
+    mock_create = MagicMock(
+        return_value=mock_groq_response,
+    )
+
+    groq_client.client.chat.completions.create = mock_create
+
+    messages = [
+        Message(
+            role=MessageRole.USER,
+            content="你好",
+        )
+    ]
+
+    groq_client.chat(messages)
+
+    events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert [event.event_type for event in events] == [
+        TraceEventType.LLM_STARTED,
+        TraceEventType.LLM_FINISHED,
+    ]
+
+    assert events[0].metadata == {
+        "model": groq_client.groq_config.model,
+        "message_count": 1,
+    }
+
+    assert events[1].metadata == {
+        "model": groq_client.groq_config.model,
+        "attempt": 1,
+        "has_tool_calls": False,
+        "tool_call_count": 0,
+    }
+
+
+def test_chat_should_trace_llm_failed_on_authentication_error(
+    groq_client: GroqClient,
+    tracer: MagicMock,
+    messages: list[Message],
+) -> None:
+    request = httpx.Request(
+        method="POST",
+        url="https://api.groq.com/openai/v1/chat/completions",
+    )
+
+    response = httpx.Response(
+        status_code=401,
+        request=request,
+    )
+
+    authentication_error = AuthenticationError(
+        "Invalid API Key",
+        response=response,
+        body={
+            "error": {
+                "message": "Invalid API Key",
+            }
+        },
+    )
+
+    mock_create = MagicMock(
+        side_effect=authentication_error,
+    )
+
+    groq_client.client.chat.completions.create = mock_create
+
+    with pytest.raises(ClientAuthenticationError):
+        groq_client.chat(messages)
+
+    events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert [event.event_type for event in events] == [
+        TraceEventType.LLM_STARTED,
+        TraceEventType.LLM_FAILED,
+    ]
+
+    assert events[1].metadata == {
+        "model": groq_client.groq_config.model,
+        "error_type": "ClientAuthenticationError",
+        "error_message": "AI client authentication failed",
+    }
+
+
+@patch("app.clients.groq_client.time.sleep")
+def test_chat_should_not_trace_llm_failed_when_retry_succeeds(
+    mock_sleep: MagicMock,
+    groq_client: GroqClient,
+    tracer: MagicMock,
+    messages: list[Message],
+) -> None:
+    request = httpx.Request(
+        method="POST",
+        url="https://api.groq.com/openai/v1/chat/completions",
+    )
+
+    connection_error = APIConnectionError(
+        request=request,
+    )
+
+    successful_response = create_success_response("你好, Frank!")
+
+    mock_create = MagicMock(
+        side_effect=[
+            connection_error,
+            successful_response,
+        ]
+    )
+
+    groq_client.client.chat.completions.create = mock_create
+
+    groq_client.chat(messages)
+
+    events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert [event.event_type for event in events] == [
+        TraceEventType.LLM_STARTED,
+        TraceEventType.LLM_FINISHED,
+    ]
+
+    assert TraceEventType.LLM_FAILED not in [event.event_type for event in events]
+
+
+@patch("app.clients.groq_client.time.sleep")
+def test_chat_should_trace_llm_failed_after_max_attempts(
+    mock_sleep: MagicMock,
+    groq_client: GroqClient,
+    tracer: MagicMock,
+    messages: list[Message],
+) -> None:
+    request = httpx.Request(
+        method="POST",
+        url="https://api.groq.com/openai/v1/chat/completions",
+    )
+
+    connection_error = APIConnectionError(
+        request=request,
+    )
+
+    mock_create = MagicMock(
+        side_effect=connection_error,
+    )
+
+    groq_client.client.chat.completions.create = mock_create
+
+    with pytest.raises(ClientConnectionError):
+        groq_client.chat(messages)
+
+    events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert [event.event_type for event in events] == [
+        TraceEventType.LLM_STARTED,
+        TraceEventType.LLM_FAILED,
+    ]
+
+    assert events[1].metadata == {
+        "model": groq_client.groq_config.model,
+        "error_type": "ClientConnectionError",
+        "error_message": "Failed to connect to AI service",
+    }
+
+    assert mock_create.call_count == 3

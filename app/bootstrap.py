@@ -1,3 +1,4 @@
+from app.agent.agent_runner import AgentRunner
 from app.agent.chat_agent import ChatAgent
 from app.clients.groq_client import GroqClient
 from app.config import GROQ_API_KEY, GROQ_MODEL
@@ -11,21 +12,51 @@ from app.memory.sliding_window_memory import SlidingWindowMemory
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
 from app.prompts.prompt_composer import PromptComposer
 from app.prompts.prompt_template import PromptTemplate
+from app.tools.tool_executor import ToolExecutor
+from app.tools.tool_provider import ToolProvider
+from app.tools.tool_registry import ToolRegistry
+from app.tools.tool_schema_adapter import ToolSchemaAdapter
+from app.tracing.logging_tracer import LoggingTracer
 
 
 def create_chat_agent() -> ChatAgent:
+    tracer = LoggingTracer()
+    registry = ToolRegistry()
+    adapter = ToolSchemaAdapter()
+
     groq_config = GroqConfig(
         api_key=GROQ_API_KEY,
         model=GROQ_MODEL,
     )
+
     retry_config = RetryConfig(
         max_attempts=3,
         initial_delay_seconds=1,
         backoff_multiplier=2.0,
     )
+
+    tool_provider = ToolProvider(
+        registry=registry,
+        adapter=adapter,
+    )
+
+    tool_executor = ToolExecutor(
+        registry=registry,
+        tracer=tracer,
+    )
+
     client = GroqClient(
         groq_config=groq_config,
         retry_config=retry_config,
+        tool_provider=tool_provider,
+        tracer=tracer,
+    )
+
+    agent_runner = AgentRunner(
+        client=client,
+        tool_executor=tool_executor,
+        tracer=tracer,
+        max_iterations=10,
     )
 
     prompt_config = PromptConfig(
@@ -56,7 +87,7 @@ def create_chat_agent() -> ChatAgent:
 
     return ChatAgent(
         prompt_template=prompt_template,
-        client=client,
+        agent_runner=agent_runner,
         memory=memory,
         fact_memory=fact_memory,
         fact_extractor=fact_extractor,

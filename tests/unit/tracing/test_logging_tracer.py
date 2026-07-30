@@ -1,0 +1,24 @@
+import logging
+
+from app.tracing.logging_tracer import LoggingTracer
+from app.tracing.trace_event import TraceEvent
+from app.tracing.trace_event_type import TraceEventType
+
+
+def test_trace_should_log_event(
+    caplog,
+) -> None:
+    tracer = LoggingTracer()
+
+    event = TraceEvent(
+        event_type=TraceEventType.TOOL_STARTED,
+        metadata={
+            "tool_name": "calculator",
+        },
+    )
+
+    with caplog.at_level(logging.INFO):
+        tracer.trace(event)
+
+    assert "tool_started" in caplog.text
+    assert "calculator" in caplog.text

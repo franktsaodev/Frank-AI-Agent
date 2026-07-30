@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -15,6 +16,7 @@ from app.models.message_role import MessageRole
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
 from app.prompts.prompt_composer import PromptComposer
 from app.prompts.prompt_template import PromptTemplate
+from app.tracing.base_tracer import BaseTracer
 from tests.fakes.fake_client import FakeClient
 from tests.fakes.fake_memory_policy import FakeMemoryPolicy
 from tests.fakes.fake_prompt_composer import FakePromptComposer
@@ -41,9 +43,12 @@ def create_agent() -> Callable[..., ChatAgent]:
 
         actual_tool_executor = tool_executor or FakeToolExecutor()
 
+        tracer = MagicMock(spec=BaseTracer)
+
         agent_runner = AgentRunner(
             client=actual_client,
             tool_executor=actual_tool_executor,
+            tracer=tracer,
         )
 
         return ChatAgent(
