@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import pytest
 
 from app.agent.chat_agent import ChatAgent
@@ -6,19 +8,19 @@ from app.extractors.regex_fact_extractor import RegexFactExtractor
 from app.memory.in_memory_fact_memory import InMemoryFactMemory
 from app.memory.sliding_window_memory import SlidingWindowMemory
 from app.models.client_response import ClientResponse
+from app.models.message import Message
+from app.models.message_role import MessageRole
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
 from app.prompts.prompt_composer import PromptComposer
 from app.prompts.prompt_template import PromptTemplate
-from app.tools.tool_call import ToolCall
-from tests.fakes.fake_client import FakeClient
-from tests.fakes.fake_tool_executor import FakeToolExecutor
+from tests.fakes.fake_agent_runner import FakeAgentRunner
 
 
 @pytest.fixture
-def create_agent():
+def create_agent() -> Callable[..., ChatAgent]:
     def _create_agent(
-        client_response: ClientResponse,
-        tool_executor: FakeToolExecutor,
+        *,
+        agent_runner: FakeAgentRunner,
     ) -> ChatAgent:
         return ChatAgent(
             prompt_template=PromptTemplate(
@@ -28,10 +30,7 @@ def create_agent():
                     language="Traditional Chinese",
                 ),
             ),
-            client=FakeClient(
-                response=client_response,
-            ),
-            tool_executor=tool_executor,
+            agent_runner=agent_runner,
             memory=SlidingWindowMemory(
                 max_rounds=10,
             ),
@@ -44,73 +43,47 @@ def create_agent():
     return _create_agent
 
 
-def test_chat_executes_tool_calls_returned_by_client(
+def test_chat_returns_final_response_from_agent_runner(
     create_agent,
 ) -> None:
-    tool_call = ToolCall(
-        call_id="call_123",
-        name="calculator",
-        arguments={
-            "expression": "1 + 2",
-        },
-    )
-
-    tool_executor = FakeToolExecutor(
-        result=3,
+    agent_runner = FakeAgentRunner(
+        response=ClientResponse(
+            content="Hello Frank!",
+        ),
     )
 
     agent = create_agent(
-        client_response=ClientResponse(
-            tool_calls=(tool_call,),
-        ),
-        tool_executor=tool_executor,
+        agent_runner=agent_runner,
     )
 
-    result = agent.chat("What is 1 + 2?")
+    result = agent.chat("Hello")
 
-    assert tool_executor.received_tool_calls == [
-        tool_call,
-    ]
-
-    assert result == "3"
+    assert result == "Hello Frank!"
 
 
-def test_chat_executes_all_tool_calls_returned_by_client(
+def test_chat_sends_composed_messages_to_agent_runner(
     create_agent,
 ) -> None:
-    first_call = ToolCall(
-        call_id="call_1",
-        name="calculator",
-        arguments={
-            "expression": "1 + 2",
-        },
-    )
-
-    second_call = ToolCall(
-        call_id="call_2",
-        name="calculator",
-        arguments={
-            "expression": "3 + 4",
-        },
-    )
-
-    tool_executor = FakeToolExecutor(
-        result=7,
+    agent_runner = FakeAgentRunner(
+        response=ClientResponse(
+            content="Hello!",
+        ),
     )
 
     agent = create_agent(
-        client_response=ClientResponse(
-            tool_calls=(
-                first_call,
-                second_call,
-            ),
-        ),
-        tool_executor=tool_executor,
+        agent_runner=agent_runner,
     )
 
-    agent.chat("Calculate these.")
+    agent.chat("Hello")
 
-    assert tool_executor.received_tool_calls == [
-        first_call,
-        second_call,
-    ]
+    assert len(agent_runner.received_message_batches) == 1
+
+    sent_messages = agent_runner.received_message_batches[0]
+
+    assert (
+        Message(
+            role=MessageRole.USER,
+            content="Hello",
+        )
+        in sent_messages
+    )

@@ -1,7 +1,6 @@
 import logging
-from typing import Any
 
-from app.clients.base_client import BaseClient
+from app.agent.agent_runner import AgentRunner
 from app.extractors.base_fact_extractor import BaseFactExtractor
 from app.memory.base_fact_memory import BaseFactMemory
 from app.memory.base_memory import BaseMemory
@@ -10,8 +9,6 @@ from app.models.message_role import MessageRole
 from app.policies.base_memory_policy import BaseMemoryPolicy
 from app.prompts.base_prompt_template import BasePromptTemplate
 from app.prompts.prompt_composer import PromptComposer
-from app.tools.tool_call import ToolCall
-from app.tools.tool_executor import ToolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +17,7 @@ class ChatAgent:
     def __init__(
         self,
         prompt_template: BasePromptTemplate,
-        client: BaseClient,
-        tool_executor: ToolExecutor,
+        agent_runner: AgentRunner,
         memory: BaseMemory,
         fact_memory: BaseFactMemory,
         fact_extractor: BaseFactExtractor,
@@ -31,8 +27,7 @@ class ChatAgent:
         logger.info("ChatAgent initialized")
 
         self.prompt_template = prompt_template
-        self.client = client
-        self.tool_executor = tool_executor
+        self.agent_runner = agent_runner
         self.memory = memory
         self.fact_memory = fact_memory
         self.fact_extractor = fact_extractor
@@ -48,6 +43,75 @@ class ChatAgent:
             role=MessageRole.SYSTEM,
             content=rendered_prompt,
         )
+
+    def chat(
+        self,
+        message: str,
+    ) -> str:
+        if not message.strip():
+            raise ValueError("User message cannot be empty")
+
+        logger.info(
+            "Processing chat request with message_length=%d",
+            len(message),
+        )
+
+        user_message = Message(
+            role=MessageRole.USER,
+            content=message,
+        )
+
+        extracted_facts = self.fact_extractor.extract(user_message.content)
+
+        self._remember_extracted_facts(extracted_facts)
+
+        history_messages = self.memory.get_messages()
+        known_facts = self.fact_memory.get_all()
+
+        messages = self.prompt_composer.compose(
+            system_message=self.system_message,
+            history_messages=history_messages,
+            facts=known_facts,
+            user_message=user_message,
+        )
+
+        response = self.agent_runner.run(messages)
+
+        if response.content is None:
+            raise ValueError("Client response does not contain text content.")
+
+        assistant_message = Message(
+            role=MessageRole.ASSISTANT,
+            content=response.content,
+        )
+
+        self.memory.add_turn(
+            user_message=user_message,
+            assistant_message=assistant_message,
+        )
+
+        logger.info("Chat request completed")
+
+        return response.content
+
+    def remember_fact(
+        self,
+        key: str,
+        value: str,
+    ) -> None:
+        self.fact_memory.set(key, value)
+
+    def get_fact(
+        self,
+        key: str,
+    ) -> str | None:
+        return self.fact_memory.get(key)
+
+    def forget_fact(
+        self,
+        key: str,
+    ) -> None:
+        self.fact_memory.delete(key)
 
     def _remember_extracted_facts(
         self,
@@ -76,89 +140,3 @@ class ChatAgent:
                 key,
                 value,
             )
-
-    def _execute_tool_calls(
-        self,
-        tool_calls: tuple[ToolCall, ...],
-    ) -> list[Any]:
-        return [self.tool_executor.execute(tool_call) for tool_call in tool_calls]
-
-    def remember_fact(
-        self,
-        key: str,
-        value: str,
-    ) -> None:
-        self.fact_memory.set(key, value)
-
-    def get_fact(
-        self,
-        key: str,
-    ) -> str | None:
-        return self.fact_memory.get(key)
-
-    def forget_fact(
-        self,
-        key: str,
-    ) -> None:
-        self.fact_memory.delete(key)
-
-    def chat(
-        self,
-        message: str,
-    ) -> str:
-        if not message.strip():
-            raise ValueError("User message cannot be empty")
-
-        logger.info(
-            "Processing chat request with message_length=%d",
-            len(message),
-        )
-
-        user_message = Message(
-            role=MessageRole.USER,
-            content=message,
-        )
-
-        extracted_facts = self.fact_extractor.extract(
-            user_message.content,
-        )
-
-        self._remember_extracted_facts(
-            extracted_facts,
-        )
-
-        history_messages = self.memory.get_messages()
-        known_facts = self.fact_memory.get_all()
-
-        messages = self.prompt_composer.compose(
-            system_message=self.system_message,
-            history_messages=history_messages,
-            facts=known_facts,
-            user_message=user_message,
-        )
-
-        response = self.client.chat(messages)
-
-        if response.has_tool_calls:
-            tool_results = self._execute_tool_calls(
-                response.tool_calls,
-            )
-
-            return str(tool_results[-1])
-
-        if response.content is None:
-            raise ValueError("Client response does not contain text content.")
-
-        assistant_message = Message(
-            role=MessageRole.ASSISTANT,
-            content=response.content,
-        )
-
-        self.memory.add_turn(
-            user_message=user_message,
-            assistant_message=assistant_message,
-        )
-
-        logger.info("Chat request completed")
-
-        return response.content

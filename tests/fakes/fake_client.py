@@ -7,21 +7,38 @@ class FakeClient(BaseClient):
     def __init__(
         self,
         response: ClientResponse | None = None,
+        responses: list[ClientResponse] | None = None,
     ) -> None:
-        if response is None:
-            response = ClientResponse(
-                content="This is a fake response.",
-            )
+        if response is not None and responses is not None:
+            raise ValueError("Provide either response or responses, not both.")
 
-        self.response = response
-        self.received_messages: list[Message] = []
+        if responses is not None:
+            self._responses = list(responses)
+        else:
+            self._responses = [
+                response
+                or ClientResponse(
+                    content="This is a fake response.",
+                )
+            ]
+
         self.call_count = 0
+        self.received_messages: list[Message] = []
+        self.received_message_batches: list[list[Message]] = []
 
     def chat(
         self,
         messages: list[Message],
     ) -> ClientResponse:
-        self.received_messages = list(messages)
         self.call_count += 1
+        self.received_messages = list(messages)
+        self.received_message_batches.append(
+            list(messages),
+        )
 
-        return self.response
+        response_index = self.call_count - 1
+
+        if response_index >= len(self._responses):
+            raise RuntimeError("FakeClient has no more configured responses.")
+
+        return self._responses[response_index]

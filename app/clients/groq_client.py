@@ -1,5 +1,7 @@
+import json
 import logging
 import time
+from typing import Any
 
 from groq import (
     APIConnectionError,
@@ -21,6 +23,7 @@ from app.exceptions.client_exceptions import (
 )
 from app.models.client_response import ClientResponse
 from app.models.message import Message
+from app.tools.tool_call import ToolCall
 from app.tools.tool_provider import ToolProvider
 
 logger = logging.getLogger(__name__)
@@ -40,134 +43,6 @@ class GroqClient(BaseClient):
         self.groq_config = groq_config
         self.retry_config = retry_config
         self.tool_provider = tool_provider
-
-    def _calculate_delay(self, attempt: int) -> float:
-        return (
-            self.retry_config.initial_delay_seconds
-            * self.retry_config.backoff_multiplier ** (attempt - 1)
-        )
-
-    def _handle_retryable_error(
-        self,
-        *,
-        attempt: int,
-        max_attempts: int,
-        error: Exception,
-        error_name: str,
-        final_exception: Exception,
-    ) -> None:
-        if attempt == max_attempts:
-            logger.exception(
-                "Groq %s failed after %d attempts",
-                error_name,
-                max_attempts,
-            )
-
-            raise final_exception from error
-
-        delay_seconds = self._calculate_delay(attempt)
-
-        logger.warning(
-            "Groq %s failed on attempt %d/%d. Retrying in %.1f seconds. Reason: %s",
-            error_name,
-            attempt,
-            max_attempts,
-            delay_seconds,
-            error,
-        )
-
-        time.sleep(delay_seconds)
-
-    def _contains_chinese(self, content: str) -> bool:
-        """Check whether the response contains Chinese characters."""
-        return any("\u4e00" <= character <= "\u9fff" for character in content)
-
-    def _sanitize_response(self, content: str) -> str:
-        cleaned_content = content.strip()
-
-        invalid_prefixes = (
-            ", !",
-            ",!",
-            ", 。",
-            ",。",
-        )
-
-        for prefix in invalid_prefixes:
-            if cleaned_content.startswith(prefix):
-                cleaned_content = cleaned_content[len(prefix) :].lstrip()
-                break
-
-        return cleaned_content
-
-    def _is_valid_response(
-        self,
-        content: str | None,
-    ) -> bool:
-        if content is None:
-            return False
-
-        cleaned_content = content.strip()
-
-        if not cleaned_content:
-            return False
-
-        if not any(character.isalnum() for character in cleaned_content):
-            return False
-
-        return self._contains_chinese(cleaned_content)
-
-    def _validate_messages(
-        self,
-        messages: list[Message],
-    ) -> None:
-        for message in messages:
-            if not isinstance(message, Message):
-                raise TypeError(
-                    "All messages must be Message instances, "
-                    f"but received {type(message).__name__}."
-                )
-
-    def _format_messages(
-        self,
-        messages: list[Message],
-    ) -> list[dict[str, str]]:
-        self._validate_messages(messages)
-
-        return [
-            {
-                "role": message.role.value,
-                "content": message.content,
-            }
-            for message in messages
-        ]
-
-    def _handle_invalid_response(
-        self,
-        *,
-        content: str | None,
-        attempt: int,
-        max_attempts: int,
-    ) -> None:
-        logger.warning(
-            "Groq returned invalid content on attempt %d/%d: %r",
-            attempt,
-            max_attempts,
-            content,
-        )
-
-        if attempt == max_attempts:
-            raise ClientInvalidResponseError(
-                f"Groq returned invalid content after {max_attempts} attempts."
-            )
-
-        delay_seconds = self._calculate_delay(attempt)
-
-        logger.debug(
-            "Retrying invalid response in %.1f seconds",
-            delay_seconds,
-        )
-
-        time.sleep(delay_seconds)
 
     def chat(self, messages: list[Message]) -> ClientResponse:
         formatted_messages = self._format_messages(messages)
@@ -201,6 +76,8 @@ class GroqClient(BaseClient):
                 choice = response.choices[0]
                 raw_content = choice.message.content
 
+                tool_calls = self._parse_tool_calls(choice.message.tool_calls)
+
                 logger.debug(
                     "Groq response finish_reason=%s raw_content=%r",
                     choice.finish_reason,
@@ -220,15 +97,13 @@ class GroqClient(BaseClient):
                         content,
                     )
 
-                if not self._is_valid_response(content):
+                if not tool_calls and not self._is_valid_response(content):
                     self._handle_invalid_response(
                         content=content,
                         attempt=attempt,
                         max_attempts=max_attempts,
                     )
                     continue
-
-                assert content is not None
 
                 logger.info(
                     "Groq request succeeded on attempt %d/%d",
@@ -238,6 +113,7 @@ class GroqClient(BaseClient):
 
                 return ClientResponse(
                     content=content,
+                    tool_calls=tool_calls,
                 )
             except AuthenticationError as error:
                 logger.exception("Groq authentication failed")
@@ -278,3 +154,167 @@ class GroqClient(BaseClient):
                 )
 
         raise RuntimeError("Groq retry loop ended unexpectedly.")
+
+    def _format_messages(
+        self,
+        messages: list[Message],
+    ) -> list[dict[str, object]]:
+        self._validate_messages(messages)
+
+        formatted_messages: list[dict[str, object]] = []
+
+        for message in messages:
+            formatted_message: dict[str, object] = {
+                "role": message.role.value,
+                "content": message.content,
+            }
+
+            if message.tool_calls:
+                formatted_message["tool_calls"] = [
+                    {
+                        "id": tool_call.call_id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_call.name,
+                            "arguments": json.dumps(tool_call.arguments),
+                        },
+                    }
+                    for tool_call in message.tool_calls
+                ]
+
+            if message.tool_call_id is not None:
+                formatted_message["tool_call_id"] = message.tool_call_id
+
+            formatted_messages.append(formatted_message)
+
+        return formatted_messages
+
+    def _parse_tool_calls(
+        self,
+        raw_tool_calls: Any,
+    ) -> tuple[ToolCall, ...]:
+        if not raw_tool_calls:
+            return ()
+
+        return tuple(
+            ToolCall(
+                call_id=raw_tool_call.id,
+                name=raw_tool_call.function.name,
+                arguments=json.loads(raw_tool_call.function.arguments),
+            )
+            for raw_tool_call in raw_tool_calls
+        )
+
+    def _validate_messages(
+        self,
+        messages: list[Message],
+    ) -> None:
+        for message in messages:
+            if not isinstance(message, Message):
+                raise TypeError(
+                    "All messages must be Message instances, "
+                    f"but received {type(message).__name__}."
+                )
+
+    def _handle_retryable_error(
+        self,
+        *,
+        attempt: int,
+        max_attempts: int,
+        error: Exception,
+        error_name: str,
+        final_exception: Exception,
+    ) -> None:
+        if attempt == max_attempts:
+            logger.exception(
+                "Groq %s failed after %d attempts",
+                error_name,
+                max_attempts,
+            )
+
+            raise final_exception from error
+
+        delay_seconds = self._calculate_delay(attempt)
+
+        logger.warning(
+            "Groq %s failed on attempt %d/%d. Retrying in %.1f seconds. Reason: %s",
+            error_name,
+            attempt,
+            max_attempts,
+            delay_seconds,
+            error,
+        )
+
+        time.sleep(delay_seconds)
+
+    def _handle_invalid_response(
+        self,
+        *,
+        content: str | None,
+        attempt: int,
+        max_attempts: int,
+    ) -> None:
+        logger.warning(
+            "Groq returned invalid content on attempt %d/%d: %r",
+            attempt,
+            max_attempts,
+            content,
+        )
+
+        if attempt == max_attempts:
+            raise ClientInvalidResponseError(
+                f"Groq returned invalid content after {max_attempts} attempts."
+            )
+
+        delay_seconds = self._calculate_delay(attempt)
+
+        logger.debug(
+            "Retrying invalid response in %.1f seconds",
+            delay_seconds,
+        )
+
+        time.sleep(delay_seconds)
+
+    def _is_valid_response(
+        self,
+        content: str | None,
+    ) -> bool:
+        if content is None:
+            return False
+
+        cleaned_content = content.strip()
+
+        if not cleaned_content:
+            return False
+
+        if not any(character.isalnum() for character in cleaned_content):
+            return False
+
+        return self._contains_chinese(cleaned_content)
+
+    def _calculate_delay(self, attempt: int) -> float:
+        return (
+            self.retry_config.initial_delay_seconds
+            * self.retry_config.backoff_multiplier ** (attempt - 1)
+        )
+
+    def _sanitize_response(self, content: str) -> str:
+        cleaned_content = content.strip()
+
+        invalid_prefixes = (
+            ", !",
+            ",!",
+            ", 。",
+            ",。",
+        )
+
+        for prefix in invalid_prefixes:
+            if cleaned_content.startswith(prefix):
+                cleaned_content = cleaned_content[len(prefix) :].lstrip()
+                break
+
+        return cleaned_content
+
+    def _contains_chinese(self, content: str) -> bool:
+        """Check whether the response contains Chinese characters."""
+        return any("\u4e00" <= character <= "\u9fff" for character in content)

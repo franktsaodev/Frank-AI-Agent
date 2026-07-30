@@ -1,7 +1,10 @@
+from collections.abc import Callable
+from typing import Any
+
 import pytest
 
+from app.agent.agent_runner import AgentRunner
 from app.agent.chat_agent import ChatAgent
-from app.config_models.memory_config import MemoryConfig
 from app.config_models.prompt_config import PromptConfig
 from app.extractors.regex_fact_extractor import RegexFactExtractor
 from app.memory.in_memory_fact_memory import InMemoryFactMemory
@@ -19,52 +22,57 @@ from tests.fakes.fake_tool_executor import FakeToolExecutor
 
 
 @pytest.fixture
-def fake_client() -> FakeClient:
-    return FakeClient(
-        response=ClientResponse(
-            content="測試回覆",
-        ),
-    )
+def create_agent() -> Callable[..., ChatAgent]:
+    def _create_agent(
+        *,
+        client: FakeClient | None = None,
+        tool_executor: FakeToolExecutor | None = None,
+        memory: SlidingWindowMemory | None = None,
+        fact_memory: InMemoryFactMemory | None = None,
+        fact_extractor: RegexFactExtractor | None = None,
+        memory_policy: Any = None,
+        prompt_composer: Any = None,
+    ) -> ChatAgent:
+        actual_client = client or FakeClient(
+            response=ClientResponse(
+                content="測試回覆",
+            ),
+        )
+
+        actual_tool_executor = tool_executor or FakeToolExecutor()
+
+        agent_runner = AgentRunner(
+            client=actual_client,
+            tool_executor=actual_tool_executor,
+        )
+
+        return ChatAgent(
+            prompt_template=PromptTemplate(
+                config=PromptConfig(
+                    prompt_name="system_prompt.txt",
+                    user_name="Frank",
+                    language="Traditional Chinese",
+                ),
+            ),
+            agent_runner=agent_runner,
+            memory=(
+                memory
+                or SlidingWindowMemory(
+                    max_rounds=10,
+                )
+            ),
+            fact_memory=(fact_memory or InMemoryFactMemory()),
+            fact_extractor=(fact_extractor or RegexFactExtractor()),
+            memory_policy=(memory_policy or SimpleMemoryPolicy()),
+            prompt_composer=(prompt_composer or PromptComposer()),
+        )
+
+    return _create_agent
 
 
 @pytest.fixture
-def fake_tool_executor() -> FakeToolExecutor:
-    return FakeToolExecutor()
-
-
-@pytest.fixture
-def agent(
-    fake_client: FakeClient,
-    fake_tool_executor: FakeToolExecutor,
-) -> ChatAgent:
-    prompt_config = PromptConfig(
-        prompt_name="system_prompt.txt",
-        user_name="Frank",
-        language="Traditional Chinese",
-    )
-
-    prompt_template = PromptTemplate(
-        config=prompt_config,
-    )
-
-    memory_config = MemoryConfig(
-        max_history_rounds=2,
-    )
-
-    memory = SlidingWindowMemory(
-        max_rounds=memory_config.max_history_rounds,
-    )
-
-    return ChatAgent(
-        prompt_template=prompt_template,
-        client=fake_client,
-        tool_executor=fake_tool_executor,
-        memory=memory,
-        fact_memory=InMemoryFactMemory(),
-        fact_extractor=RegexFactExtractor(),
-        memory_policy=SimpleMemoryPolicy(),
-        prompt_composer=PromptComposer(),
-    )
+def agent(create_agent) -> ChatAgent:
+    return create_agent()
 
 
 def test_chat_automatically_remembers_extracted_fact(
@@ -84,14 +92,23 @@ def test_chat_does_not_create_fact_when_none_is_extracted(
 
 
 def test_extracted_fact_is_injected_into_system_message(
-    agent: ChatAgent,
-    fake_client: FakeClient,
+    create_agent,
 ) -> None:
+    client = FakeClient(
+        response=ClientResponse(
+            content="測試回覆",
+        ),
+    )
+
+    agent = create_agent(
+        client=client,
+    )
+
     agent.chat("My name is Frank.")
 
-    assert fake_client.call_count == 1
+    assert client.call_count == 1
 
-    system_message = fake_client.received_messages[0]
+    system_message = client.received_messages[0]
 
     assert system_message.role == MessageRole.SYSTEM
     assert "User facts:" in system_message.content
@@ -118,73 +135,48 @@ def test_chat_stores_conversation_turn(
 
 
 def test_new_extracted_fact_overwrites_existing_fact(
-    agent: ChatAgent,
+    create_agent,
 ) -> None:
+    client = FakeClient(
+        responses=[
+            ClientResponse(
+                content="第一次測試回覆",
+            ),
+            ClientResponse(
+                content="第二次測試回覆",
+            ),
+        ],
+    )
+
+    agent = create_agent(
+        client=client,
+    )
+
     agent.chat("My name is Frank.")
     agent.chat("My name is David.")
 
     assert agent.get_fact("user_name") == "David"
 
 
-def test_chat_agent_stores_memory_policy() -> None:
-    prompt_config = PromptConfig(
-        prompt_name="system_prompt.txt",
-        user_name="Frank",
-        language="Traditional Chinese",
-    )
-
+def test_chat_agent_stores_memory_policy(create_agent) -> None:
     memory_policy = SimpleMemoryPolicy()
 
-    agent = ChatAgent(
-        prompt_template=PromptTemplate(
-            config=prompt_config,
-        ),
-        client=FakeClient(
-            response=ClientResponse(
-                content="測試回覆",
-            ),
-        ),
-        tool_executor=FakeToolExecutor(),
-        memory=SlidingWindowMemory(
-            max_rounds=10,
-        ),
-        fact_memory=InMemoryFactMemory(),
-        fact_extractor=RegexFactExtractor(),
+    agent = create_agent(
         memory_policy=memory_policy,
-        prompt_composer=PromptComposer(),
     )
 
     assert agent.memory_policy is memory_policy
 
 
-def test_chat_does_not_store_fact_when_memory_policy_rejects_it() -> None:
-    prompt_config = PromptConfig(
-        prompt_name="system_prompt.txt",
-        user_name="Frank",
-        language="Traditional Chinese",
-    )
-
+def test_chat_does_not_store_fact_when_memory_policy_rejects_it(
+    create_agent,
+) -> None:
     memory_policy = FakeMemoryPolicy(
         should_remember_result=False,
     )
 
-    agent = ChatAgent(
-        prompt_template=PromptTemplate(
-            config=prompt_config,
-        ),
-        client=FakeClient(
-            response=ClientResponse(
-                content="測試回覆",
-            ),
-        ),
-        tool_executor=FakeToolExecutor(),
-        memory=SlidingWindowMemory(
-            max_rounds=10,
-        ),
-        fact_memory=InMemoryFactMemory(),
-        fact_extractor=RegexFactExtractor(),
+    agent = create_agent(
         memory_policy=memory_policy,
-        prompt_composer=PromptComposer(),
     )
 
     agent.chat("My name is Frank.")
@@ -192,34 +184,13 @@ def test_chat_does_not_store_fact_when_memory_policy_rejects_it() -> None:
     assert agent.get_fact("user_name") is None
 
 
-def test_chat_stores_fact_when_memory_policy_allows_it() -> None:
-    prompt_config = PromptConfig(
-        prompt_name="system_prompt.txt",
-        user_name="Frank",
-        language="Traditional Chinese",
-    )
-
+def test_chat_stores_fact_when_memory_policy_allows_it(create_agent) -> None:
     memory_policy = FakeMemoryPolicy(
         should_remember_result=True,
     )
 
-    agent = ChatAgent(
-        prompt_template=PromptTemplate(
-            config=prompt_config,
-        ),
-        client=FakeClient(
-            response=ClientResponse(
-                content="測試回覆",
-            ),
-        ),
-        tool_executor=FakeToolExecutor(),
-        memory=SlidingWindowMemory(
-            max_rounds=10,
-        ),
-        fact_memory=InMemoryFactMemory(),
-        fact_extractor=RegexFactExtractor(),
+    agent = create_agent(
         memory_policy=memory_policy,
-        prompt_composer=PromptComposer(),
     )
 
     agent.chat("My name is Frank.")
@@ -229,9 +200,9 @@ def test_chat_stores_fact_when_memory_policy_allows_it() -> None:
     assert memory_policy.received_value == "Frank"
 
 
-def test_chat_passes_context_to_prompt_composer_and_sends_composed_messages_to_client() -> (
-    None
-):
+def test_chat_passes_context_to_prompt_composer_and_sends_composed_messages_to_client(
+    create_agent,
+) -> None:
     composed_messages = [
         Message(
             role=MessageRole.SYSTEM,
@@ -242,12 +213,6 @@ def test_chat_passes_context_to_prompt_composer_and_sends_composed_messages_to_c
             content="Hello",
         ),
     ]
-
-    fake_client = FakeClient(
-        response=ClientResponse(
-            content="測試回覆",
-        ),
-    )
 
     memory = SlidingWindowMemory(
         max_rounds=10,
@@ -279,33 +244,30 @@ def test_chat_passes_context_to_prompt_composer_and_sends_composed_messages_to_c
         composed_messages=composed_messages,
     )
 
-    prompt_config = PromptConfig(
-        prompt_name="system_prompt.txt",
-        user_name="Frank",
-        language="Traditional Chinese",
+    client = FakeClient(
+        response=ClientResponse(
+            content="測試回覆",
+        ),
     )
 
-    agent = ChatAgent(
-        prompt_template=PromptTemplate(
-            config=prompt_config,
-        ),
-        client=fake_client,
-        tool_executor=FakeToolExecutor(),
+    agent = create_agent(
+        client=client,
         memory=memory,
         fact_memory=fact_memory,
-        fact_extractor=RegexFactExtractor(),
-        memory_policy=SimpleMemoryPolicy(),
         prompt_composer=fake_prompt_composer,
     )
 
     agent.chat("Hello")
 
     assert fake_prompt_composer.received_system_message == agent.system_message
+
     assert fake_prompt_composer.received_history_messages == expected_history_messages
+
     assert fake_prompt_composer.received_facts == expected_facts
+
     assert fake_prompt_composer.received_user_message == Message(
         role=MessageRole.USER,
         content="Hello",
     )
 
-    assert fake_client.received_messages == composed_messages
+    assert client.received_messages == composed_messages
