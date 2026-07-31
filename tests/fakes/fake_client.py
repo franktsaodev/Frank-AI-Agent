@@ -1,6 +1,7 @@
 from app.clients.base_client import BaseClient
 from app.models.client_response import ClientResponse
 from app.models.message import Message
+from app.tracing.trace_context import TraceContext
 
 
 class FakeClient(BaseClient):
@@ -25,15 +26,21 @@ class FakeClient(BaseClient):
         self.call_count = 0
         self.received_messages: list[Message] = []
         self.received_message_batches: list[list[Message]] = []
+        self.received_trace_contexts: list[TraceContext] = []
 
     def chat(
         self,
         messages: list[Message],
+        trace_context: TraceContext,
     ) -> ClientResponse:
         self.call_count += 1
         self.received_messages = list(messages)
         self.received_message_batches.append(
             list(messages),
+        )
+
+        self.received_trace_contexts.append(
+            trace_context,
         )
 
         response_index = self.call_count - 1

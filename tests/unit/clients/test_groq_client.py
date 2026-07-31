@@ -26,6 +26,7 @@ from app.tools.tool_provider import ToolProvider
 from app.tools.tool_registry import ToolRegistry
 from app.tools.tool_schema_adapter import ToolSchemaAdapter
 from app.tracing.base_tracer import BaseTracer
+from app.tracing.trace_context import TraceContext
 from app.tracing.trace_event_type import TraceEventType
 
 
@@ -114,11 +115,19 @@ def messages() -> list[Message]:
     ]
 
 
+@pytest.fixture
+def trace_context() -> TraceContext:
+    return TraceContext(
+        trace_id="test-trace-id",
+    )
+
+
 @patch("app.clients.groq_client.time.sleep")
 def test_chat_retries_connection_error_then_succeeds(
     mock_sleep: MagicMock,
     groq_client: GroqClient,
     messages: list[Message],
+    trace_context: TraceContext,
 ) -> None:
     request = httpx.Request(
         method="POST",
@@ -141,7 +150,10 @@ def test_chat_retries_connection_error_then_succeeds(
 
     groq_client.client.chat.completions.create = mock_create
 
-    result = groq_client.chat(messages)
+    result = groq_client.chat(
+        messages=messages,
+        trace_context=trace_context,
+    )
 
     assert result.content == "你好, Frank!"
     assert mock_create.call_count == 3
@@ -159,6 +171,7 @@ def test_chat_retries_connection_error_then_succeeds(
 def test_chat_raises_connection_error_after_max_attempts(
     groq_client: GroqClient,
     messages: list[Message],
+    trace_context: TraceContext,
 ) -> None:
     request = httpx.Request(
         method="POST",
@@ -176,7 +189,10 @@ def test_chat_raises_connection_error_after_max_attempts(
     groq_client.client.chat.completions.create = mock_create
 
     with pytest.raises(ClientConnectionError):
-        groq_client.chat(messages)
+        groq_client.chat(
+            messages=messages,
+            trace_context=trace_context,
+        )
 
     assert mock_create.call_count == 3
 
@@ -184,6 +200,7 @@ def test_chat_raises_connection_error_after_max_attempts(
 def test_chat_does_not_retry_authentication_error(
     groq_client: GroqClient,
     messages: list[Message],
+    trace_context: TraceContext,
 ) -> None:
     request = httpx.Request(
         method="POST",
@@ -212,7 +229,10 @@ def test_chat_does_not_retry_authentication_error(
     groq_client.client.chat.completions.create = mock_create
 
     with pytest.raises(ClientAuthenticationError):
-        groq_client.chat(messages)
+        groq_client.chat(
+            messages=messages,
+            trace_context=trace_context,
+        )
 
     assert mock_create.call_count == 1
 
@@ -230,6 +250,7 @@ def test_chat_retries_rate_limit_error_then_succeeds(
     mock_sleep: MagicMock,
     groq_client: GroqClient,
     messages: list[Message],
+    trace_context: TraceContext,
 ) -> None:
     request = httpx.Request(
         method="POST",
@@ -259,7 +280,10 @@ def test_chat_retries_rate_limit_error_then_succeeds(
 
     groq_client.client.chat.completions.create = mock_create
 
-    result = groq_client.chat(messages)
+    result = groq_client.chat(
+        messages=messages,
+        trace_context=trace_context,
+    )
 
     assert result.content == "你好, Frank!"
     assert mock_create.call_count == 3
@@ -275,6 +299,7 @@ def test_chat_raises_rate_limit_error_after_max_attempts(
     mock_sleep: MagicMock,
     groq_client: GroqClient,
     messages: list[Message],
+    trace_context: TraceContext,
 ) -> None:
     request = httpx.Request(
         method="POST",
@@ -299,7 +324,10 @@ def test_chat_raises_rate_limit_error_after_max_attempts(
     groq_client.client.chat.completions.create = mock_create
 
     with pytest.raises(ClientRateLimitError):
-        groq_client.chat(messages)
+        groq_client.chat(
+            messages=messages,
+            trace_context=trace_context,
+        )
 
     assert mock_create.call_count == 3
 
@@ -312,6 +340,7 @@ def test_chat_raises_rate_limit_error_after_max_attempts(
 def test_chat_includes_tool_schemas_when_tools_registered(
     messages: list[Message],
     tracer: MagicMock,
+    trace_context: TraceContext,
 ) -> None:
     registry = ToolRegistry()
     registry.register(CalculatorTool())
@@ -336,7 +365,10 @@ def test_chat_includes_tool_schemas_when_tools_registered(
 
     groq_client.client.chat.completions.create = mock_create
 
-    result = groq_client.chat(messages)
+    result = groq_client.chat(
+        messages=messages,
+        trace_context=trace_context,
+    )
 
     kwargs = mock_create.call_args.kwargs
 
@@ -350,6 +382,7 @@ def test_chat_includes_tool_schemas_when_tools_registered(
 def test_chat_omits_tools_when_no_tools_registered(
     messages: list[Message],
     tracer: MagicMock,
+    trace_context: TraceContext,
 ) -> None:
     registry = ToolRegistry()
     adapter = ToolSchemaAdapter()
@@ -372,7 +405,10 @@ def test_chat_omits_tools_when_no_tools_registered(
 
     groq_client.client.chat.completions.create = mock_create
 
-    result = groq_client.chat(messages)
+    result = groq_client.chat(
+        messages=messages,
+        trace_context=trace_context,
+    )
 
     kwargs = mock_create.call_args.kwargs
 
@@ -384,6 +420,7 @@ def test_chat_omits_tools_when_no_tools_registered(
 def test_chat_returns_tool_calls_when_groq_requests_tool(
     groq_client: GroqClient,
     messages: list[Message],
+    trace_context: TraceContext,
 ) -> None:
     groq_tool_call = MagicMock()
     groq_tool_call.id = "call_123"
@@ -402,7 +439,10 @@ def test_chat_returns_tool_calls_when_groq_requests_tool(
 
     groq_client.client.chat.completions.create = mock_create
 
-    result = groq_client.chat(messages)
+    result = groq_client.chat(
+        messages=messages,
+        trace_context=trace_context,
+    )
 
     assert result == ClientResponse(
         content=None,
@@ -495,6 +535,7 @@ def test_format_messages_includes_tool_call_id(
 
 def test_chat_sends_tool_call_conversation_to_groq(
     groq_client: GroqClient,
+    trace_context: TraceContext,
 ) -> None:
     tool_call = ToolCall(
         call_id="call_123",
@@ -529,7 +570,10 @@ def test_chat_sends_tool_call_conversation_to_groq(
 
     groq_client.client.chat.completions.create = mock_create
 
-    result = groq_client.chat(messages)
+    result = groq_client.chat(
+        messages=messages,
+        trace_context=trace_context,
+    )
 
     sent_messages = mock_create.call_args.kwargs["messages"]
 
@@ -571,6 +615,7 @@ def test_chat_sends_tool_call_conversation_to_groq(
 def test_chat_should_trace_llm_lifecycle(
     groq_client: GroqClient,
     tracer: MagicMock,
+    trace_context: TraceContext,
 ) -> None:
     mock_groq_response = create_success_response("你好")
 
@@ -587,7 +632,10 @@ def test_chat_should_trace_llm_lifecycle(
         )
     ]
 
-    groq_client.chat(messages)
+    groq_client.chat(
+        messages=messages,
+        trace_context=trace_context,
+    )
 
     events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
 
@@ -597,12 +645,12 @@ def test_chat_should_trace_llm_lifecycle(
     ]
 
     assert events[0].metadata == {
-        "model": groq_client.groq_config.model,
+        "model": groq_client._groq_config.model,
         "message_count": 1,
     }
 
     assert events[1].metadata == {
-        "model": groq_client.groq_config.model,
+        "model": groq_client._groq_config.model,
         "attempt": 1,
         "has_tool_calls": False,
         "tool_call_count": 0,
@@ -613,6 +661,7 @@ def test_chat_should_trace_llm_failed_on_authentication_error(
     groq_client: GroqClient,
     tracer: MagicMock,
     messages: list[Message],
+    trace_context: TraceContext,
 ) -> None:
     request = httpx.Request(
         method="POST",
@@ -641,7 +690,10 @@ def test_chat_should_trace_llm_failed_on_authentication_error(
     groq_client.client.chat.completions.create = mock_create
 
     with pytest.raises(ClientAuthenticationError):
-        groq_client.chat(messages)
+        groq_client.chat(
+            messages=messages,
+            trace_context=trace_context,
+        )
 
     events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
 
@@ -651,10 +703,12 @@ def test_chat_should_trace_llm_failed_on_authentication_error(
     ]
 
     assert events[1].metadata == {
-        "model": groq_client.groq_config.model,
+        "model": groq_client._groq_config.model,
         "error_type": "ClientAuthenticationError",
         "error_message": "AI client authentication failed",
     }
+
+    assert {event.trace_id for event in events} == {"test-trace-id"}
 
 
 @patch("app.clients.groq_client.time.sleep")
@@ -663,6 +717,7 @@ def test_chat_should_not_trace_llm_failed_when_retry_succeeds(
     groq_client: GroqClient,
     tracer: MagicMock,
     messages: list[Message],
+    trace_context: TraceContext,
 ) -> None:
     request = httpx.Request(
         method="POST",
@@ -684,7 +739,10 @@ def test_chat_should_not_trace_llm_failed_when_retry_succeeds(
 
     groq_client.client.chat.completions.create = mock_create
 
-    groq_client.chat(messages)
+    groq_client.chat(
+        messages=messages,
+        trace_context=trace_context,
+    )
 
     events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
 
@@ -702,6 +760,7 @@ def test_chat_should_trace_llm_failed_after_max_attempts(
     groq_client: GroqClient,
     tracer: MagicMock,
     messages: list[Message],
+    trace_context: TraceContext,
 ) -> None:
     request = httpx.Request(
         method="POST",
@@ -719,7 +778,10 @@ def test_chat_should_trace_llm_failed_after_max_attempts(
     groq_client.client.chat.completions.create = mock_create
 
     with pytest.raises(ClientConnectionError):
-        groq_client.chat(messages)
+        groq_client.chat(
+            messages=messages,
+            trace_context=trace_context,
+        )
 
     events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
 
@@ -729,9 +791,11 @@ def test_chat_should_trace_llm_failed_after_max_attempts(
     ]
 
     assert events[1].metadata == {
-        "model": groq_client.groq_config.model,
+        "model": groq_client._groq_config.model,
         "error_type": "ClientConnectionError",
         "error_message": "Failed to connect to AI service",
     }
 
     assert mock_create.call_count == 3
+
+    assert {event.trace_id for event in events} == {"test-trace-id"}

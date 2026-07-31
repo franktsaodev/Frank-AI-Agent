@@ -3,6 +3,7 @@ from typing import Any
 from app.tools.tool_call import ToolCall
 from app.tools.tool_registry import ToolRegistry
 from app.tracing.base_tracer import BaseTracer
+from app.tracing.trace_context import TraceContext
 from app.tracing.trace_event import TraceEvent
 from app.tracing.trace_event_type import TraceEventType
 
@@ -16,9 +17,14 @@ class ToolExecutor:
         self._registry = registry
         self._tracer = tracer
 
-    def execute(self, tool_call: ToolCall) -> Any:
+    def execute(
+        self,
+        tool_call: ToolCall,
+        trace_context: TraceContext,
+    ) -> Any:
         self._tracer.trace(
             TraceEvent(
+                trace_id=trace_context.trace_id,
                 event_type=TraceEventType.TOOL_STARTED,
                 metadata={
                     "tool_name": tool_call.name,
@@ -33,6 +39,7 @@ class ToolExecutor:
         except Exception as error:
             self._tracer.trace(
                 TraceEvent(
+                    trace_id=trace_context.trace_id,
                     event_type=TraceEventType.TOOL_FAILED,
                     metadata={
                         "tool_name": tool_call.name,
@@ -46,6 +53,7 @@ class ToolExecutor:
 
         self._tracer.trace(
             TraceEvent(
+                trace_id=trace_context.trace_id,
                 event_type=TraceEventType.TOOL_FINISHED,
                 metadata={
                     "tool_name": tool_call.name,

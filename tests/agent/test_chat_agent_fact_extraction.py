@@ -125,7 +125,7 @@ def test_chat_stores_conversation_turn(
 ) -> None:
     agent.chat("My name is Frank.")
 
-    messages = agent.memory.get_messages()
+    messages = agent._memory.get_messages()
 
     assert messages == [
         Message(
@@ -170,7 +170,7 @@ def test_chat_agent_stores_memory_policy(create_agent) -> None:
         memory_policy=memory_policy,
     )
 
-    assert agent.memory_policy is memory_policy
+    assert agent._memory_policy is memory_policy
 
 
 def test_chat_does_not_store_fact_when_memory_policy_rejects_it(

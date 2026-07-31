@@ -26,15 +26,15 @@ class ChatAgent:
     ) -> None:
         logger.info("ChatAgent initialized")
 
-        self.prompt_template = prompt_template
-        self.agent_runner = agent_runner
-        self.memory = memory
-        self.fact_memory = fact_memory
-        self.fact_extractor = fact_extractor
-        self.memory_policy = memory_policy
-        self.prompt_composer = prompt_composer
+        self._prompt_template = prompt_template
+        self._agent_runner = agent_runner
+        self._memory = memory
+        self._fact_memory = fact_memory
+        self._fact_extractor = fact_extractor
+        self._memory_policy = memory_policy
+        self._prompt_composer = prompt_composer
 
-        rendered_prompt = self.prompt_template.render()
+        rendered_prompt = self._prompt_template.render()
 
         if not rendered_prompt.strip():
             raise ValueError("Rendered system prompt cannot be empty")
@@ -61,21 +61,21 @@ class ChatAgent:
             content=message,
         )
 
-        extracted_facts = self.fact_extractor.extract(user_message.content)
+        extracted_facts = self._fact_extractor.extract(user_message.content)
 
         self._remember_extracted_facts(extracted_facts)
 
-        history_messages = self.memory.get_messages()
-        known_facts = self.fact_memory.get_all()
+        history_messages = self._memory.get_messages()
+        known_facts = self._fact_memory.get_all()
 
-        messages = self.prompt_composer.compose(
+        messages = self._prompt_composer.compose(
             system_message=self.system_message,
             history_messages=history_messages,
             facts=known_facts,
             user_message=user_message,
         )
 
-        response = self.agent_runner.run(messages)
+        response = self._agent_runner.run(messages)
 
         if response.content is None:
             raise ValueError("Client response does not contain text content.")
@@ -85,7 +85,7 @@ class ChatAgent:
             content=response.content,
         )
 
-        self.memory.add_turn(
+        self._memory.add_turn(
             user_message=user_message,
             assistant_message=assistant_message,
         )
@@ -99,19 +99,19 @@ class ChatAgent:
         key: str,
         value: str,
     ) -> None:
-        self.fact_memory.set(key, value)
+        self._fact_memory.set(key, value)
 
     def get_fact(
         self,
         key: str,
     ) -> str | None:
-        return self.fact_memory.get(key)
+        return self._fact_memory.get(key)
 
     def forget_fact(
         self,
         key: str,
     ) -> None:
-        self.fact_memory.delete(key)
+        self._fact_memory.delete(key)
 
     def _remember_extracted_facts(
         self,
@@ -122,7 +122,7 @@ class ChatAgent:
             return
 
         for key, value in facts.items():
-            if not self.memory_policy.should_remember(key, value):
+            if not self._memory_policy.should_remember(key, value):
                 logger.debug(
                     "Rejected extracted fact key=%s value=%r",
                     key,
@@ -130,7 +130,7 @@ class ChatAgent:
                 )
                 continue
 
-            self.fact_memory.set(
+            self._fact_memory.set(
                 key,
                 value,
             )

@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -724,10 +724,7 @@ def test_run_should_trace_agent_failed_when_max_iterations_exceeded() -> None:
     with pytest.raises(MaxIterationsExceededError) as exception_info:
         runner.run(messages)
 
-    events = [
-        call.args[0]
-        for call in tracer.trace.call_args_list
-    ]
+    events = [call.args[0] for call in tracer.trace.call_args_list]
 
     assert [event.event_type for event in events] == [
         TraceEventType.AGENT_STARTED,
@@ -738,3 +735,122 @@ def test_run_should_trace_agent_failed_when_max_iterations_exceeded() -> None:
         "error_type": "MaxIterationsExceededError",
         "error_message": str(exception_info.value),
     }
+
+
+@patch(
+    "app.agent.agent_runner.uuid.uuid4",
+)
+def test_run_should_use_same_trace_id_for_agent_lifecycle_events(
+    mock_uuid4: MagicMock,
+) -> None:
+    mock_uuid4.return_value.hex = "test-trace-id"
+
+    client = MagicMock(spec=BaseClient)
+    tool_executor = MagicMock(spec=ToolExecutor)
+    tracer = MagicMock(spec=BaseTracer)
+
+    client.chat.return_value = ClientResponse(
+        content="完成",
+        tool_calls=(),
+    )
+
+    agent_runner = AgentRunner(
+        client=client,
+        tool_executor=tool_executor,
+        tracer=tracer,
+    )
+
+    agent_runner.run(
+        messages=[],
+    )
+
+    events = [call.args[0] for call in tracer.trace.call_args_list]
+
+    trace_ids = {event.trace_id for event in events}
+
+    assert trace_ids == {"test-trace-id"}
+
+
+def test_run_should_pass_trace_context_to_client() -> None:
+    client = FakeClient(
+        response=ClientResponse(
+            content="完成",
+        ),
+    )
+
+    tool_executor = FakeToolExecutor()
+    tracer = MagicMock(spec=BaseTracer)
+
+    agent_runner = AgentRunner(
+        client=client,
+        tool_executor=tool_executor,
+        tracer=tracer,
+    )
+
+    agent_runner.run(
+        messages=[
+            Message(
+                role=MessageRole.USER,
+                content="你好",
+            ),
+        ],
+    )
+
+    events = [call.args[0] for call in tracer.trace.call_args_list]
+
+    assert len(client.received_trace_contexts) == 1
+
+    received_context = client.received_trace_contexts[0]
+
+    assert received_context.trace_id == events[0].trace_id
+
+
+def test_run_should_pass_trace_context_to_tool_executor() -> None:
+    tool_call = ToolCall(
+        call_id="call-123",
+        name="calculator",
+        arguments={
+            "expression": "1 + 1",
+        },
+    )
+
+    client = FakeClient(
+        responses=[
+            ClientResponse(
+                content=None,
+                tool_calls=(tool_call,),
+            ),
+            ClientResponse(
+                content="答案是 2。",
+            ),
+        ],
+    )
+
+    tool_executor = FakeToolExecutor(
+        result=2,
+    )
+
+    tracer = MagicMock(spec=BaseTracer)
+
+    agent_runner = AgentRunner(
+        client=client,
+        tool_executor=tool_executor,
+        tracer=tracer,
+    )
+
+    agent_runner.run(
+        messages=[
+            Message(
+                role=MessageRole.USER,
+                content="幫我計算 1 + 1",
+            ),
+        ],
+    )
+
+    events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert len(tool_executor.received_trace_contexts) == 1
+
+    received_context = tool_executor.received_trace_contexts[0]
+
+    assert received_context.trace_id == events[0].trace_id

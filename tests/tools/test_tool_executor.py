@@ -6,6 +6,7 @@ from app.tools.tool_call import ToolCall
 from app.tools.tool_executor import ToolExecutor
 from app.tools.tool_registry import ToolRegistry
 from app.tracing.base_tracer import BaseTracer
+from app.tracing.trace_context import TraceContext
 from app.tracing.trace_event_type import TraceEventType
 from tests.fakes.failing_tool import FailingTool
 from tests.fakes.fake_tool import FakeTool
@@ -32,9 +33,17 @@ def executor(
     )
 
 
+@pytest.fixture
+def trace_context() -> TraceContext:
+    return TraceContext(
+        trace_id="test-trace-id",
+    )
+
+
 def test_execute_calls_tool_with_arguments(
     executor: ToolExecutor,
     registry: ToolRegistry,
+    trace_context: TraceContext,
 ) -> None:
     fake_tool = FakeTool()
     registry.register(fake_tool)
@@ -48,7 +57,10 @@ def test_execute_calls_tool_with_arguments(
         },
     )
 
-    result = executor.execute(tool_call)
+    result = executor.execute(
+        tool_call=tool_call,
+        trace_context=trace_context,
+    )
 
     assert result == "fake result"
     assert fake_tool.received_arguments == {
@@ -59,23 +71,26 @@ def test_execute_calls_tool_with_arguments(
 
 def test_execute_raises_error_when_tool_does_not_exist(
     executor: ToolExecutor,
+    trace_context: TraceContext,
 ) -> None:
     with pytest.raises(
         KeyError,
         match="Tool not found: weather",
     ):
         executor.execute(
-            ToolCall(
+            tool_call=ToolCall(
                 call_id="",
                 name="weather",
                 arguments={},
-            )
+            ),
+            trace_context=trace_context,
         )
 
 
 def test_execute_propagates_tool_error(
     executor: ToolExecutor,
     registry: ToolRegistry,
+    trace_context: TraceContext,
 ) -> None:
     registry.register(FailingTool())
 
@@ -84,11 +99,12 @@ def test_execute_propagates_tool_error(
         match="Tool execution failed",
     ):
         executor.execute(
-            ToolCall(
+            tool_call=ToolCall(
                 call_id="",
                 name="failing",
                 arguments={},
-            )
+            ),
+            trace_context=trace_context,
         )
 
 
@@ -96,6 +112,7 @@ def test_execute_should_trace_tool_lifecycle(
     executor: ToolExecutor,
     registry: ToolRegistry,
     tracer: MagicMock,
+    trace_context: TraceContext,
 ) -> None:
     registry.register(FakeTool())
 
@@ -108,7 +125,10 @@ def test_execute_should_trace_tool_lifecycle(
         },
     )
 
-    result = executor.execute(tool_call)
+    result = executor.execute(
+        tool_call=tool_call,
+        trace_context=trace_context,
+    )
 
     events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
 
@@ -130,11 +150,14 @@ def test_execute_should_trace_tool_lifecycle(
         "result_type": "str",
     }
 
+    assert {event.trace_id for event in events} == {"test-trace-id"}
+
 
 def test_execute_should_trace_tool_failed(
     executor: ToolExecutor,
     registry: ToolRegistry,
     tracer: MagicMock,
+    trace_context: TraceContext,
 ) -> None:
     registry.register(FailingTool())
 
@@ -148,7 +171,10 @@ def test_execute_should_trace_tool_failed(
         RuntimeError,
         match="Tool execution failed",
     ):
-        executor.execute(tool_call)
+        executor.execute(
+            tool_call=tool_call,
+            trace_context=trace_context,
+        )
 
     events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
 
@@ -169,10 +195,13 @@ def test_execute_should_trace_tool_failed(
         "error_message": "Tool execution failed",
     }
 
+    assert {event.trace_id for event in events} == {"test-trace-id"}
+
 
 def test_execute_should_trace_tool_failed_when_tool_not_found(
     executor: ToolExecutor,
     tracer: MagicMock,
+    trace_context: TraceContext,
 ) -> None:
     tool_call = ToolCall(
         call_id="call_missing",
@@ -184,7 +213,10 @@ def test_execute_should_trace_tool_failed_when_tool_not_found(
         KeyError,
         match="Tool not found: missing_tool",
     ):
-        executor.execute(tool_call)
+        executor.execute(
+            tool_call=tool_call,
+            trace_context=trace_context,
+        )
 
     events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
 
@@ -204,3 +236,5 @@ def test_execute_should_trace_tool_failed_when_tool_not_found(
         "error_type": "KeyError",
         "error_message": "'Tool not found: missing_tool'",
     }
+
+    assert {event.trace_id for event in events} == {"test-trace-id"}

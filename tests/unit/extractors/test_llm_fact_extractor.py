@@ -5,6 +5,7 @@ import pytest
 from app.extractors.llm_fact_extractor import LLMFactExtractor
 from app.models.client_response import ClientResponse
 from app.models.message_role import MessageRole
+from app.tracing.trace_context import TraceContext
 from tests.fakes.fake_client import FakeClient
 
 
@@ -14,6 +15,13 @@ def extractor() -> LLMFactExtractor:
         client=FakeClient(
             response=ClientResponse(),
         ),
+    )
+
+
+@pytest.fixture
+def trace_context() -> TraceContext:
+    return TraceContext(
+        trace_id="test-trace-id",
     )
 
 
@@ -31,7 +39,9 @@ def test_build_messages_contains_system_and_user_messages(
     assert messages[1].content == "My name is Frank."
 
 
-def test_extract_calls_client_and_returns_parsed_facts() -> None:
+def test_extract_calls_client_and_returns_parsed_facts(
+    trace_context: TraceContext,
+) -> None:
     client = FakeClient(
         response=ClientResponse(
             content='{"user_name": "Frank"}',
@@ -44,6 +54,7 @@ def test_extract_calls_client_and_returns_parsed_facts() -> None:
 
     result = extractor.extract(
         "My name is Frank.",
+        trace_context=trace_context,
     )
 
     assert result == {
@@ -153,7 +164,9 @@ def test_clean_response_keeps_clean_json(
     assert result == "{}"
 
 
-def test_extract_cleans_markdown_and_returns_parsed_facts() -> None:
+def test_extract_cleans_markdown_and_returns_parsed_facts(
+    trace_context: TraceContext,
+) -> None:
     client = FakeClient(
         response=ClientResponse(
             content=('```json\n{"user_name": "Frank"}\n```'),
@@ -166,6 +179,7 @@ def test_extract_cleans_markdown_and_returns_parsed_facts() -> None:
 
     result = extractor.extract(
         "My name is Frank.",
+        trace_context=trace_context,
     )
 
     assert result == {

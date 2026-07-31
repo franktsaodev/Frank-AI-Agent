@@ -11,6 +11,7 @@ def test_trace_should_log_event(
     tracer = LoggingTracer()
 
     event = TraceEvent(
+        trace_id="test-trace-id",
         event_type=TraceEventType.TOOL_STARTED,
         metadata={
             "tool_name": "calculator",

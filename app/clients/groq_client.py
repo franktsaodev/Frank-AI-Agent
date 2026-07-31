@@ -26,6 +26,7 @@ from app.models.message import Message
 from app.tools.tool_call import ToolCall
 from app.tools.tool_provider import ToolProvider
 from app.tracing.base_tracer import BaseTracer
+from app.tracing.trace_context import TraceContext
 from app.tracing.trace_event import TraceEvent
 from app.tracing.trace_event_type import TraceEventType
 
@@ -44,22 +45,24 @@ class GroqClient(BaseClient):
             api_key=groq_config.api_key,
             max_retries=0,
         )
-        self.groq_config = groq_config
-        self.retry_config = retry_config
-        self.tool_provider = tool_provider
-        self.tracer = tracer
+        self._groq_config = groq_config
+        self._retry_config = retry_config
+        self._tool_provider = tool_provider
+        self._tracer = tracer
 
     def chat(
         self,
         messages: list[Message],
+        trace_context: TraceContext,
     ) -> ClientResponse:
         formatted_messages = self._format_messages(messages)
 
-        self.tracer.trace(
+        self._tracer.trace(
             TraceEvent(
+                trace_id=trace_context.trace_id,
                 event_type=TraceEventType.LLM_STARTED,
                 metadata={
-                    "model": self.groq_config.model,
+                    "model": self._groq_config.model,
                     "message_count": len(messages),
                 },
             )
@@ -68,11 +71,12 @@ class GroqClient(BaseClient):
         try:
             client_response, attempt = self._chat_with_retry(formatted_messages)
         except Exception as error:
-            self.tracer.trace(
+            self._tracer.trace(
                 TraceEvent(
+                    trace_id=trace_context.trace_id,
                     event_type=TraceEventType.LLM_FAILED,
                     metadata={
-                        "model": self.groq_config.model,
+                        "model": self._groq_config.model,
                         "error_type": type(error).__name__,
                         "error_message": str(error),
                     },
@@ -81,11 +85,12 @@ class GroqClient(BaseClient):
 
             raise
 
-        self.tracer.trace(
+        self._tracer.trace(
             TraceEvent(
+                trace_id=trace_context.trace_id,
                 event_type=TraceEventType.LLM_FINISHED,
                 metadata={
-                    "model": self.groq_config.model,
+                    "model": self._groq_config.model,
                     "attempt": attempt,
                     "has_tool_calls": client_response.has_tool_calls,
                     "tool_call_count": len(client_response.tool_calls),
@@ -99,7 +104,7 @@ class GroqClient(BaseClient):
         self,
         formatted_messages: list[dict[str, object]],
     ) -> tuple[ClientResponse, int]:
-        max_attempts = self.retry_config.max_attempts
+        max_attempts = self._retry_config.max_attempts
 
         for attempt in range(1, max_attempts + 1):
             try:
@@ -109,13 +114,13 @@ class GroqClient(BaseClient):
                     max_attempts,
                 )
 
-                tool_schemas = self.tool_provider.get_tool_schemas()
+                tool_schemas = self._tool_provider.get_tool_schemas()
 
                 request_kwargs = {
                     "messages": formatted_messages,
-                    "model": self.groq_config.model,
-                    "temperature": self.groq_config.temperature,
-                    "max_completion_tokens": (self.groq_config.max_completion_tokens),
+                    "model": self._groq_config.model,
+                    "temperature": self._groq_config.temperature,
+                    "max_completion_tokens": (self._groq_config.max_completion_tokens),
                 }
 
                 if tool_schemas:
@@ -349,8 +354,8 @@ class GroqClient(BaseClient):
 
     def _calculate_delay(self, attempt: int) -> float:
         return (
-            self.retry_config.initial_delay_seconds
-            * self.retry_config.backoff_multiplier ** (attempt - 1)
+            self._retry_config.initial_delay_seconds
+            * self._retry_config.backoff_multiplier ** (attempt - 1)
         )
 
     def _sanitize_response(self, content: str) -> str:

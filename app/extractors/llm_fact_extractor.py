@@ -4,6 +4,7 @@ from app.clients.base_client import BaseClient
 from app.extractors.base_fact_extractor import BaseFactExtractor
 from app.models.message import Message
 from app.models.message_role import MessageRole
+from app.tracing.trace_context import TraceContext
 
 
 class LLMFactExtractor(BaseFactExtractor):
@@ -46,7 +47,7 @@ Output:
         self,
         client: BaseClient,
     ) -> None:
-        self.client = client
+        self._client = client
 
     def _build_messages(
         self,
@@ -98,12 +99,16 @@ Output:
     def extract(
         self,
         user_message: str,
+        trace_context: TraceContext,
     ) -> dict[str, str]:
         messages = self._build_messages(
             user_message,
         )
 
-        client_response = self.client.chat(messages)
+        client_response = self._client.chat(
+            messages=messages,
+            trace_context=trace_context,
+        )
 
         if client_response.content is None:
             raise ValueError("Fact extraction response does not contain text content.")

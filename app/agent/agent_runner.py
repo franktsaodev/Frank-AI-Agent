@@ -1,3 +1,5 @@
+import uuid
+
 from app.clients.base_client import BaseClient
 from app.exceptions.max_iterations_exceeded_error import (
     MaxIterationsExceededError,
@@ -8,6 +10,7 @@ from app.models.message_role import MessageRole
 from app.tools.tool_call import ToolCall
 from app.tools.tool_executor import ToolExecutor
 from app.tracing.base_tracer import BaseTracer
+from app.tracing.trace_context import TraceContext
 from app.tracing.trace_event import TraceEvent
 from app.tracing.trace_event_type import TraceEventType
 
@@ -32,10 +35,13 @@ class AgentRunner:
         self,
         messages: list[Message],
     ) -> ClientResponse:
+        trace_context = self._create_trace_context()
+
         current_messages = list(messages)
 
         self._tracer.trace(
             TraceEvent(
+                trace_id=trace_context.trace_id,
                 event_type=TraceEventType.AGENT_STARTED,
                 metadata={
                     "message_count": len(current_messages),
@@ -46,11 +52,15 @@ class AgentRunner:
 
         try:
             for iteration in range(self._max_iterations):
-                response = self._client.chat(current_messages)
+                response = self._client.chat(
+                    messages=current_messages,
+                    trace_context=trace_context,
+                )
 
                 if not response.has_tool_calls:
                     self._tracer.trace(
                         TraceEvent(
+                            trace_id=trace_context.trace_id,
                             event_type=TraceEventType.AGENT_FINISHED,
                             metadata={
                                 "iterations": iteration + 1,
@@ -73,12 +83,16 @@ class AgentRunner:
                 )
 
                 current_messages.extend(
-                    self._execute_tool_calls(response.tool_calls)
+                    self._execute_tool_calls(
+                        tool_calls=response.tool_calls,
+                        trace_context=trace_context,
+                    )
                 )
 
         except Exception as error:
             self._tracer.trace(
                 TraceEvent(
+                    trace_id=trace_context.trace_id,
                     event_type=TraceEventType.AGENT_FAILED,
                     metadata={
                         "error_type": type(error).__name__,
@@ -104,11 +118,15 @@ class AgentRunner:
     def _execute_tool_calls(
         self,
         tool_calls: tuple[ToolCall, ...],
+        trace_context: TraceContext,
     ) -> list[Message]:
         tool_messages: list[Message] = []
 
         for tool_call in tool_calls:
-            tool_result = self._tool_executor.execute(tool_call)
+            tool_result = self._tool_executor.execute(
+                tool_call=tool_call,
+                trace_context=trace_context,
+            )
 
             tool_messages.append(
                 Message(
@@ -119,3 +137,8 @@ class AgentRunner:
             )
 
         return tool_messages
+
+    def _create_trace_context(self) -> TraceContext:
+        return TraceContext(
+            trace_id=uuid.uuid4().hex,
+        )
