@@ -119,6 +119,7 @@ def messages() -> list[Message]:
 def trace_context() -> TraceContext:
     return TraceContext(
         trace_id="test-trace-id",
+        span_id="agent-span-id",
     )
 
 
@@ -612,11 +613,15 @@ def test_chat_sends_tool_call_conversation_to_groq(
     )
 
 
+@patch("app.tracing.trace_context.uuid.uuid4")
 def test_chat_should_trace_llm_lifecycle(
+    mock_uuid4: MagicMock,
     groq_client: GroqClient,
     tracer: MagicMock,
     trace_context: TraceContext,
 ) -> None:
+    mock_uuid4.return_value.hex = "llm-span-id"
+
     mock_groq_response = create_success_response("你好")
 
     mock_create = MagicMock(
@@ -625,15 +630,13 @@ def test_chat_should_trace_llm_lifecycle(
 
     groq_client.client.chat.completions.create = mock_create
 
-    messages = [
-        Message(
-            role=MessageRole.USER,
-            content="你好",
-        )
-    ]
-
     groq_client.chat(
-        messages=messages,
+        messages=[
+            Message(
+                role=MessageRole.USER,
+                content="你好",
+            ),
+        ],
         trace_context=trace_context,
     )
 
@@ -656,13 +659,23 @@ def test_chat_should_trace_llm_lifecycle(
         "tool_call_count": 0,
     }
 
+    assert {event.trace_id for event in events} == {"test-trace-id"}
 
+    assert {event.span_id for event in events} == {"llm-span-id"}
+
+    assert {event.parent_span_id for event in events} == {"agent-span-id"}
+
+
+@patch("app.tracing.trace_context.uuid.uuid4")
 def test_chat_should_trace_llm_failed_on_authentication_error(
+    mock_uuid4: MagicMock,
     groq_client: GroqClient,
     tracer: MagicMock,
     messages: list[Message],
     trace_context: TraceContext,
 ) -> None:
+    mock_uuid4.return_value.hex = "llm-span-id"
+
     request = httpx.Request(
         method="POST",
         url="https://api.groq.com/openai/v1/chat/completions",
@@ -710,15 +723,23 @@ def test_chat_should_trace_llm_failed_on_authentication_error(
 
     assert {event.trace_id for event in events} == {"test-trace-id"}
 
+    assert {event.span_id for event in events} == {"llm-span-id"}
 
+    assert {event.parent_span_id for event in events} == {"agent-span-id"}
+
+
+@patch("app.tracing.trace_context.uuid.uuid4")
 @patch("app.clients.groq_client.time.sleep")
 def test_chat_should_not_trace_llm_failed_when_retry_succeeds(
     mock_sleep: MagicMock,
+    mock_uuid4: MagicMock,
     groq_client: GroqClient,
     tracer: MagicMock,
     messages: list[Message],
     trace_context: TraceContext,
 ) -> None:
+    mock_uuid4.return_value.hex = "llm-span-id"
+
     request = httpx.Request(
         method="POST",
         url="https://api.groq.com/openai/v1/chat/completions",
@@ -753,15 +774,23 @@ def test_chat_should_not_trace_llm_failed_when_retry_succeeds(
 
     assert TraceEventType.LLM_FAILED not in [event.event_type for event in events]
 
+    assert {event.span_id for event in events} == {"llm-span-id"}
 
+    assert {event.parent_span_id for event in events} == {"agent-span-id"}
+
+
+@patch("app.tracing.trace_context.uuid.uuid4")
 @patch("app.clients.groq_client.time.sleep")
 def test_chat_should_trace_llm_failed_after_max_attempts(
     mock_sleep: MagicMock,
+    mock_uuid4: MagicMock,
     groq_client: GroqClient,
     tracer: MagicMock,
     messages: list[Message],
     trace_context: TraceContext,
 ) -> None:
+    mock_uuid4.return_value.hex = "llm-span-id"
+    
     request = httpx.Request(
         method="POST",
         url="https://api.groq.com/openai/v1/chat/completions",
@@ -799,3 +828,7 @@ def test_chat_should_trace_llm_failed_after_max_attempts(
     assert mock_create.call_count == 3
 
     assert {event.trace_id for event in events} == {"test-trace-id"}
+
+    assert {event.span_id for event in events} == {"llm-span-id"}
+
+    assert {event.parent_span_id for event in events} == {"agent-span-id"}

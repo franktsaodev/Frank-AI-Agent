@@ -22,6 +22,7 @@ def extractor() -> LLMFactExtractor:
 def trace_context() -> TraceContext:
     return TraceContext(
         trace_id="test-trace-id",
+        span_id="test-span-id",
     )
 
 

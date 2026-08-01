@@ -1,28 +1,35 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from app.tracing.trace_event import TraceEvent
 from app.tracing.trace_event_type import TraceEventType
 
 
-def test_trace_event_should_store_trace_id_type_and_metadata() -> None:
+def test_trace_event_should_store_trace_span_and_metadata() -> None:
     event = TraceEvent(
-        trace_id="test-trace-id",
-        event_type=TraceEventType.LLM_STARTED,
+        trace_id="trace-123",
+        span_id="span-123",
+        parent_span_id="parent-span-123",
+        event_type=TraceEventType.AGENT_STARTED,
         metadata={
-            "iteration": 1,
+            "message_count": 1,
         },
     )
 
-    assert event.trace_id == "test-trace-id"
-    assert event.event_type is TraceEventType.LLM_STARTED
+    assert event.trace_id == "trace-123"
+    assert event.span_id == "span-123"
+    assert event.parent_span_id == "parent-span-123"
+    assert event.event_type == TraceEventType.AGENT_STARTED
     assert event.metadata == {
-        "iteration": 1,
+        "message_count": 1,
     }
 
 
 def test_trace_event_should_use_empty_metadata_by_default() -> None:
     event = TraceEvent(
         trace_id="test-trace-id",
+        span_id="test-span-id",
         event_type=TraceEventType.AGENT_STARTED,
     )
 
@@ -32,8 +39,19 @@ def test_trace_event_should_use_empty_metadata_by_default() -> None:
 def test_trace_event_should_be_immutable() -> None:
     event = TraceEvent(
         trace_id="test-trace-id",
+        span_id="span-123",
         event_type=TraceEventType.AGENT_STARTED,
     )
 
-    with pytest.raises(AttributeError):
+    with pytest.raises(FrozenInstanceError):
         event.event_type = TraceEventType.AGENT_FINISHED
+
+
+def test_trace_event_should_allow_no_parent_span() -> None:
+    event = TraceEvent(
+        trace_id="trace-123",
+        span_id="agent-span",
+        event_type=TraceEventType.AGENT_STARTED,
+    )
+
+    assert event.parent_span_id is None

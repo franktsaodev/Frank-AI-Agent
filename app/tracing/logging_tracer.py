@@ -3,16 +3,20 @@ import logging
 from app.tracing.base_tracer import BaseTracer
 from app.tracing.trace_event import TraceEvent
 
-logger = logging.getLogger(__name__)
-
 
 class LoggingTracer(BaseTracer):
+    def __init__(self) -> None:
+        self._logger = logging.getLogger(__name__)
+
     def trace(
         self,
         event: TraceEvent,
     ) -> None:
-        logger.info(
-            "Trace event=%s metadata=%s",
+        self._logger.info(
+            "trace_id=%s span_id=%s parent_span_id=%s event_type=%s metadata=%s",
+            event.trace_id,
+            event.span_id,
+            event.parent_span_id,
             event.event_type.value,
             event.metadata,
         )

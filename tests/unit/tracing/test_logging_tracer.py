@@ -12,6 +12,8 @@ def test_trace_should_log_event(
 
     event = TraceEvent(
         trace_id="test-trace-id",
+        span_id="test-span-id",
+        parent_span_id="parent-span-id",
         event_type=TraceEventType.TOOL_STARTED,
         metadata={
             "tool_name": "calculator",
@@ -21,5 +23,8 @@ def test_trace_should_log_event(
     with caplog.at_level(logging.INFO):
         tracer.trace(event)
 
+    assert "test-trace-id" in caplog.text
+    assert "test-span-id" in caplog.text
+    assert "parent-span-id" in caplog.text
     assert "tool_started" in caplog.text
     assert "calculator" in caplog.text

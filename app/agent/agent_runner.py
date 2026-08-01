@@ -35,13 +35,15 @@ class AgentRunner:
         self,
         messages: list[Message],
     ) -> ClientResponse:
-        trace_context = self._create_trace_context()
+        agent_context = self._create_trace_context()
 
         current_messages = list(messages)
 
         self._tracer.trace(
             TraceEvent(
-                trace_id=trace_context.trace_id,
+                trace_id=agent_context.trace_id,
+                span_id=agent_context.span_id,
+                parent_span_id=agent_context.parent_span_id,
                 event_type=TraceEventType.AGENT_STARTED,
                 metadata={
                     "message_count": len(current_messages),
@@ -54,13 +56,15 @@ class AgentRunner:
             for iteration in range(self._max_iterations):
                 response = self._client.chat(
                     messages=current_messages,
-                    trace_context=trace_context,
+                    trace_context=agent_context,
                 )
 
                 if not response.has_tool_calls:
                     self._tracer.trace(
                         TraceEvent(
-                            trace_id=trace_context.trace_id,
+                            trace_id=agent_context.trace_id,
+                            span_id=agent_context.span_id,
+                            parent_span_id=agent_context.parent_span_id,
                             event_type=TraceEventType.AGENT_FINISHED,
                             metadata={
                                 "iterations": iteration + 1,
@@ -85,14 +89,16 @@ class AgentRunner:
                 current_messages.extend(
                     self._execute_tool_calls(
                         tool_calls=response.tool_calls,
-                        trace_context=trace_context,
+                        trace_context=agent_context,
                     )
                 )
 
         except Exception as error:
             self._tracer.trace(
                 TraceEvent(
-                    trace_id=trace_context.trace_id,
+                    trace_id=agent_context.trace_id,
+                    span_id=agent_context.span_id,
+                    parent_span_id=agent_context.parent_span_id,
                     event_type=TraceEventType.AGENT_FAILED,
                     metadata={
                         "error_type": type(error).__name__,
@@ -141,4 +147,5 @@ class AgentRunner:
     def _create_trace_context(self) -> TraceContext:
         return TraceContext(
             trace_id=uuid.uuid4().hex,
+            span_id=uuid.uuid4().hex,
         )

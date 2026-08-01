@@ -22,9 +22,13 @@ class ToolExecutor:
         tool_call: ToolCall,
         trace_context: TraceContext,
     ) -> Any:
+        tool_context = trace_context.create_child()
+
         self._tracer.trace(
             TraceEvent(
-                trace_id=trace_context.trace_id,
+                trace_id=tool_context.trace_id,
+                span_id=tool_context.span_id,
+                parent_span_id=tool_context.parent_span_id,
                 event_type=TraceEventType.TOOL_STARTED,
                 metadata={
                     "tool_name": tool_call.name,
@@ -39,7 +43,9 @@ class ToolExecutor:
         except Exception as error:
             self._tracer.trace(
                 TraceEvent(
-                    trace_id=trace_context.trace_id,
+                    trace_id=tool_context.trace_id,
+                    span_id=tool_context.span_id,
+                    parent_span_id=tool_context.parent_span_id,
                     event_type=TraceEventType.TOOL_FAILED,
                     metadata={
                         "tool_name": tool_call.name,
@@ -53,7 +59,9 @@ class ToolExecutor:
 
         self._tracer.trace(
             TraceEvent(
-                trace_id=trace_context.trace_id,
+                trace_id=tool_context.trace_id,
+                span_id=tool_context.span_id,
+                parent_span_id=tool_context.parent_span_id,
                 event_type=TraceEventType.TOOL_FINISHED,
                 metadata={
                     "tool_name": tool_call.name,

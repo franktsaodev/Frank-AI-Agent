@@ -57,9 +57,13 @@ class GroqClient(BaseClient):
     ) -> ClientResponse:
         formatted_messages = self._format_messages(messages)
 
+        llm_context = trace_context.create_child()
+
         self._tracer.trace(
             TraceEvent(
-                trace_id=trace_context.trace_id,
+                trace_id=llm_context.trace_id,
+                span_id=llm_context.span_id,
+                parent_span_id=llm_context.parent_span_id,
                 event_type=TraceEventType.LLM_STARTED,
                 metadata={
                     "model": self._groq_config.model,
@@ -69,11 +73,15 @@ class GroqClient(BaseClient):
         )
 
         try:
-            client_response, attempt = self._chat_with_retry(formatted_messages)
+            client_response, attempt = self._chat_with_retry(
+                formatted_messages,
+            )
         except Exception as error:
             self._tracer.trace(
                 TraceEvent(
-                    trace_id=trace_context.trace_id,
+                    trace_id=llm_context.trace_id,
+                    span_id=llm_context.span_id,
+                    parent_span_id=llm_context.parent_span_id,
                     event_type=TraceEventType.LLM_FAILED,
                     metadata={
                         "model": self._groq_config.model,
@@ -87,7 +95,9 @@ class GroqClient(BaseClient):
 
         self._tracer.trace(
             TraceEvent(
-                trace_id=trace_context.trace_id,
+                trace_id=llm_context.trace_id,
+                span_id=llm_context.span_id,
+                parent_span_id=llm_context.parent_span_id,
                 event_type=TraceEventType.LLM_FINISHED,
                 metadata={
                     "model": self._groq_config.model,

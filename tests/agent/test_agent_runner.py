@@ -740,10 +740,19 @@ def test_run_should_trace_agent_failed_when_max_iterations_exceeded() -> None:
 @patch(
     "app.agent.agent_runner.uuid.uuid4",
 )
-def test_run_should_use_same_trace_id_for_agent_lifecycle_events(
+def test_run_should_use_root_span_for_agent_lifecycle_events(
     mock_uuid4: MagicMock,
 ) -> None:
-    mock_uuid4.return_value.hex = "test-trace-id"
+    trace_uuid = MagicMock()
+    trace_uuid.hex = "test-trace-id"
+
+    span_uuid = MagicMock()
+    span_uuid.hex = "agent-span-id"
+
+    mock_uuid4.side_effect = [
+        trace_uuid,
+        span_uuid,
+    ]
 
     client = MagicMock(spec=BaseClient)
     tool_executor = MagicMock(spec=ToolExecutor)
@@ -764,11 +773,18 @@ def test_run_should_use_same_trace_id_for_agent_lifecycle_events(
         messages=[],
     )
 
-    events = [call.args[0] for call in tracer.trace.call_args_list]
+    events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
 
-    trace_ids = {event.trace_id for event in events}
+    assert [event.event_type for event in events] == [
+        TraceEventType.AGENT_STARTED,
+        TraceEventType.AGENT_FINISHED,
+    ]
 
-    assert trace_ids == {"test-trace-id"}
+    assert {event.trace_id for event in events} == {"test-trace-id"}
+
+    assert {event.span_id for event in events} == {"agent-span-id"}
+
+    assert {event.parent_span_id for event in events} == {None}
 
 
 def test_run_should_pass_trace_context_to_client() -> None:

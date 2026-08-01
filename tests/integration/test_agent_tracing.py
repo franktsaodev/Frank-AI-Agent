@@ -1,6 +1,6 @@
 import json
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -140,6 +140,27 @@ def test_agent_should_trace_complete_lifecycle_without_tool(
 
     assert result.content == "你好，Frank！"
 
+    # 所有事件都屬於同一條 trace
+    assert len({event.trace_id for event in events}) == 1
+
+    agent_started = events[0]
+    llm_started = events[1]
+    llm_finished = events[2]
+    agent_finished = events[3]
+
+    # Agent lifecycle 共用 root span
+    assert agent_started.span_id == agent_finished.span_id
+    assert agent_started.parent_span_id is None
+    assert agent_finished.parent_span_id is None
+
+    # LLM lifecycle 共用 child span
+    assert llm_started.span_id == llm_finished.span_id
+    assert llm_started.parent_span_id == agent_started.span_id
+    assert llm_finished.parent_span_id == agent_started.span_id
+
+    # LLM span 和 Agent span 不同
+    assert llm_started.span_id != agent_started.span_id
+
 
 def test_agent_should_trace_complete_lifecycle_with_tool(
     agent_runner: AgentRunner,
@@ -171,14 +192,14 @@ def test_agent_should_trace_complete_lifecycle_with_tool(
 
     groq_client.client.chat.completions.create = mock_create
 
-    messages = [
-        Message(
-            role=MessageRole.USER,
-            content="請使用 fake tool",
-        )
-    ]
-
-    result = agent_runner.run(messages)
+    result = agent_runner.run(
+        [
+            Message(
+                role=MessageRole.USER,
+                content="請使用 fake tool",
+            )
+        ]
+    )
 
     events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
 
@@ -194,8 +215,51 @@ def test_agent_should_trace_complete_lifecycle_with_tool(
     ]
 
     assert mock_create.call_count == 2
-
     assert result.content == "工具已執行完成"
+
+    # 所有事件都屬於同一條 trace
+    assert len({event.trace_id for event in events}) == 1
+
+    agent_span_id = events[0].span_id
+    first_llm_span_id = events[1].span_id
+    tool_span_id = events[3].span_id
+    second_llm_span_id = events[5].span_id
+
+    # Agent root span
+    assert events[0].span_id == agent_span_id
+    assert events[7].span_id == agent_span_id
+    assert events[0].parent_span_id is None
+    assert events[7].parent_span_id is None
+
+    # 第一個 LLM child span
+    assert events[1].span_id == first_llm_span_id
+    assert events[2].span_id == first_llm_span_id
+    assert events[1].parent_span_id == agent_span_id
+    assert events[2].parent_span_id == agent_span_id
+
+    # Tool child span
+    assert events[3].span_id == tool_span_id
+    assert events[4].span_id == tool_span_id
+    assert events[3].parent_span_id == agent_span_id
+    assert events[4].parent_span_id == agent_span_id
+
+    # 第二個 LLM child span
+    assert events[5].span_id == second_llm_span_id
+    assert events[6].span_id == second_llm_span_id
+    assert events[5].parent_span_id == agent_span_id
+    assert events[6].parent_span_id == agent_span_id
+
+    # 三個 child span 必須彼此不同
+    assert (
+        len(
+            {
+                first_llm_span_id,
+                tool_span_id,
+                second_llm_span_id,
+            }
+        )
+        == 3
+    )
 
 
 def test_agent_should_trace_complete_lifecycle_when_tool_fails(
@@ -212,24 +276,22 @@ def test_agent_should_trace_complete_lifecycle_when_tool_fails(
         arguments={},
     )
 
-    mock_create = MagicMock(
+    groq_client.client.chat.completions.create = MagicMock(
         return_value=tool_response,
     )
-
-    groq_client.client.chat.completions.create = mock_create
-
-    messages = [
-        Message(
-            role=MessageRole.USER,
-            content="請執行 failing tool",
-        )
-    ]
 
     with pytest.raises(
         RuntimeError,
         match="Tool execution failed",
     ):
-        agent_runner.run(messages)
+        agent_runner.run(
+            [
+                Message(
+                    role=MessageRole.USER,
+                    content="請執行 failing tool",
+                )
+            ]
+        )
 
     events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
 
@@ -241,3 +303,29 @@ def test_agent_should_trace_complete_lifecycle_when_tool_fails(
         TraceEventType.TOOL_FAILED,
         TraceEventType.AGENT_FAILED,
     ]
+
+    assert len({event.trace_id for event in events}) == 1
+
+    agent_span_id = events[0].span_id
+    llm_span_id = events[1].span_id
+    tool_span_id = events[3].span_id
+
+    # Agent root span：Started 與 Failed 共用
+    assert events[0].span_id == agent_span_id
+    assert events[5].span_id == agent_span_id
+    assert events[0].parent_span_id is None
+    assert events[5].parent_span_id is None
+
+    # LLM child span
+    assert events[1].span_id == llm_span_id
+    assert events[2].span_id == llm_span_id
+    assert events[1].parent_span_id == agent_span_id
+    assert events[2].parent_span_id == agent_span_id
+
+    # Tool failed child span
+    assert events[3].span_id == tool_span_id
+    assert events[4].span_id == tool_span_id
+    assert events[3].parent_span_id == agent_span_id
+    assert events[4].parent_span_id == agent_span_id
+
+    assert llm_span_id != tool_span_id

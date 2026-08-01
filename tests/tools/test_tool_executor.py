@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -37,6 +37,7 @@ def executor(
 def trace_context() -> TraceContext:
     return TraceContext(
         trace_id="test-trace-id",
+        span_id="agent-span-id",
     )
 
 
@@ -108,12 +109,16 @@ def test_execute_propagates_tool_error(
         )
 
 
+@patch("app.tracing.trace_context.uuid.uuid4")
 def test_execute_should_trace_tool_lifecycle(
+    mock_uuid4: MagicMock,
     executor: ToolExecutor,
     registry: ToolRegistry,
     tracer: MagicMock,
     trace_context: TraceContext,
 ) -> None:
+    mock_uuid4.return_value.hex = "tool-span-id"
+
     registry.register(FakeTool())
 
     tool_call = ToolCall(
@@ -152,13 +157,21 @@ def test_execute_should_trace_tool_lifecycle(
 
     assert {event.trace_id for event in events} == {"test-trace-id"}
 
+    assert {event.span_id for event in events} == {"tool-span-id"}
 
+    assert {event.parent_span_id for event in events} == {"agent-span-id"}
+
+
+@patch("app.tracing.trace_context.uuid.uuid4")
 def test_execute_should_trace_tool_failed(
+    mock_uuid4: MagicMock,
     executor: ToolExecutor,
     registry: ToolRegistry,
     tracer: MagicMock,
     trace_context: TraceContext,
 ) -> None:
+    mock_uuid4.return_value.hex = "tool-span-id"
+
     registry.register(FailingTool())
 
     tool_call = ToolCall(
@@ -197,12 +210,20 @@ def test_execute_should_trace_tool_failed(
 
     assert {event.trace_id for event in events} == {"test-trace-id"}
 
+    assert {event.span_id for event in events} == {"tool-span-id"}
 
+    assert {event.parent_span_id for event in events} == {"agent-span-id"}
+
+
+@patch("app.tracing.trace_context.uuid.uuid4")
 def test_execute_should_trace_tool_failed_when_tool_not_found(
+    mock_uuid4: MagicMock,
     executor: ToolExecutor,
     tracer: MagicMock,
     trace_context: TraceContext,
 ) -> None:
+    mock_uuid4.return_value.hex = "tool-span-id"
+
     tool_call = ToolCall(
         call_id="call_missing",
         name="missing_tool",
@@ -238,3 +259,68 @@ def test_execute_should_trace_tool_failed_when_tool_not_found(
     }
 
     assert {event.trace_id for event in events} == {"test-trace-id"}
+
+    assert {event.span_id for event in events} == {"tool-span-id"}
+
+    assert {event.parent_span_id for event in events} == {"agent-span-id"}
+
+
+@patch("app.tracing.trace_context.uuid.uuid4")
+def test_each_execute_should_create_a_new_tool_span(
+    mock_uuid4: MagicMock,
+    executor: ToolExecutor,
+    registry: ToolRegistry,
+    tracer: MagicMock,
+    trace_context: TraceContext,
+) -> None:
+    first_uuid = MagicMock()
+    first_uuid.hex = "tool-span-1"
+
+    second_uuid = MagicMock()
+    second_uuid.hex = "tool-span-2"
+
+    mock_uuid4.side_effect = [
+        first_uuid,
+        second_uuid,
+    ]
+
+    registry.register(FakeTool())
+
+    first_call = ToolCall(
+        call_id="call_1",
+        name="fake",
+        arguments={
+            "message": "first",
+            "count": 1,
+        },
+    )
+
+    second_call = ToolCall(
+        call_id="call_2",
+        name="fake",
+        arguments={
+            "message": "second",
+            "count": 2,
+        },
+    )
+
+    executor.execute(
+        tool_call=first_call,
+        trace_context=trace_context,
+    )
+
+    executor.execute(
+        tool_call=second_call,
+        trace_context=trace_context,
+    )
+
+    events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert [event.span_id for event in events] == [
+        "tool-span-1",
+        "tool-span-1",
+        "tool-span-2",
+        "tool-span-2",
+    ]
+
+    assert {event.parent_span_id for event in events} == {"agent-span-id"}
