@@ -1,6 +1,7 @@
 from app.agent.agent_runner import AgentRunner
 from app.agent.chat_agent import ChatAgent
 from app.clients.groq_client import GroqClient
+from app.clock.system_clock import SystemClock
 from app.config import GROQ_API_KEY, GROQ_MODEL
 from app.config_models.groq_config import GroqConfig
 from app.config_models.memory_config import MemoryConfig
@@ -23,6 +24,7 @@ def create_chat_agent() -> ChatAgent:
     tracer = LoggingTracer()
     registry = ToolRegistry()
     adapter = ToolSchemaAdapter()
+    clock = SystemClock()
 
     groq_config = GroqConfig(
         api_key=GROQ_API_KEY,
@@ -43,6 +45,7 @@ def create_chat_agent() -> ChatAgent:
     tool_executor = ToolExecutor(
         registry=registry,
         tracer=tracer,
+        clock=clock,
     )
 
     client = GroqClient(
@@ -50,12 +53,14 @@ def create_chat_agent() -> ChatAgent:
         retry_config=retry_config,
         tool_provider=tool_provider,
         tracer=tracer,
+        clock=clock,
     )
 
     agent_runner = AgentRunner(
         client=client,
         tool_executor=tool_executor,
         tracer=tracer,
+        clock=clock,
         max_iterations=10,
     )
 

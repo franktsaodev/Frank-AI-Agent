@@ -6,6 +6,8 @@ import pytest
 
 from app.agent.agent_runner import AgentRunner
 from app.clients.groq_client import GroqClient
+from app.clock.base_clock import BaseClock
+from app.clock.system_clock import SystemClock
 from app.config_models.groq_config import GroqConfig
 from app.config_models.retry_config import RetryConfig
 from app.models.message import Message
@@ -31,9 +33,15 @@ def registry() -> ToolRegistry:
 
 
 @pytest.fixture
+def clock() -> BaseClock:
+    return SystemClock()
+
+
+@pytest.fixture
 def groq_client(
     registry: ToolRegistry,
     tracer: MagicMock,
+    clock: BaseClock,
 ) -> GroqClient:
     tool_provider = ToolProvider(
         registry=registry,
@@ -52,6 +60,7 @@ def groq_client(
         ),
         tool_provider=tool_provider,
         tracer=tracer,
+        clock=clock,
     )
 
 
@@ -59,10 +68,12 @@ def groq_client(
 def tool_executor(
     registry: ToolRegistry,
     tracer: MagicMock,
+    clock: BaseClock,
 ) -> ToolExecutor:
     return ToolExecutor(
         registry=registry,
         tracer=tracer,
+        clock=clock,
     )
 
 
@@ -71,11 +82,13 @@ def agent_runner(
     groq_client: GroqClient,
     tool_executor: ToolExecutor,
     tracer: MagicMock,
+    clock: BaseClock,
 ) -> AgentRunner:
     return AgentRunner(
         client=groq_client,
         tool_executor=tool_executor,
         tracer=tracer,
+        clock=clock,
         max_iterations=10,
     )
 
@@ -160,6 +173,20 @@ def test_agent_should_trace_complete_lifecycle_without_tool(
 
     # LLM span 和 Agent span 不同
     assert llm_started.span_id != agent_started.span_id
+
+    agent_finished_event = next(
+        event for event in events if event.event_type == TraceEventType.AGENT_FINISHED
+    )
+
+    assert "duration_ms" in agent_finished_event.metadata
+    assert agent_finished_event.metadata["duration_ms"] >= 0
+
+    llm_finished = next(
+        event for event in events if event.event_type == TraceEventType.LLM_FINISHED
+    )
+
+    assert "duration_ms" in llm_finished.metadata
+    assert llm_finished.metadata["duration_ms"] >= 0
 
 
 def test_agent_should_trace_complete_lifecycle_with_tool(
@@ -261,6 +288,27 @@ def test_agent_should_trace_complete_lifecycle_with_tool(
         == 3
     )
 
+    agent_finished_event = next(
+        event for event in events if event.event_type == TraceEventType.AGENT_FINISHED
+    )
+
+    assert "duration_ms" in agent_finished_event.metadata
+    assert agent_finished_event.metadata["duration_ms"] >= 0
+
+    llm_finished = next(
+        event for event in events if event.event_type == TraceEventType.LLM_FINISHED
+    )
+
+    assert "duration_ms" in llm_finished.metadata
+    assert llm_finished.metadata["duration_ms"] >= 0
+
+    tool_finished = next(
+        event for event in events if event.event_type == TraceEventType.TOOL_FINISHED
+    )
+
+    assert "duration_ms" in tool_finished.metadata
+    assert tool_finished.metadata["duration_ms"] >= 0
+
 
 def test_agent_should_trace_complete_lifecycle_when_tool_fails(
     agent_runner: AgentRunner,
@@ -329,3 +377,24 @@ def test_agent_should_trace_complete_lifecycle_when_tool_fails(
     assert events[4].parent_span_id == agent_span_id
 
     assert llm_span_id != tool_span_id
+
+    agent_failed = next(
+        event for event in events if event.event_type == TraceEventType.AGENT_FAILED
+    )
+
+    assert "duration_ms" in agent_failed.metadata
+    assert agent_failed.metadata["duration_ms"] >= 0
+
+    llm_finished_event = next(
+        event for event in events if event.event_type == TraceEventType.LLM_FINISHED
+    )
+
+    assert "duration_ms" in llm_finished_event.metadata
+    assert llm_finished_event.metadata["duration_ms"] >= 0
+
+    tool_failed = next(
+        event for event in events if event.event_type == TraceEventType.TOOL_FAILED
+    )
+
+    assert "duration_ms" in tool_failed.metadata
+    assert tool_failed.metadata["duration_ms"] >= 0

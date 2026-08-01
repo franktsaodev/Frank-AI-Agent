@@ -23,6 +23,7 @@ def test_trace_should_log_event(
     with caplog.at_level(logging.INFO):
         tracer.trace(event)
 
+    assert event.timestamp.isoformat() in caplog.text
     assert "test-trace-id" in caplog.text
     assert "test-span-id" in caplog.text
     assert "parent-span-id" in caplog.text

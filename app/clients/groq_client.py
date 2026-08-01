@@ -12,6 +12,7 @@ from groq import (
 )
 
 from app.clients.base_client import BaseClient
+from app.clock.base_clock import BaseClock
 from app.config_models.groq_config import GroqConfig
 from app.config_models.retry_config import RetryConfig
 from app.exceptions.client_exceptions import (
@@ -40,6 +41,7 @@ class GroqClient(BaseClient):
         retry_config: RetryConfig,
         tool_provider: ToolProvider,
         tracer: BaseTracer,
+        clock: BaseClock,
     ) -> None:
         self.client = Groq(
             api_key=groq_config.api_key,
@@ -49,6 +51,7 @@ class GroqClient(BaseClient):
         self._retry_config = retry_config
         self._tool_provider = tool_provider
         self._tracer = tracer
+        self._clock = clock
 
     def chat(
         self,
@@ -58,6 +61,8 @@ class GroqClient(BaseClient):
         formatted_messages = self._format_messages(messages)
 
         llm_context = trace_context.create_child()
+
+        start_time = self._clock.now()
 
         self._tracer.trace(
             TraceEvent(
@@ -77,6 +82,8 @@ class GroqClient(BaseClient):
                 formatted_messages,
             )
         except Exception as error:
+            duration_ms = (self._clock.now() - start_time) * 1000
+
             self._tracer.trace(
                 TraceEvent(
                     trace_id=llm_context.trace_id,
@@ -87,12 +94,15 @@ class GroqClient(BaseClient):
                         "model": self._groq_config.model,
                         "error_type": type(error).__name__,
                         "error_message": str(error),
+                        "duration_ms": duration_ms,
                     },
                 )
             )
 
             raise
 
+        duration_ms = (self._clock.now() - start_time) * 1000
+        
         self._tracer.trace(
             TraceEvent(
                 trace_id=llm_context.trace_id,
@@ -104,6 +114,7 @@ class GroqClient(BaseClient):
                     "attempt": attempt,
                     "has_tool_calls": client_response.has_tool_calls,
                     "tool_call_count": len(client_response.tool_calls),
+                    "duration_ms": duration_ms,
                 },
             )
         )

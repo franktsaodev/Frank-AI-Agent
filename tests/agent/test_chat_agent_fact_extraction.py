@@ -6,6 +6,7 @@ import pytest
 
 from app.agent.agent_runner import AgentRunner
 from app.agent.chat_agent import ChatAgent
+from app.clock.system_clock import SystemClock
 from app.config_models.prompt_config import PromptConfig
 from app.extractors.regex_fact_extractor import RegexFactExtractor
 from app.memory.in_memory_fact_memory import InMemoryFactMemory
@@ -49,6 +50,7 @@ def create_agent() -> Callable[..., ChatAgent]:
             client=actual_client,
             tool_executor=actual_tool_executor,
             tracer=tracer,
+            clock=SystemClock(),
         )
 
         return ChatAgent(

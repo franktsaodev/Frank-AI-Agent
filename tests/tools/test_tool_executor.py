@@ -1,7 +1,9 @@
+from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.clock.base_clock import BaseClock
 from app.tools.tool_call import ToolCall
 from app.tools.tool_executor import ToolExecutor
 from app.tools.tool_registry import ToolRegistry
@@ -9,6 +11,7 @@ from app.tracing.base_tracer import BaseTracer
 from app.tracing.trace_context import TraceContext
 from app.tracing.trace_event_type import TraceEventType
 from tests.fakes.failing_tool import FailingTool
+from tests.fakes.fake_clock import FakeClock
 from tests.fakes.fake_tool import FakeTool
 
 
@@ -23,14 +26,27 @@ def registry() -> ToolRegistry:
 
 
 @pytest.fixture
-def executor(
+def create_tool_executor(
     registry: ToolRegistry,
     tracer: MagicMock,
-) -> ToolExecutor:
-    return ToolExecutor(
-        registry=registry,
-        tracer=tracer,
-    )
+) -> Callable[..., ToolExecutor]:
+    def _create_tool_executor(
+        *,
+        clock: BaseClock | None = None,
+    ) -> ToolExecutor:
+        return ToolExecutor(
+            registry=registry,
+            tracer=tracer,
+            clock=clock
+            or FakeClock(
+                times=[
+                    0.0,
+                    1.0,
+                ],
+            ),
+        )
+
+    return _create_tool_executor
 
 
 @pytest.fixture
@@ -42,12 +58,14 @@ def trace_context() -> TraceContext:
 
 
 def test_execute_calls_tool_with_arguments(
-    executor: ToolExecutor,
+    create_tool_executor: Callable[..., ToolExecutor],
     registry: ToolRegistry,
     trace_context: TraceContext,
 ) -> None:
     fake_tool = FakeTool()
     registry.register(fake_tool)
+
+    executor = create_tool_executor()
 
     tool_call = ToolCall(
         call_id="",
@@ -71,9 +89,11 @@ def test_execute_calls_tool_with_arguments(
 
 
 def test_execute_raises_error_when_tool_does_not_exist(
-    executor: ToolExecutor,
+    create_tool_executor: Callable[..., ToolExecutor],
     trace_context: TraceContext,
 ) -> None:
+    executor = create_tool_executor()
+
     with pytest.raises(
         KeyError,
         match="Tool not found: weather",
@@ -89,11 +109,13 @@ def test_execute_raises_error_when_tool_does_not_exist(
 
 
 def test_execute_propagates_tool_error(
-    executor: ToolExecutor,
+    create_tool_executor: Callable[..., ToolExecutor],
     registry: ToolRegistry,
     trace_context: TraceContext,
 ) -> None:
     registry.register(FailingTool())
+
+    executor = create_tool_executor()
 
     with pytest.raises(
         RuntimeError,
@@ -112,7 +134,7 @@ def test_execute_propagates_tool_error(
 @patch("app.tracing.trace_context.uuid.uuid4")
 def test_execute_should_trace_tool_lifecycle(
     mock_uuid4: MagicMock,
-    executor: ToolExecutor,
+    create_tool_executor: Callable[..., ToolExecutor],
     registry: ToolRegistry,
     tracer: MagicMock,
     trace_context: TraceContext,
@@ -120,6 +142,8 @@ def test_execute_should_trace_tool_lifecycle(
     mock_uuid4.return_value.hex = "tool-span-id"
 
     registry.register(FakeTool())
+
+    executor = create_tool_executor()
 
     tool_call = ToolCall(
         call_id="call_123",
@@ -144,16 +168,13 @@ def test_execute_should_trace_tool_lifecycle(
         TraceEventType.TOOL_FINISHED,
     ]
 
-    assert events[0].metadata == {
-        "tool_name": "fake",
-        "tool_call_id": "call_123",
-    }
+    assert events[0].metadata["tool_name"] == "fake"
+    assert events[0].metadata["tool_call_id"] == "call_123"
 
-    assert events[1].metadata == {
-        "tool_name": "fake",
-        "tool_call_id": "call_123",
-        "result_type": "str",
-    }
+    assert events[1].metadata["tool_name"] == "fake"
+    assert events[1].metadata["tool_call_id"] == "call_123"
+    assert events[1].metadata["result_type"] == "str"
+    assert events[1].metadata["duration_ms"] == 1000.0
 
     assert {event.trace_id for event in events} == {"test-trace-id"}
 
@@ -165,7 +186,7 @@ def test_execute_should_trace_tool_lifecycle(
 @patch("app.tracing.trace_context.uuid.uuid4")
 def test_execute_should_trace_tool_failed(
     mock_uuid4: MagicMock,
-    executor: ToolExecutor,
+    create_tool_executor: Callable[..., ToolExecutor],
     registry: ToolRegistry,
     tracer: MagicMock,
     trace_context: TraceContext,
@@ -173,6 +194,8 @@ def test_execute_should_trace_tool_failed(
     mock_uuid4.return_value.hex = "tool-span-id"
 
     registry.register(FailingTool())
+
+    executor = create_tool_executor()
 
     tool_call = ToolCall(
         call_id="call_456",
@@ -196,17 +219,14 @@ def test_execute_should_trace_tool_failed(
         TraceEventType.TOOL_FAILED,
     ]
 
-    assert events[0].metadata == {
-        "tool_name": "failing",
-        "tool_call_id": "call_456",
-    }
+    assert events[0].metadata["tool_name"] == "failing"
+    assert events[0].metadata["tool_call_id"] == "call_456"
 
-    assert events[1].metadata == {
-        "tool_name": "failing",
-        "tool_call_id": "call_456",
-        "error_type": "RuntimeError",
-        "error_message": "Tool execution failed",
-    }
+    assert events[1].metadata["tool_name"] == "failing"
+    assert events[1].metadata["tool_call_id"] == "call_456"
+    assert events[1].metadata["error_type"] == "RuntimeError"
+    assert events[1].metadata["error_message"] == "Tool execution failed"
+    assert events[1].metadata["duration_ms"] == 1000.0
 
     assert {event.trace_id for event in events} == {"test-trace-id"}
 
@@ -218,11 +238,13 @@ def test_execute_should_trace_tool_failed(
 @patch("app.tracing.trace_context.uuid.uuid4")
 def test_execute_should_trace_tool_failed_when_tool_not_found(
     mock_uuid4: MagicMock,
-    executor: ToolExecutor,
+    create_tool_executor: Callable[..., ToolExecutor],
     tracer: MagicMock,
     trace_context: TraceContext,
 ) -> None:
     mock_uuid4.return_value.hex = "tool-span-id"
+
+    executor = create_tool_executor()
 
     tool_call = ToolCall(
         call_id="call_missing",
@@ -246,17 +268,14 @@ def test_execute_should_trace_tool_failed_when_tool_not_found(
         TraceEventType.TOOL_FAILED,
     ]
 
-    assert events[0].metadata == {
-        "tool_name": "missing_tool",
-        "tool_call_id": "call_missing",
-    }
+    assert events[0].metadata["tool_name"] == "missing_tool"
+    assert events[0].metadata["tool_call_id"] == "call_missing"
 
-    assert events[1].metadata == {
-        "tool_name": "missing_tool",
-        "tool_call_id": "call_missing",
-        "error_type": "KeyError",
-        "error_message": "'Tool not found: missing_tool'",
-    }
+    assert events[1].metadata["tool_name"] == "missing_tool"
+    assert events[1].metadata["tool_call_id"] == "call_missing"
+    assert events[1].metadata["error_type"] == "KeyError"
+    assert events[1].metadata["error_message"] == "'Tool not found: missing_tool'"
+    assert events[1].metadata["duration_ms"] == 1000.0
 
     assert {event.trace_id for event in events} == {"test-trace-id"}
 
@@ -268,7 +287,7 @@ def test_execute_should_trace_tool_failed_when_tool_not_found(
 @patch("app.tracing.trace_context.uuid.uuid4")
 def test_each_execute_should_create_a_new_tool_span(
     mock_uuid4: MagicMock,
-    executor: ToolExecutor,
+    create_tool_executor: Callable[..., ToolExecutor],
     registry: ToolRegistry,
     tracer: MagicMock,
     trace_context: TraceContext,
@@ -285,6 +304,17 @@ def test_each_execute_should_create_a_new_tool_span(
     ]
 
     registry.register(FakeTool())
+
+    executor = create_tool_executor(
+        clock=FakeClock(
+            times=[
+                0.0,
+                1.0,
+                2.0,
+                3.0,
+            ],
+        ),
+    )
 
     first_call = ToolCall(
         call_id="call_1",
@@ -324,3 +354,74 @@ def test_each_execute_should_create_a_new_tool_span(
     ]
 
     assert {event.parent_span_id for event in events} == {"agent-span-id"}
+
+
+def test_execute_should_trace_tool_duration(
+    create_tool_executor: Callable[..., ToolExecutor],
+    registry: ToolRegistry,
+    tracer: MagicMock,
+    trace_context: TraceContext,
+) -> None:
+    registry.register(FakeTool())
+
+    executor = create_tool_executor(
+        clock=FakeClock(
+            times=[
+                10.0,
+                10.15,
+            ],
+        ),
+    )
+
+    executor.execute(
+        tool_call=ToolCall(
+            call_id="call_123",
+            name="fake",
+            arguments={
+                "message": "hello",
+                "count": 1,
+            },
+        ),
+        trace_context=trace_context,
+    )
+
+    events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert events[-1].event_type == TraceEventType.TOOL_FINISHED
+    assert events[-1].metadata["duration_ms"] == pytest.approx(150.0)
+
+
+def test_execute_should_trace_tool_duration_when_failed(
+    create_tool_executor: Callable[..., ToolExecutor],
+    registry: ToolRegistry,
+    tracer: MagicMock,
+    trace_context: TraceContext,
+) -> None:
+    registry.register(FailingTool())
+
+    executor = create_tool_executor(
+        clock=FakeClock(
+            times=[
+                20.0,
+                20.4,
+            ],
+        ),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Tool execution failed",
+    ):
+        executor.execute(
+            tool_call=ToolCall(
+                call_id="call_456",
+                name="failing",
+                arguments={},
+            ),
+            trace_context=trace_context,
+        )
+
+    events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert events[-1].event_type == TraceEventType.TOOL_FAILED
+    assert events[-1].metadata["duration_ms"] == pytest.approx(400.0)

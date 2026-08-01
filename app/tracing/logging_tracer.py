@@ -13,7 +13,8 @@ class LoggingTracer(BaseTracer):
         event: TraceEvent,
     ) -> None:
         self._logger.info(
-            "trace_id=%s span_id=%s parent_span_id=%s event_type=%s metadata=%s",
+            "timestamp=%s trace_id=%s span_id=%s parent_span_id=%s event_type=%s metadata=%s",
+            event.timestamp.isoformat(),
             event.trace_id,
             event.span_id,
             event.parent_span_id,

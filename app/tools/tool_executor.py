@@ -1,5 +1,6 @@
 from typing import Any
 
+from app.clock.base_clock import BaseClock
 from app.tools.tool_call import ToolCall
 from app.tools.tool_registry import ToolRegistry
 from app.tracing.base_tracer import BaseTracer
@@ -13,9 +14,11 @@ class ToolExecutor:
         self,
         registry: ToolRegistry,
         tracer: BaseTracer,
+        clock: BaseClock,
     ) -> None:
         self._registry = registry
         self._tracer = tracer
+        self._clock = clock
 
     def execute(
         self,
@@ -23,6 +26,8 @@ class ToolExecutor:
         trace_context: TraceContext,
     ) -> Any:
         tool_context = trace_context.create_child()
+
+        start_time = self._clock.now()
 
         self._tracer.trace(
             TraceEvent(
@@ -41,6 +46,8 @@ class ToolExecutor:
             tool = self._registry.get(tool_call.name)
             result = tool.execute(**tool_call.arguments)
         except Exception as error:
+            duration_ms = (self._clock.now() - start_time) * 1000
+
             self._tracer.trace(
                 TraceEvent(
                     trace_id=tool_context.trace_id,
@@ -52,10 +59,13 @@ class ToolExecutor:
                         "tool_call_id": tool_call.call_id,
                         "error_type": type(error).__name__,
                         "error_message": str(error),
+                        "duration_ms": duration_ms,
                     },
                 )
             )
             raise
+
+        duration_ms = (self._clock.now() - start_time) * 1000
 
         self._tracer.trace(
             TraceEvent(
@@ -67,6 +77,7 @@ class ToolExecutor:
                     "tool_name": tool_call.name,
                     "tool_call_id": tool_call.call_id,
                     "result_type": type(result).__name__,
+                    "duration_ms": duration_ms,
                 },
             )
         )

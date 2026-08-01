@@ -1,6 +1,7 @@
 import uuid
 
 from app.clients.base_client import BaseClient
+from app.clock.base_clock import BaseClock
 from app.exceptions.max_iterations_exceeded_error import (
     MaxIterationsExceededError,
 )
@@ -21,6 +22,7 @@ class AgentRunner:
         client: BaseClient,
         tool_executor: ToolExecutor,
         tracer: BaseTracer,
+        clock: BaseClock,
         max_iterations: int = 10,
     ) -> None:
         if max_iterations < 1:
@@ -29,6 +31,7 @@ class AgentRunner:
         self._client = client
         self._tool_executor = tool_executor
         self._tracer = tracer
+        self._clock = clock
         self._max_iterations = max_iterations
 
     def run(
@@ -36,6 +39,8 @@ class AgentRunner:
         messages: list[Message],
     ) -> ClientResponse:
         agent_context = self._create_trace_context()
+
+        start_time = self._clock.now()
 
         current_messages = list(messages)
 
@@ -58,8 +63,9 @@ class AgentRunner:
                     messages=current_messages,
                     trace_context=agent_context,
                 )
-
+                
                 if not response.has_tool_calls:
+                    duration_ms = (self._clock.now() - start_time) * 1000
                     self._tracer.trace(
                         TraceEvent(
                             trace_id=agent_context.trace_id,
@@ -69,6 +75,7 @@ class AgentRunner:
                             metadata={
                                 "iterations": iteration + 1,
                                 "final_message_count": len(current_messages),
+                                "duration_ms": duration_ms,
                             },
                         )
                     )
@@ -94,6 +101,8 @@ class AgentRunner:
                 )
 
         except Exception as error:
+            duration_ms = (self._clock.now() - start_time) * 1000
+
             self._tracer.trace(
                 TraceEvent(
                     trace_id=agent_context.trace_id,
@@ -103,6 +112,7 @@ class AgentRunner:
                     metadata={
                         "error_type": type(error).__name__,
                         "error_message": str(error),
+                        "duration_ms": duration_ms,
                     },
                 )
             )
