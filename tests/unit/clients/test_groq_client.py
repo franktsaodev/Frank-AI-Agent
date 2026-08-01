@@ -68,11 +68,8 @@ def create_groq_client(
         tool_provider=tool_provider,
         tracer=tracer,
         clock=clock
-        or FakeClock(
-            times=[
-                0.0,
-                1.0,
-            ],
+        or FakeClock.for_duration(
+            1.0,
         ),
     )
 
@@ -102,11 +99,6 @@ def create_tool_call_response(
 
 
 @pytest.fixture
-def tracer() -> MagicMock:
-    return MagicMock(spec=BaseTracer)
-
-
-@pytest.fixture
 def groq_client(
     tracer: MagicMock,
 ) -> GroqClient:
@@ -123,14 +115,6 @@ def messages() -> list[Message]:
             content="Hello",
         )
     ]
-
-
-@pytest.fixture
-def trace_context() -> TraceContext:
-    return TraceContext(
-        trace_id="test-trace-id",
-        span_id="agent-span-id",
-    )
 
 
 @patch("app.clients.groq_client.time.sleep")
@@ -848,11 +832,9 @@ def test_chat_should_trace_llm_duration(
     messages: list[Message],
     trace_context: TraceContext,
 ) -> None:
-    clock = FakeClock(
-        times=[
-            10.0,
-            10.35,
-        ],
+    clock = FakeClock.for_duration(
+        0.35,
+        start_time=10.0,
     )
 
     groq_client = create_groq_client(
@@ -882,11 +864,9 @@ def test_chat_should_trace_llm_duration_when_failed(
     messages: list[Message],
     trace_context: TraceContext,
 ) -> None:
-    clock = FakeClock(
-        times=[
-            20.0,
-            20.4,
-        ],
+    clock = FakeClock.for_duration(
+        0.4,
+        start_time=20.0,
     )
 
     groq_client = create_groq_client(

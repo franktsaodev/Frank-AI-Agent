@@ -12,6 +12,23 @@ class FakeClock(BaseClock):
         self._times = list(times)
         self._index = 0
 
+    @classmethod
+    def for_duration(
+        cls,
+        duration_seconds: float,
+        *,
+        start_time: float = 0.0,
+    ) -> "FakeClock":
+        if duration_seconds < 0:
+            raise ValueError("duration_seconds cannot be negative.")
+
+        return cls(
+            times=[
+                start_time,
+                start_time + duration_seconds,
+            ],
+        )
+
     def now(self) -> float:
         if self._index >= len(self._times):
             raise RuntimeError("FakeClock has no more configured time values.")

@@ -18,14 +18,6 @@ def extractor() -> LLMFactExtractor:
     )
 
 
-@pytest.fixture
-def trace_context() -> TraceContext:
-    return TraceContext(
-        trace_id="test-trace-id",
-        span_id="test-span-id",
-    )
-
-
 def test_build_messages_contains_system_and_user_messages(
     extractor: LLMFactExtractor,
 ) -> None:

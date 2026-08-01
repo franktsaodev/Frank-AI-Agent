@@ -7,22 +7,11 @@ from app.clock.base_clock import BaseClock
 from app.tools.tool_call import ToolCall
 from app.tools.tool_executor import ToolExecutor
 from app.tools.tool_registry import ToolRegistry
-from app.tracing.base_tracer import BaseTracer
 from app.tracing.trace_context import TraceContext
 from app.tracing.trace_event_type import TraceEventType
 from tests.fakes.failing_tool import FailingTool
 from tests.fakes.fake_clock import FakeClock
 from tests.fakes.fake_tool import FakeTool
-
-
-@pytest.fixture
-def tracer() -> MagicMock:
-    return MagicMock(spec=BaseTracer)
-
-
-@pytest.fixture
-def registry() -> ToolRegistry:
-    return ToolRegistry()
 
 
 @pytest.fixture
@@ -38,23 +27,12 @@ def create_tool_executor(
             registry=registry,
             tracer=tracer,
             clock=clock
-            or FakeClock(
-                times=[
-                    0.0,
-                    1.0,
-                ],
+            or FakeClock.for_duration(
+                1.0,
             ),
         )
 
     return _create_tool_executor
-
-
-@pytest.fixture
-def trace_context() -> TraceContext:
-    return TraceContext(
-        trace_id="test-trace-id",
-        span_id="agent-span-id",
-    )
 
 
 def test_execute_calls_tool_with_arguments(
@@ -365,11 +343,9 @@ def test_execute_should_trace_tool_duration(
     registry.register(FakeTool())
 
     executor = create_tool_executor(
-        clock=FakeClock(
-            times=[
-                10.0,
-                10.15,
-            ],
+        clock=FakeClock.for_duration(
+            0.15,
+            start_time=10.0,
         ),
     )
 
@@ -400,11 +376,9 @@ def test_execute_should_trace_tool_duration_when_failed(
     registry.register(FailingTool())
 
     executor = create_tool_executor(
-        clock=FakeClock(
-            times=[
-                20.0,
-                20.4,
-            ],
+        clock=FakeClock.for_duration(
+            0.4,
+            start_time=20.0,
         ),
     )
 

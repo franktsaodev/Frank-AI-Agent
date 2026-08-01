@@ -35,11 +35,8 @@ def create_agent_runner() -> Callable[..., AgentRunner]:
             tool_executor=tool_executor,
             tracer=tracer or MagicMock(spec=BaseTracer),
             clock=clock
-            or FakeClock(
-                times=[
-                    0.0,
-                    1.0,
-                ],
+            or FakeClock.for_duration(
+                1.0,
             ),
             max_iterations=max_iterations,
         )
@@ -908,11 +905,9 @@ def test_run_should_trace_agent_duration(
     tool_executor = FakeToolExecutor()
     tracer = MagicMock(spec=BaseTracer)
 
-    clock = FakeClock(
-        times=[
-            10.0,
-            10.25,
-        ],
+    clock = FakeClock.for_duration(
+        0.25,
+        start_time=10.0,
     )
 
     runner = create_agent_runner(
@@ -947,11 +942,9 @@ def test_run_should_trace_agent_duration_when_failed(
 
     client.chat.side_effect = RuntimeError("Agent failed")
 
-    clock = FakeClock(
-        times=[
-            20.0,
-            20.4,
-        ],
+    clock = FakeClock.for_duration(
+        0.4,
+        start_time=20.0,
     )
 
     runner = create_agent_runner(
