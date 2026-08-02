@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from app.agent.agent_runner import AgentRunner
 from app.agent.chat_agent import ChatAgent
 from app.clients.groq_client import GroqClient
@@ -11,6 +13,7 @@ from app.config_models.memory_policy_config import (
 )
 from app.config_models.prompt_config import PromptConfig
 from app.config_models.retry_config import RetryConfig
+from app.config_models.tracing_config import TracingConfig
 from app.extractors.regex_fact_extractor import RegexFactExtractor
 from app.memory.in_memory_fact_memory import InMemoryFactMemory
 from app.memory.sliding_window_memory import SlidingWindowMemory
@@ -22,15 +25,22 @@ from app.tools.tool_provider import ToolProvider
 from app.tools.tool_registry import ToolRegistry
 from app.tools.tool_schema_adapter import ToolSchemaAdapter
 from app.tracing.exporter_tracer import ExporterTracer
-from app.tracing.exporters.logging_trace_exporter import (
-    LoggingTraceExporter,
-)
+from app.tracing.trace_exporter_factory import TraceExporterFactory
 
 
 def create_chat_agent() -> ChatAgent:
     clock = SystemClock()
 
-    trace_exporter = LoggingTraceExporter()
+    tracing_config = TracingConfig(
+        enable_logging=True,
+        json_file_path=Path(
+            "logs/traces.jsonl",
+        ),
+    )
+
+    trace_exporter = TraceExporterFactory().create(
+        config=tracing_config,
+    )
 
     tracer = ExporterTracer(
         exporter=trace_exporter,
