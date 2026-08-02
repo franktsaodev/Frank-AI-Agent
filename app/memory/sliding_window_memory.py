@@ -1,6 +1,7 @@
+import logging
+
 from app.memory.base_memory import BaseMemory
 from app.models.message import Message
-import logging
 
 logger = logging.getLogger(__name__)
 

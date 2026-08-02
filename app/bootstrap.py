@@ -17,14 +17,33 @@ from app.tools.tool_executor import ToolExecutor
 from app.tools.tool_provider import ToolProvider
 from app.tools.tool_registry import ToolRegistry
 from app.tools.tool_schema_adapter import ToolSchemaAdapter
-from app.tracing.logging_tracer import LoggingTracer
+from app.tracing.exporter_tracer import ExporterTracer
+from app.tracing.exporters.logging_trace_exporter import (
+    LoggingTraceExporter,
+)
 
 
 def create_chat_agent() -> ChatAgent:
-    tracer = LoggingTracer()
-    registry = ToolRegistry()
-    adapter = ToolSchemaAdapter()
     clock = SystemClock()
+
+    trace_exporter = LoggingTraceExporter()
+
+    tracer = ExporterTracer(
+        exporter=trace_exporter,
+    )
+
+    registry = ToolRegistry()
+
+    tool_provider = ToolProvider(
+        registry=registry,
+        adapter=ToolSchemaAdapter(),
+    )
+
+    tool_executor = ToolExecutor(
+        registry=registry,
+        tracer=tracer,
+        clock=clock,
+    )
 
     groq_config = GroqConfig(
         api_key=GROQ_API_KEY,
@@ -35,17 +54,6 @@ def create_chat_agent() -> ChatAgent:
         max_attempts=3,
         initial_delay_seconds=1,
         backoff_multiplier=2.0,
-    )
-
-    tool_provider = ToolProvider(
-        registry=registry,
-        adapter=adapter,
-    )
-
-    tool_executor = ToolExecutor(
-        registry=registry,
-        tracer=tracer,
-        clock=clock,
     )
 
     client = GroqClient(
@@ -64,38 +72,26 @@ def create_chat_agent() -> ChatAgent:
         max_iterations=10,
     )
 
-    prompt_config = PromptConfig(
-        prompt_name="system_prompt.txt",
-        user_name="Frank",
-        language="Traditional Chinese",
-    )
-
     prompt_template = PromptTemplate(
-        config=prompt_config,
-    )
-
-    memory_config = MemoryConfig(
-        max_history_rounds=2,
+        config=PromptConfig(
+            prompt_name="system_prompt.txt",
+            user_name="Frank",
+            language="Traditional Chinese",
+        ),
     )
 
     memory = SlidingWindowMemory(
-        max_rounds=memory_config.max_history_rounds,
+        max_rounds=MemoryConfig(
+            max_history_rounds=2,
+        ).max_history_rounds,
     )
-
-    fact_memory = InMemoryFactMemory()
-
-    fact_extractor = RegexFactExtractor()
-
-    memory_policy = SimpleMemoryPolicy()
-
-    prompt_composer = PromptComposer()
 
     return ChatAgent(
         prompt_template=prompt_template,
         agent_runner=agent_runner,
         memory=memory,
-        fact_memory=fact_memory,
-        fact_extractor=fact_extractor,
-        memory_policy=memory_policy,
-        prompt_composer=prompt_composer,
+        fact_memory=InMemoryFactMemory(),
+        fact_extractor=RegexFactExtractor(),
+        memory_policy=SimpleMemoryPolicy(),
+        prompt_composer=PromptComposer(),
     )
