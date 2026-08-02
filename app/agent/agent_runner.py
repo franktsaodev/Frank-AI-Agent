@@ -2,6 +2,7 @@ import uuid
 
 from app.clients.base_client import BaseClient
 from app.clock.base_clock import BaseClock
+from app.config_models.agent_config import AgentConfig
 from app.exceptions.max_iterations_exceeded_error import (
     MaxIterationsExceededError,
 )
@@ -23,16 +24,13 @@ class AgentRunner:
         tool_executor: ToolExecutor,
         tracer: BaseTracer,
         clock: BaseClock,
-        max_iterations: int = 10,
+        config: AgentConfig,
     ) -> None:
-        if max_iterations < 1:
-            raise ValueError("max_iterations must be at least 1.")
-
         self._client = client
         self._tool_executor = tool_executor
         self._tracer = tracer
         self._clock = clock
-        self._max_iterations = max_iterations
+        self._config = config
 
     def run(
         self,
@@ -52,18 +50,17 @@ class AgentRunner:
                 event_type=TraceEventType.AGENT_STARTED,
                 metadata={
                     "message_count": len(current_messages),
-                    "max_iterations": self._max_iterations,
+                    "max_iterations": self._config.max_iterations,
                 },
             )
         )
 
         try:
-            for iteration in range(self._max_iterations):
+            for iteration in range(self._config.max_iterations):
                 response = self._client.chat(
                     messages=current_messages,
                     trace_context=agent_context,
                 )
-                
                 if not response.has_tool_calls:
                     duration_ms = (self._clock.now() - start_time) * 1000
                     self._tracer.trace(
@@ -82,11 +79,11 @@ class AgentRunner:
 
                     return response
 
-                is_last_iteration = iteration == self._max_iterations - 1
+                is_last_iteration = iteration == self._config.max_iterations - 1
 
                 if is_last_iteration:
                     raise MaxIterationsExceededError(
-                        max_iterations=self._max_iterations,
+                        max_iterations=self._config.max_iterations,
                     )
 
                 current_messages.append(

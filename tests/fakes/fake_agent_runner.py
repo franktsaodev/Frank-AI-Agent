@@ -14,8 +14,6 @@ class FakeAgentRunner:
         self,
         messages: list[Message],
     ) -> ClientResponse:
-        self.received_message_batches.append(
-            list(messages)
-        )
+        self.received_message_batches.append(list(messages))
 
         return self.response

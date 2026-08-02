@@ -7,6 +7,11 @@ import pytest
 from app.agent.agent_runner import AgentRunner
 from app.agent.chat_agent import ChatAgent
 from app.clock.system_clock import SystemClock
+from app.config_models.agent_config import AgentConfig
+from app.config_models.memory_config import MemoryConfig
+from app.config_models.memory_policy_config import (
+    MemoryPolicyConfig,
+)
 from app.config_models.prompt_config import PromptConfig
 from app.extractors.regex_fact_extractor import RegexFactExtractor
 from app.memory.in_memory_fact_memory import InMemoryFactMemory
@@ -25,7 +30,9 @@ from tests.fakes.fake_tool_executor import FakeToolExecutor
 
 
 @pytest.fixture
-def create_agent() -> Callable[..., ChatAgent]:
+def create_agent(
+    memory_policy_config: MemoryPolicyConfig,
+) -> Callable[..., ChatAgent]:
     def _create_agent(
         *,
         client: FakeClient | None = None,
@@ -51,6 +58,7 @@ def create_agent() -> Callable[..., ChatAgent]:
             tool_executor=actual_tool_executor,
             tracer=tracer,
             clock=SystemClock(),
+            config=AgentConfig(),
         )
 
         return ChatAgent(
@@ -65,12 +73,19 @@ def create_agent() -> Callable[..., ChatAgent]:
             memory=(
                 memory
                 or SlidingWindowMemory(
-                    max_rounds=10,
+                    config=MemoryConfig(
+                        max_history_rounds=10,
+                    ),
                 )
             ),
             fact_memory=(fact_memory or InMemoryFactMemory()),
             fact_extractor=(fact_extractor or RegexFactExtractor()),
-            memory_policy=(memory_policy or SimpleMemoryPolicy()),
+            memory_policy=(
+                memory_policy
+                or SimpleMemoryPolicy(
+                    config=memory_policy_config,
+                )
+            ),
             prompt_composer=(prompt_composer or PromptComposer()),
         )
 
@@ -80,6 +95,19 @@ def create_agent() -> Callable[..., ChatAgent]:
 @pytest.fixture
 def agent(create_agent) -> ChatAgent:
     return create_agent()
+
+
+@pytest.fixture
+def memory_policy_config() -> MemoryPolicyConfig:
+    return MemoryPolicyConfig(
+        allowed_keys=frozenset(
+            {
+                "user_name",
+                "favorite_music",
+                "occupation",
+            }
+        ),
+    )
 
 
 def test_chat_automatically_remembers_extracted_fact(
@@ -123,13 +151,21 @@ def test_extracted_fact_is_injected_into_system_message(
 
 
 def test_chat_stores_conversation_turn(
-    agent: ChatAgent,
+    create_agent,
 ) -> None:
+    memory = SlidingWindowMemory(
+        config=MemoryConfig(
+            max_history_rounds=10,
+        ),
+    )
+
+    agent = create_agent(
+        memory=memory,
+    )
+
     agent.chat("My name is Frank.")
 
-    messages = agent._memory.get_messages()
-
-    assert messages == [
+    assert memory.get_messages() == (
         Message(
             role=MessageRole.USER,
             content="My name is Frank.",
@@ -138,7 +174,7 @@ def test_chat_stores_conversation_turn(
             role=MessageRole.ASSISTANT,
             content="測試回覆",
         ),
-    ]
+    )
 
 
 def test_new_extracted_fact_overwrites_existing_fact(
@@ -165,8 +201,13 @@ def test_new_extracted_fact_overwrites_existing_fact(
     assert agent.get_fact("user_name") == "David"
 
 
-def test_chat_agent_stores_memory_policy(create_agent) -> None:
-    memory_policy = SimpleMemoryPolicy()
+def test_chat_agent_stores_memory_policy(
+    create_agent,
+    memory_policy_config: MemoryPolicyConfig,
+) -> None:
+    memory_policy = SimpleMemoryPolicy(
+        config=memory_policy_config,
+    )
 
     agent = create_agent(
         memory_policy=memory_policy,
@@ -222,7 +263,9 @@ def test_chat_passes_context_to_prompt_composer_and_sends_composed_messages_to_c
     ]
 
     memory = SlidingWindowMemory(
-        max_rounds=10,
+        config=MemoryConfig(
+            max_history_rounds=10,
+        ),
     )
 
     memory.add_turn(

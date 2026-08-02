@@ -42,6 +42,4 @@ def test_tracer_should_export_event_to_all_composite_exporters() -> None:
 
     logging_exporter.export.assert_called_once_with(event)
 
-    assert memory_exporter.events == (
-        event,
-    )
+    assert memory_exporter.events == (event,)

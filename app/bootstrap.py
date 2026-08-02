@@ -3,8 +3,12 @@ from app.agent.chat_agent import ChatAgent
 from app.clients.groq_client import GroqClient
 from app.clock.system_clock import SystemClock
 from app.config import GROQ_API_KEY, GROQ_MODEL
+from app.config_models.agent_config import AgentConfig
 from app.config_models.groq_config import GroqConfig
 from app.config_models.memory_config import MemoryConfig
+from app.config_models.memory_policy_config import (
+    MemoryPolicyConfig,
+)
 from app.config_models.prompt_config import PromptConfig
 from app.config_models.retry_config import RetryConfig
 from app.extractors.regex_fact_extractor import RegexFactExtractor
@@ -64,12 +68,16 @@ def create_chat_agent() -> ChatAgent:
         clock=clock,
     )
 
+    agent_config = AgentConfig(
+        max_iterations=10,
+    )
+
     agent_runner = AgentRunner(
         client=client,
         tool_executor=tool_executor,
         tracer=tracer,
         clock=clock,
-        max_iterations=10,
+        config=agent_config,
     )
 
     prompt_template = PromptTemplate(
@@ -80,10 +88,22 @@ def create_chat_agent() -> ChatAgent:
         ),
     )
 
+    memory_config = MemoryConfig(
+        max_history_rounds=2,
+    )
+
     memory = SlidingWindowMemory(
-        max_rounds=MemoryConfig(
-            max_history_rounds=2,
-        ).max_history_rounds,
+        config=memory_config,
+    )
+
+    memory_policy_config = MemoryPolicyConfig(
+        allowed_keys=frozenset(
+            {
+                "user_name",
+                "favorite_music",
+                "occupation",
+            }
+        ),
     )
 
     return ChatAgent(
@@ -92,6 +112,8 @@ def create_chat_agent() -> ChatAgent:
         memory=memory,
         fact_memory=InMemoryFactMemory(),
         fact_extractor=RegexFactExtractor(),
-        memory_policy=SimpleMemoryPolicy(),
+        memory_policy=SimpleMemoryPolicy(
+            config=memory_policy_config,
+        ),
         prompt_composer=PromptComposer(),
     )

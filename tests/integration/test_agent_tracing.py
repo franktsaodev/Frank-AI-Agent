@@ -8,6 +8,7 @@ from app.agent.agent_runner import AgentRunner
 from app.clients.groq_client import GroqClient
 from app.clock.base_clock import BaseClock
 from app.clock.system_clock import SystemClock
+from app.config_models.agent_config import AgentConfig
 from app.config_models.groq_config import GroqConfig
 from app.config_models.retry_config import RetryConfig
 from app.models.message import Message
@@ -83,7 +84,9 @@ def agent_runner(
         tool_executor=tool_executor,
         tracer=tracer,
         clock=system_clock,
-        max_iterations=10,
+        config=AgentConfig(
+            max_iterations=10,
+        ),
     )
 
 

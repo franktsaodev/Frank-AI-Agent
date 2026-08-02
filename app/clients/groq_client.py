@@ -102,7 +102,6 @@ class GroqClient(BaseClient):
             raise
 
         duration_ms = (self._clock.now() - start_time) * 1000
-        
         self._tracer.trace(
             TraceEvent(
                 trace_id=llm_context.trace_id,

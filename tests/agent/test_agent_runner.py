@@ -5,6 +5,7 @@ import pytest
 
 from app.agent.agent_runner import AgentRunner
 from app.clients.base_client import BaseClient
+from app.config_models.agent_config import AgentConfig
 from app.exceptions.max_iterations_exceeded_error import (
     MaxIterationsExceededError,
 )
@@ -38,7 +39,9 @@ def create_agent_runner() -> Callable[..., AgentRunner]:
             or FakeClock.for_duration(
                 1.0,
             ),
-            max_iterations=max_iterations,
+            config=AgentConfig(
+                max_iterations=max_iterations,
+            ),
         )
 
     return _create_agent_runner
@@ -376,28 +379,6 @@ def test_run_accumulates_tool_messages_across_iterations(
         )
         in third_request_messages
     )
-
-
-def test_init_raises_when_max_iterations_is_less_than_one(
-    create_agent_runner,
-) -> None:
-    client = FakeClient(
-        response=ClientResponse(
-            content="Hello!",
-        ),
-    )
-
-    tool_executor = FakeToolExecutor()
-
-    with pytest.raises(
-        ValueError,
-        match="max_iterations must be at least 1",
-    ):
-        create_agent_runner(
-            client=client,
-            tool_executor=tool_executor,
-            max_iterations=0,
-        )
 
 
 def test_run_raises_when_max_iterations_is_exceeded(

@@ -3,6 +3,10 @@ from collections.abc import Callable
 import pytest
 
 from app.agent.chat_agent import ChatAgent
+from app.config_models.memory_config import MemoryConfig
+from app.config_models.memory_policy_config import (
+    MemoryPolicyConfig,
+)
 from app.config_models.prompt_config import PromptConfig
 from app.extractors.regex_fact_extractor import RegexFactExtractor
 from app.memory.in_memory_fact_memory import InMemoryFactMemory
@@ -32,11 +36,23 @@ def create_agent() -> Callable[..., ChatAgent]:
             ),
             agent_runner=agent_runner,
             memory=SlidingWindowMemory(
-                max_rounds=10,
+                config=MemoryConfig(
+                    max_history_rounds=10,
+                ),
             ),
             fact_memory=InMemoryFactMemory(),
             fact_extractor=RegexFactExtractor(),
-            memory_policy=SimpleMemoryPolicy(),
+            memory_policy=SimpleMemoryPolicy(
+                config=MemoryPolicyConfig(
+                    allowed_keys=frozenset(
+                        {
+                            "user_name",
+                            "favorite_music",
+                            "occupation",
+                        }
+                    ),
+                ),
+            ),
             prompt_composer=PromptComposer(),
         )
 

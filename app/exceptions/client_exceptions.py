@@ -17,5 +17,6 @@ class ClientTimeoutError(AIClientError):
 class ClientRateLimitError(Exception):
     """Raised when the AI service rate limit remains exceeded."""
 
+
 class ClientInvalidResponseError(AIClientError):
     """Raised when the AI service repeatedly returns invalid content."""
