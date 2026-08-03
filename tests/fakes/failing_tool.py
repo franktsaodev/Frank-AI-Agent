@@ -1,6 +1,7 @@
 from typing import Any
 
 from app.tools.base_tool import BaseTool
+from app.types.json_types import JsonObject
 
 
 class FailingTool(BaseTool):
@@ -13,7 +14,7 @@ class FailingTool(BaseTool):
         return "Always fails."
 
     @property
-    def input_schema(self) -> dict[str, Any]:
+    def input_schema(self) -> JsonObject:
         return {
             "type": "object",
             "properties": {},

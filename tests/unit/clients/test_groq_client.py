@@ -1,4 +1,5 @@
 import json
+from collections.abc import Sequence
 from unittest.mock import MagicMock, call, patch
 
 import httpx
@@ -121,7 +122,7 @@ def messages() -> list[Message]:
 def test_chat_retries_connection_error_then_succeeds(
     mock_sleep: MagicMock,
     groq_client: GroqClient,
-    messages: list[Message],
+    messages: Sequence[Message],
     trace_context: TraceContext,
 ) -> None:
     request = httpx.Request(
@@ -143,7 +144,7 @@ def test_chat_retries_connection_error_then_succeeds(
         ]
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     result = groq_client.chat(
         messages=messages,
@@ -165,7 +166,7 @@ def test_chat_retries_connection_error_then_succeeds(
 
 def test_chat_raises_connection_error_after_max_attempts(
     groq_client: GroqClient,
-    messages: list[Message],
+    messages: Sequence[Message],
     trace_context: TraceContext,
 ) -> None:
     request = httpx.Request(
@@ -181,7 +182,7 @@ def test_chat_raises_connection_error_after_max_attempts(
         side_effect=connection_error,
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     with pytest.raises(ClientConnectionError):
         groq_client.chat(
@@ -194,7 +195,7 @@ def test_chat_raises_connection_error_after_max_attempts(
 
 def test_chat_does_not_retry_authentication_error(
     groq_client: GroqClient,
-    messages: list[Message],
+    messages: Sequence[Message],
     trace_context: TraceContext,
 ) -> None:
     request = httpx.Request(
@@ -221,7 +222,7 @@ def test_chat_does_not_retry_authentication_error(
         side_effect=authentication_error,
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     with pytest.raises(ClientAuthenticationError):
         groq_client.chat(
@@ -244,7 +245,7 @@ def test_calculate_delay_uses_exponential_backoff(
 def test_chat_retries_rate_limit_error_then_succeeds(
     mock_sleep: MagicMock,
     groq_client: GroqClient,
-    messages: list[Message],
+    messages: Sequence[Message],
     trace_context: TraceContext,
 ) -> None:
     request = httpx.Request(
@@ -273,7 +274,7 @@ def test_chat_retries_rate_limit_error_then_succeeds(
         ]
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     result = groq_client.chat(
         messages=messages,
@@ -293,7 +294,7 @@ def test_chat_retries_rate_limit_error_then_succeeds(
 def test_chat_raises_rate_limit_error_after_max_attempts(
     mock_sleep: MagicMock,
     groq_client: GroqClient,
-    messages: list[Message],
+    messages: Sequence[Message],
     trace_context: TraceContext,
 ) -> None:
     request = httpx.Request(
@@ -316,7 +317,7 @@ def test_chat_raises_rate_limit_error_after_max_attempts(
         side_effect=rate_limit_error,
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     with pytest.raises(ClientRateLimitError):
         groq_client.chat(
@@ -333,7 +334,7 @@ def test_chat_raises_rate_limit_error_after_max_attempts(
 
 
 def test_chat_includes_tool_schemas_when_tools_registered(
-    messages: list[Message],
+    messages: Sequence[Message],
     tracer: MagicMock,
     trace_context: TraceContext,
 ) -> None:
@@ -358,7 +359,7 @@ def test_chat_includes_tool_schemas_when_tools_registered(
         return_value=successful_response,
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     result = groq_client.chat(
         messages=messages,
@@ -375,7 +376,7 @@ def test_chat_includes_tool_schemas_when_tools_registered(
 
 
 def test_chat_omits_tools_when_no_tools_registered(
-    messages: list[Message],
+    messages: Sequence[Message],
     tracer: MagicMock,
     trace_context: TraceContext,
 ) -> None:
@@ -398,7 +399,7 @@ def test_chat_omits_tools_when_no_tools_registered(
         return_value=successful_response,
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     result = groq_client.chat(
         messages=messages,
@@ -414,7 +415,7 @@ def test_chat_omits_tools_when_no_tools_registered(
 
 def test_chat_returns_tool_calls_when_groq_requests_tool(
     groq_client: GroqClient,
-    messages: list[Message],
+    messages: Sequence[Message],
     trace_context: TraceContext,
 ) -> None:
     groq_tool_call = MagicMock()
@@ -432,7 +433,7 @@ def test_chat_returns_tool_calls_when_groq_requests_tool(
         return_value=successful_response,
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     result = groq_client.chat(
         messages=messages,
@@ -563,7 +564,7 @@ def test_chat_sends_tool_call_conversation_to_groq(
         return_value=successful_response,
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     result = groq_client.chat(
         messages=messages,
@@ -622,7 +623,7 @@ def test_chat_should_trace_llm_lifecycle(
         return_value=mock_groq_response,
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     groq_client.chat(
         messages=[
@@ -667,7 +668,7 @@ def test_chat_should_trace_llm_failed_on_authentication_error(
     mock_uuid4: MagicMock,
     groq_client: GroqClient,
     tracer: MagicMock,
-    messages: list[Message],
+    messages: Sequence[Message],
     trace_context: TraceContext,
 ) -> None:
     mock_uuid4.return_value.hex = "llm-span-id"
@@ -696,7 +697,7 @@ def test_chat_should_trace_llm_failed_on_authentication_error(
         side_effect=authentication_error,
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     with pytest.raises(ClientAuthenticationError):
         groq_client.chat(
@@ -730,7 +731,7 @@ def test_chat_should_not_trace_llm_failed_when_retry_succeeds(
     mock_uuid4: MagicMock,
     groq_client: GroqClient,
     tracer: MagicMock,
-    messages: list[Message],
+    messages: Sequence[Message],
     trace_context: TraceContext,
 ) -> None:
     mock_uuid4.return_value.hex = "llm-span-id"
@@ -753,7 +754,7 @@ def test_chat_should_not_trace_llm_failed_when_retry_succeeds(
         ]
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     groq_client.chat(
         messages=messages,
@@ -781,7 +782,7 @@ def test_chat_should_trace_llm_failed_after_max_attempts(
     mock_uuid4: MagicMock,
     groq_client: GroqClient,
     tracer: MagicMock,
-    messages: list[Message],
+    messages: Sequence[Message],
     trace_context: TraceContext,
 ) -> None:
     mock_uuid4.return_value.hex = "llm-span-id"
@@ -799,7 +800,7 @@ def test_chat_should_trace_llm_failed_after_max_attempts(
         side_effect=connection_error,
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     with pytest.raises(ClientConnectionError):
         groq_client.chat(
@@ -829,7 +830,7 @@ def test_chat_should_trace_llm_failed_after_max_attempts(
 
 def test_chat_should_trace_llm_duration(
     tracer: MagicMock,
-    messages: list[Message],
+    messages: Sequence[Message],
     trace_context: TraceContext,
 ) -> None:
     clock = FakeClock.for_duration(
@@ -842,7 +843,7 @@ def test_chat_should_trace_llm_duration(
         clock=clock,
     )
 
-    groq_client.client.chat.completions.create = MagicMock(
+    groq_client._client.chat.completions.create = MagicMock(
         return_value=create_success_response("你好"),
     )
 
@@ -861,7 +862,7 @@ def test_chat_should_trace_llm_duration(
 
 def test_chat_should_trace_llm_duration_when_failed(
     tracer: MagicMock,
-    messages: list[Message],
+    messages: Sequence[Message],
     trace_context: TraceContext,
 ) -> None:
     clock = FakeClock.for_duration(
@@ -884,7 +885,7 @@ def test_chat_should_trace_llm_duration_when_failed(
         request=request,
     )
 
-    groq_client.client.chat.completions.create = MagicMock(
+    groq_client._client.chat.completions.create = MagicMock(
         side_effect=AuthenticationError(
             "Invalid API Key",
             response=response,

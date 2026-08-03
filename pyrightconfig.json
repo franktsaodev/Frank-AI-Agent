@@ -1,0 +1,15 @@
+{
+  "include": [
+    "app",
+    "tests"
+  ],
+  "exclude": [
+    ".venv",
+    "__pycache__",
+    "logs", "**/node_modules", "**/.*"
+  ],
+  "typeCheckingMode": "basic",
+  "pythonVersion": "3.13",
+  "venvPath": ".",
+  "venv": ".venv"
+}

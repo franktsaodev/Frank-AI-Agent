@@ -1,10 +1,12 @@
+from collections.abc import Mapping, Sequence
+
 from app.models.message import Message
 
 
 class PromptComposer:
     def _format_facts(
         self,
-        facts: dict[str, str],
+        facts: Mapping[str, str],
     ) -> str | None:
         if not facts:
             return None
@@ -15,19 +17,27 @@ class PromptComposer:
 
     def compose(
         self,
+        *,
         system_message: Message,
-        history_messages: list[Message],
-        facts: dict[str, str],
+        history_messages: Sequence[Message],
+        facts: Mapping[str, str],
         user_message: Message,
     ) -> list[Message]:
         composed_system_message = system_message
 
-        facts_content = self._format_facts(facts)
+        facts_content = self._format_facts(
+            facts,
+        )
 
         if facts_content is not None:
+            system_content = system_message.content
+
+            if system_content is None:
+                raise ValueError("System message content cannot be None.")
+
             composed_system_message = Message(
                 role=system_message.role,
-                content=f"{system_message.content}\n\n{facts_content}",
+                content=(f"{system_content}\n\n{facts_content}"),
             )
 
         return [

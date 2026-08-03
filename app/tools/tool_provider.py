@@ -1,7 +1,6 @@
-from typing import Any
-
 from app.tools.tool_registry import ToolRegistry
 from app.tools.tool_schema_adapter import ToolSchemaAdapter
+from app.tools.tool_schema_types import ToolSchema
 
 
 class ToolProvider:
@@ -15,6 +14,6 @@ class ToolProvider:
 
     def get_tool_schemas(
         self,
-    ) -> list[dict[str, Any]]:
+    ) -> list[ToolSchema]:
 
         return self._adapter.adapt_all(self._registry.get_all())

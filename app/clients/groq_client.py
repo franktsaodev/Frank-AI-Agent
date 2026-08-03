@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from collections.abc import Sequence
 from typing import Any
 
 from groq import (
@@ -43,7 +44,7 @@ class GroqClient(BaseClient):
         tracer: BaseTracer,
         clock: BaseClock,
     ) -> None:
-        self.client = Groq(
+        self._client = Groq(
             api_key=groq_config.api_key,
             max_retries=0,
         )
@@ -55,7 +56,7 @@ class GroqClient(BaseClient):
 
     def chat(
         self,
-        messages: list[Message],
+        messages: Sequence[Message],
         trace_context: TraceContext,
     ) -> ClientResponse:
         formatted_messages = self._format_messages(messages)
@@ -146,7 +147,7 @@ class GroqClient(BaseClient):
                 if tool_schemas:
                     request_kwargs["tools"] = tool_schemas
 
-                response = self.client.chat.completions.create(
+                response = self._client.chat.completions.create(
                     **request_kwargs,
                 )
 
@@ -237,7 +238,7 @@ class GroqClient(BaseClient):
 
     def _format_messages(
         self,
-        messages: list[Message],
+        messages: Sequence[Message],
     ) -> list[dict[str, object]]:
         self._validate_messages(messages)
 
@@ -287,7 +288,7 @@ class GroqClient(BaseClient):
 
     def _validate_messages(
         self,
-        messages: list[Message],
+        messages: Sequence[Message],
     ) -> None:
         for message in messages:
             if not isinstance(message, Message):

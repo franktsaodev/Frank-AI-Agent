@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from app.models.client_response import ClientResponse
 from app.models.message import Message
 
@@ -12,7 +14,7 @@ class FakeAgentRunner:
 
     def run(
         self,
-        messages: list[Message],
+        messages: Sequence[Message],
     ) -> ClientResponse:
         self.received_message_batches.append(list(messages))
 

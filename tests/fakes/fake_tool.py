@@ -1,6 +1,7 @@
 from typing import Any
 
 from app.tools.base_tool import BaseTool
+from app.types.json_types import JsonObject
 
 
 class FakeTool(BaseTool):
@@ -16,7 +17,7 @@ class FakeTool(BaseTool):
         return "A fake tool for testing."
 
     @property
-    def input_schema(self) -> dict[str, Any]:
+    def input_schema(self) -> JsonObject:
         return {
             "type": "object",
             "properties": {},

@@ -1,10 +1,11 @@
-from collections.abc import Callable
+from typing import Protocol
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.agent.agent_runner import AgentRunner
 from app.clients.base_client import BaseClient
+from app.clock.base_clock import BaseClock
 from app.config_models.agent_config import AgentConfig
 from app.exceptions.max_iterations_exceeded_error import (
     MaxIterationsExceededError,
@@ -14,6 +15,9 @@ from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.tools.tool_call import ToolCall
 from app.tools.tool_executor import ToolExecutor
+from app.tools.tool_executor_protocol import (
+    ToolExecutorProtocol,
+)
 from app.tracing.base_tracer import BaseTracer
 from app.tracing.trace_event_type import TraceEventType
 from tests.fakes.fake_client import FakeClient
@@ -21,24 +25,33 @@ from tests.fakes.fake_clock import FakeClock
 from tests.fakes.fake_tool_executor import FakeToolExecutor
 
 
+class AgentRunnerFactory(Protocol):
+    def __call__(
+        self,
+        *,
+        client: BaseClient,
+        tool_executor: ToolExecutorProtocol,
+        tracer: BaseTracer | None = None,
+        clock: BaseClock | None = None,
+        max_iterations: int = 10,
+    ) -> AgentRunner: ...
+
+
 @pytest.fixture
-def create_agent_runner() -> Callable[..., AgentRunner]:
+def create_agent_runner() -> AgentRunnerFactory:
     def _create_agent_runner(
         *,
         client: BaseClient,
-        tool_executor: ToolExecutor | FakeToolExecutor,
+        tool_executor: ToolExecutorProtocol,
         tracer: BaseTracer | None = None,
-        clock: FakeClock | None = None,
+        clock: BaseClock | None = None,
         max_iterations: int = 10,
     ) -> AgentRunner:
         return AgentRunner(
             client=client,
             tool_executor=tool_executor,
             tracer=tracer or MagicMock(spec=BaseTracer),
-            clock=clock
-            or FakeClock.for_duration(
-                1.0,
-            ),
+            clock=clock or FakeClock.for_duration(1.0),
             config=AgentConfig(
                 max_iterations=max_iterations,
             ),
@@ -48,7 +61,7 @@ def create_agent_runner() -> Callable[..., AgentRunner]:
 
 
 def test_run_returns_text_response_when_client_returns_content(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     client = FakeClient(
         response=ClientResponse(
@@ -81,7 +94,7 @@ def test_run_returns_text_response_when_client_returns_content(
 
 
 def test_run_executes_tool_call_and_returns_follow_up_response(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     tool_call = ToolCall(
         call_id="call_123",
@@ -132,7 +145,7 @@ def test_run_executes_tool_call_and_returns_follow_up_response(
 
 
 def test_run_sends_tool_result_message_to_client(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     tool_call = ToolCall(
         call_id="call_123",
@@ -184,7 +197,7 @@ def test_run_sends_tool_result_message_to_client(
 
 
 def test_run_executes_all_tool_calls(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     first_call = ToolCall(
         call_id="call_1",
@@ -241,7 +254,7 @@ def test_run_executes_all_tool_calls(
 
 
 def test_run_continues_until_client_returns_text_response(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     first_tool_call = ToolCall(
         call_id="call_1",
@@ -307,7 +320,7 @@ def test_run_continues_until_client_returns_text_response(
 
 
 def test_run_accumulates_tool_messages_across_iterations(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     first_tool_call = ToolCall(
         call_id="call_1",
@@ -382,7 +395,7 @@ def test_run_accumulates_tool_messages_across_iterations(
 
 
 def test_run_raises_when_max_iterations_is_exceeded(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     tool_call = ToolCall(
         call_id="call_123",
@@ -442,7 +455,7 @@ def test_run_raises_when_max_iterations_is_exceeded(
 
 
 def test_run_returns_response_on_last_allowed_iteration(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     first_tool_call = ToolCall(
         call_id="call_1",
@@ -504,7 +517,7 @@ def test_run_returns_response_on_last_allowed_iteration(
 
 
 def test_run_sends_assistant_tool_call_message_before_tool_result(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     tool_call = ToolCall(
         call_id="call_123",
@@ -567,7 +580,7 @@ def test_run_sends_assistant_tool_call_message_before_tool_result(
 
 
 def test_run_preserves_tool_call_conversation_order(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     first_call = ToolCall(
         call_id="call_1",
@@ -646,7 +659,7 @@ def test_run_preserves_tool_call_conversation_order(
 
 
 def test_run_should_trace_agent_lifecycle(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     client = MagicMock(spec=BaseClient)
     tool_executor = MagicMock(spec=ToolExecutor)
@@ -688,7 +701,7 @@ def test_run_should_trace_agent_lifecycle(
 
 
 def test_run_should_trace_agent_failed_when_max_iterations_exceeded(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     client = MagicMock(spec=BaseClient)
     tool_executor = MagicMock(spec=ToolExecutor)
@@ -739,7 +752,7 @@ def test_run_should_trace_agent_failed_when_max_iterations_exceeded(
 )
 def test_run_should_use_root_span_for_agent_lifecycle_events(
     mock_uuid4: MagicMock,
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     trace_uuid = MagicMock()
     trace_uuid.hex = "test-trace-id"
@@ -786,7 +799,7 @@ def test_run_should_use_root_span_for_agent_lifecycle_events(
 
 
 def test_run_should_pass_trace_context_to_client(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     client = FakeClient(
         response=ClientResponse(
@@ -822,7 +835,7 @@ def test_run_should_pass_trace_context_to_client(
 
 
 def test_run_should_pass_trace_context_to_tool_executor(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     tool_call = ToolCall(
         call_id="call-123",
@@ -875,7 +888,7 @@ def test_run_should_pass_trace_context_to_tool_executor(
 
 
 def test_run_should_trace_agent_duration(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     client = FakeClient(
         response=ClientResponse(
@@ -915,7 +928,7 @@ def test_run_should_trace_agent_duration(
 
 
 def test_run_should_trace_agent_duration_when_failed(
-    create_agent_runner,
+    create_agent_runner: AgentRunnerFactory,
 ) -> None:
     client = MagicMock(spec=BaseClient)
     tool_executor = MagicMock(spec=ToolExecutor)

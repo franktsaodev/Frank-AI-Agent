@@ -1,5 +1,3 @@
-from typing import Any
-
 from app.clock.base_clock import BaseClock
 from app.tools.tool_call import ToolCall
 from app.tools.tool_registry import ToolRegistry
@@ -24,7 +22,7 @@ class ToolExecutor:
         self,
         tool_call: ToolCall,
         trace_context: TraceContext,
-    ) -> Any:
+    ) -> object:
         tool_context = trace_context.create_child()
 
         start_time = self._clock.now()

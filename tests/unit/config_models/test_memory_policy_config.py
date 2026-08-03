@@ -41,8 +41,4 @@ def test_should_be_immutable() -> None:
     )
 
     with pytest.raises(FrozenInstanceError):
-        config.allowed_keys = frozenset(
-            {
-                "occupation",
-            }
-        )
+        config.allowed_keys = frozenset({"occupation"})  # pyright: ignore[reportAttributeAccessIssue]

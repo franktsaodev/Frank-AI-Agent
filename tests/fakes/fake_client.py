@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from app.clients.base_client import BaseClient
 from app.models.client_response import ClientResponse
 from app.models.message import Message
@@ -30,7 +32,7 @@ class FakeClient(BaseClient):
 
     def chat(
         self,
-        messages: list[Message],
+        messages: Sequence[Message],
         trace_context: TraceContext,
     ) -> ClientResponse:
         self.call_count += 1

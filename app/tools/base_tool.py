@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+from app.types.json_types import JsonObject
+
 
 class BaseTool(ABC):
     @property
@@ -15,7 +17,7 @@ class BaseTool(ABC):
 
     @property
     @abstractmethod
-    def input_schema(self) -> dict[str, Any]:
+    def input_schema(self) -> JsonObject:
         raise NotImplementedError
 
     @abstractmethod

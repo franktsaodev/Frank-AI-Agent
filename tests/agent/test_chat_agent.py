@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from typing import Protocol
 
 import pytest
 
@@ -20,12 +20,34 @@ from app.prompts.prompt_template import PromptTemplate
 from tests.fakes.fake_agent_runner import FakeAgentRunner
 
 
+class ChatAgentFactory(Protocol):
+    def __call__(
+        self,
+        *,
+        agent_runner: FakeAgentRunner | None = None,
+        memory: SlidingWindowMemory | None = None,
+    ) -> ChatAgent: ...
+
+
 @pytest.fixture
-def create_agent() -> Callable[..., ChatAgent]:
+def create_agent() -> ChatAgentFactory:
     def _create_agent(
         *,
-        agent_runner: FakeAgentRunner,
+        agent_runner: FakeAgentRunner | None = None,
+        memory: SlidingWindowMemory | None = None,
     ) -> ChatAgent:
+        actual_agent_runner = agent_runner or FakeAgentRunner(
+            response=ClientResponse(
+                content="測試回覆",
+            ),
+        )
+
+        actual_memory = memory or SlidingWindowMemory(
+            config=MemoryConfig(
+                max_history_rounds=10,
+            ),
+        )
+
         return ChatAgent(
             prompt_template=PromptTemplate(
                 config=PromptConfig(
@@ -34,12 +56,8 @@ def create_agent() -> Callable[..., ChatAgent]:
                     language="Traditional Chinese",
                 ),
             ),
-            agent_runner=agent_runner,
-            memory=SlidingWindowMemory(
-                config=MemoryConfig(
-                    max_history_rounds=10,
-                ),
-            ),
+            agent_runner=actual_agent_runner,
+            memory=actual_memory,
             fact_memory=InMemoryFactMemory(),
             fact_extractor=RegexFactExtractor(),
             memory_policy=SimpleMemoryPolicy(
@@ -60,7 +78,7 @@ def create_agent() -> Callable[..., ChatAgent]:
 
 
 def test_chat_returns_final_response_from_agent_runner(
-    create_agent,
+    create_agent: ChatAgentFactory,
 ) -> None:
     agent_runner = FakeAgentRunner(
         response=ClientResponse(
@@ -78,7 +96,7 @@ def test_chat_returns_final_response_from_agent_runner(
 
 
 def test_chat_sends_composed_messages_to_agent_runner(
-    create_agent,
+    create_agent: ChatAgentFactory,
 ) -> None:
     agent_runner = FakeAgentRunner(
         response=ClientResponse(
@@ -103,3 +121,50 @@ def test_chat_sends_composed_messages_to_agent_runner(
         )
         in sent_messages
     )
+
+
+def test_get_history_should_return_conversation_messages(
+    create_agent: ChatAgentFactory,
+) -> None:
+    memory = SlidingWindowMemory(
+        config=MemoryConfig(
+            max_history_rounds=10,
+        ),
+    )
+
+    agent = create_agent(
+        memory=memory,
+    )
+
+    agent.chat("Hello")
+
+    assert agent.get_history() == (
+        Message(
+            role=MessageRole.USER,
+            content="Hello",
+        ),
+        Message(
+            role=MessageRole.ASSISTANT,
+            content="測試回覆",
+        ),
+    )
+
+
+def test_clear_history_should_remove_conversation_messages(
+    create_agent: ChatAgentFactory,
+) -> None:
+    memory = SlidingWindowMemory(
+        config=MemoryConfig(
+            max_history_rounds=10,
+        ),
+    )
+
+    agent = create_agent(
+        memory=memory,
+    )
+
+    agent.chat("Hello")
+
+    agent.clear_history()
+
+    assert agent.get_history() == ()

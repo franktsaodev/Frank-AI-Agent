@@ -1,6 +1,9 @@
 import logging
+from collections.abc import Mapping
 
-from app.agent.agent_runner import AgentRunner
+from app.agent.agent_runner_protocol import (
+    AgentRunnerProtocol,
+)
 from app.extractors.base_fact_extractor import BaseFactExtractor
 from app.memory.base_fact_memory import BaseFactMemory
 from app.memory.base_memory import BaseMemory
@@ -8,7 +11,9 @@ from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.policies.base_memory_policy import BaseMemoryPolicy
 from app.prompts.base_prompt_template import BasePromptTemplate
-from app.prompts.prompt_composer import PromptComposer
+from app.prompts.prompt_composer_protocol import (
+    PromptComposerProtocol,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +22,12 @@ class ChatAgent:
     def __init__(
         self,
         prompt_template: BasePromptTemplate,
-        agent_runner: AgentRunner,
+        agent_runner: AgentRunnerProtocol,
         memory: BaseMemory,
         fact_memory: BaseFactMemory,
         fact_extractor: BaseFactExtractor,
         memory_policy: BaseMemoryPolicy,
-        prompt_composer: PromptComposer,
+        prompt_composer: PromptComposerProtocol,
     ) -> None:
         logger.info("ChatAgent initialized")
 
@@ -61,7 +66,7 @@ class ChatAgent:
             content=message,
         )
 
-        extracted_facts = self._fact_extractor.extract(user_message.content)
+        extracted_facts = self._fact_extractor.extract(message)
 
         self._remember_extracted_facts(extracted_facts)
 
@@ -113,16 +118,31 @@ class ChatAgent:
     ) -> None:
         self._fact_memory.delete(key)
 
+    def get_history(
+        self,
+    ) -> tuple[Message, ...]:
+        return tuple(self._memory.get_messages())
+
+    def clear_history(
+        self,
+    ) -> None:
+        self._memory.clear()
+
     def _remember_extracted_facts(
         self,
-        facts: dict[str, str],
+        facts: Mapping[str, str],
     ) -> None:
         if not facts:
-            logger.debug("No facts extracted from user message")
+            logger.debug(
+                "No facts extracted from user message",
+            )
             return
 
         for key, value in facts.items():
-            if not self._memory_policy.should_remember(key, value):
+            if not self._memory_policy.should_remember(
+                key,
+                value,
+            ):
                 logger.debug(
                     "Rejected extracted fact key=%s value=%r",
                     key,

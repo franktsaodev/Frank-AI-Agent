@@ -55,7 +55,7 @@ def test_tool_call_is_frozen() -> None:
     )
 
     with pytest.raises(FrozenInstanceError):
-        tool_call.name = "weather"
+        tool_call.name = "weather"  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_tool_call_copies_arguments() -> None:

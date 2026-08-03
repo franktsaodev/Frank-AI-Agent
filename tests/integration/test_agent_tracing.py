@@ -1,5 +1,4 @@
 import json
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -18,6 +17,7 @@ from app.tools.tool_provider import ToolProvider
 from app.tools.tool_registry import ToolRegistry
 from app.tools.tool_schema_adapter import ToolSchemaAdapter
 from app.tracing.trace_event_type import TraceEventType
+from app.types.json_types import JsonObject
 from tests.fakes.failing_tool import FailingTool
 from tests.fakes.fake_tool import FakeTool
 from tests.helpers.tracing import (
@@ -104,7 +104,7 @@ def create_tool_call_response(
     *,
     call_id: str,
     name: str,
-    arguments: dict[str, Any],
+    arguments: JsonObject,
 ) -> MagicMock:
     tool_call = MagicMock()
     tool_call.id = call_id
@@ -128,7 +128,7 @@ def test_agent_should_trace_complete_lifecycle_without_tool(
         return_value=create_success_response("你好，Frank！"),
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     messages = [
         Message(
@@ -218,7 +218,7 @@ def test_agent_should_trace_complete_lifecycle_with_tool(
         ]
     )
 
-    groq_client.client.chat.completions.create = mock_create
+    groq_client._client.chat.completions.create = mock_create
 
     result = agent_runner.run(
         [
@@ -332,7 +332,7 @@ def test_agent_should_trace_complete_lifecycle_when_tool_fails(
         arguments={},
     )
 
-    groq_client.client.chat.completions.create = MagicMock(
+    groq_client._client.chat.completions.create = MagicMock(
         return_value=tool_response,
     )
 

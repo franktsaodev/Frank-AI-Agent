@@ -1,11 +1,12 @@
+from collections.abc import Sequence
 from copy import deepcopy
-from typing import Any
 
 from app.tools.base_tool import BaseTool
+from app.tools.tool_schema_types import ToolSchema
 
 
 class ToolSchemaAdapter:
-    def adapt(self, tool: BaseTool) -> dict[str, Any]:
+    def adapt(self, tool: BaseTool) -> ToolSchema:
         return {
             "type": "function",
             "function": {
@@ -17,6 +18,6 @@ class ToolSchemaAdapter:
 
     def adapt_all(
         self,
-        tools: list[BaseTool],
-    ) -> list[dict[str, Any]]:
+        tools: Sequence[BaseTool],
+    ) -> list[ToolSchema]:
         return [self.adapt(tool) for tool in tools]

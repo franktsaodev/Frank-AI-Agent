@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
 
 from app.tracing.trace_event_type import TraceEventType
+from app.types.json_types import JsonObject
 
 
 @dataclass(frozen=True)
@@ -14,4 +14,4 @@ class TraceEvent:
     timestamp: datetime = field(
         default_factory=lambda: datetime.now(UTC),
     )
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: JsonObject = field(default_factory=dict)

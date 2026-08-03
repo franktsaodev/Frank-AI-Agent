@@ -138,7 +138,23 @@ def test_input_schema_returns_independent_dictionary() -> None:
     first_schema = tool.input_schema
     second_schema = tool.input_schema
 
-    first_schema["required"].clear()
+    first_properties = first_schema["properties"]
+
+    assert isinstance(
+        first_properties,
+        dict,
+    )
+
+    first_properties.clear()
+
+    second_properties = second_schema["properties"]
+
+    assert isinstance(
+        second_properties,
+        dict,
+    )
+
+    assert second_properties != {}
 
     assert second_schema["required"] == [
         "operation",

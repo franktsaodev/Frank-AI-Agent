@@ -1,6 +1,7 @@
 from typing import Any
 
 from app.tools.base_tool import BaseTool
+from app.types.json_types import JsonObject
 
 
 class CalculatorTool(BaseTool):
@@ -13,7 +14,7 @@ class CalculatorTool(BaseTool):
         return "Perform basic arithmetic calculations."
 
     @property
-    def input_schema(self) -> dict[str, Any]:
+    def input_schema(self) -> JsonObject:
         return {
             "type": "object",
             "properties": {

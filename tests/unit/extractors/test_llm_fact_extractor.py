@@ -25,9 +25,12 @@ def test_build_messages_contains_system_and_user_messages(
         "My name is Frank.",
     )
 
+    prompt_content = messages[0].content
+
     assert len(messages) == 2
     assert messages[0].role == MessageRole.SYSTEM
-    assert "valid JSON object" in messages[0].content
+    assert prompt_content is not None
+    assert "valid JSON object" in prompt_content
     assert messages[1].role == MessageRole.USER
     assert messages[1].content == "My name is Frank."
 

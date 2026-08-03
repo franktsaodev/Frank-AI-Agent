@@ -1,15 +1,15 @@
 import json
-from typing import Any
 
 from app.tracing.trace_event import TraceEvent
+from app.types.json_types import JsonObject
 
 
 class TraceEventSerializer:
     def to_dict(
         self,
         event: TraceEvent,
-    ) -> dict[str, Any]:
-        return {
+    ) -> JsonObject:
+        result: JsonObject = {
             "timestamp": event.timestamp.isoformat(),
             "trace_id": event.trace_id,
             "span_id": event.span_id,
@@ -17,6 +17,8 @@ class TraceEventSerializer:
             "event_type": event.event_type.value,
             "metadata": event.metadata,
         }
+
+        return result
 
     def to_json(
         self,

@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from typing import Protocol
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,11 +14,19 @@ from tests.fakes.fake_clock import FakeClock
 from tests.fakes.fake_tool import FakeTool
 
 
+class ToolExecutorFactory(Protocol):
+    def __call__(
+        self,
+        *,
+        clock: BaseClock | None = None,
+    ) -> ToolExecutor: ...
+
+
 @pytest.fixture
 def create_tool_executor(
     registry: ToolRegistry,
     tracer: MagicMock,
-) -> Callable[..., ToolExecutor]:
+) -> ToolExecutorFactory:
     def _create_tool_executor(
         *,
         clock: BaseClock | None = None,
@@ -26,17 +34,14 @@ def create_tool_executor(
         return ToolExecutor(
             registry=registry,
             tracer=tracer,
-            clock=clock
-            or FakeClock.for_duration(
-                1.0,
-            ),
+            clock=clock or FakeClock.for_duration(1.0),
         )
 
     return _create_tool_executor
 
 
 def test_execute_calls_tool_with_arguments(
-    create_tool_executor: Callable[..., ToolExecutor],
+    create_tool_executor: ToolExecutorFactory,
     registry: ToolRegistry,
     trace_context: TraceContext,
 ) -> None:
@@ -67,7 +72,7 @@ def test_execute_calls_tool_with_arguments(
 
 
 def test_execute_raises_error_when_tool_does_not_exist(
-    create_tool_executor: Callable[..., ToolExecutor],
+    create_tool_executor: ToolExecutorFactory,
     trace_context: TraceContext,
 ) -> None:
     executor = create_tool_executor()
@@ -87,7 +92,7 @@ def test_execute_raises_error_when_tool_does_not_exist(
 
 
 def test_execute_propagates_tool_error(
-    create_tool_executor: Callable[..., ToolExecutor],
+    create_tool_executor: ToolExecutorFactory,
     registry: ToolRegistry,
     trace_context: TraceContext,
 ) -> None:
@@ -112,7 +117,7 @@ def test_execute_propagates_tool_error(
 @patch("app.tracing.trace_context.uuid.uuid4")
 def test_execute_should_trace_tool_lifecycle(
     mock_uuid4: MagicMock,
-    create_tool_executor: Callable[..., ToolExecutor],
+    create_tool_executor: ToolExecutorFactory,
     registry: ToolRegistry,
     tracer: MagicMock,
     trace_context: TraceContext,
@@ -164,7 +169,7 @@ def test_execute_should_trace_tool_lifecycle(
 @patch("app.tracing.trace_context.uuid.uuid4")
 def test_execute_should_trace_tool_failed(
     mock_uuid4: MagicMock,
-    create_tool_executor: Callable[..., ToolExecutor],
+    create_tool_executor: ToolExecutorFactory,
     registry: ToolRegistry,
     tracer: MagicMock,
     trace_context: TraceContext,
@@ -216,7 +221,7 @@ def test_execute_should_trace_tool_failed(
 @patch("app.tracing.trace_context.uuid.uuid4")
 def test_execute_should_trace_tool_failed_when_tool_not_found(
     mock_uuid4: MagicMock,
-    create_tool_executor: Callable[..., ToolExecutor],
+    create_tool_executor: ToolExecutorFactory,
     tracer: MagicMock,
     trace_context: TraceContext,
 ) -> None:
@@ -265,7 +270,7 @@ def test_execute_should_trace_tool_failed_when_tool_not_found(
 @patch("app.tracing.trace_context.uuid.uuid4")
 def test_each_execute_should_create_a_new_tool_span(
     mock_uuid4: MagicMock,
-    create_tool_executor: Callable[..., ToolExecutor],
+    create_tool_executor: ToolExecutorFactory,
     registry: ToolRegistry,
     tracer: MagicMock,
     trace_context: TraceContext,
@@ -335,7 +340,7 @@ def test_each_execute_should_create_a_new_tool_span(
 
 
 def test_execute_should_trace_tool_duration(
-    create_tool_executor: Callable[..., ToolExecutor],
+    create_tool_executor: ToolExecutorFactory,
     registry: ToolRegistry,
     tracer: MagicMock,
     trace_context: TraceContext,
@@ -368,7 +373,7 @@ def test_execute_should_trace_tool_duration(
 
 
 def test_execute_should_trace_tool_duration_when_failed(
-    create_tool_executor: Callable[..., ToolExecutor],
+    create_tool_executor: ToolExecutorFactory,
     registry: ToolRegistry,
     tracer: MagicMock,
     trace_context: TraceContext,

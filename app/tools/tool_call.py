@@ -1,12 +1,13 @@
 from dataclasses import dataclass
-from typing import Any
+
+from app.types.json_types import JsonObject
 
 
 @dataclass(frozen=True)
 class ToolCall:
     call_id: str
     name: str
-    arguments: dict[str, Any]
+    arguments: JsonObject
 
     def __post_init__(self) -> None:
         if not self.name.strip():

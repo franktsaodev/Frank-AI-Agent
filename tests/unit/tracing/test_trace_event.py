@@ -45,7 +45,7 @@ def test_trace_event_should_be_immutable() -> None:
     )
 
     with pytest.raises(FrozenInstanceError):
-        event.event_type = TraceEventType.AGENT_FINISHED
+        event.event_type = TraceEventType.AGENT_FINISHED  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_trace_event_should_allow_no_parent_span() -> None:

@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Sequence
 
 from app.clients.base_client import BaseClient
 from app.clock.base_clock import BaseClock
@@ -10,7 +11,9 @@ from app.models.client_response import ClientResponse
 from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.tools.tool_call import ToolCall
-from app.tools.tool_executor import ToolExecutor
+from app.tools.tool_executor_protocol import (
+    ToolExecutorProtocol,
+)
 from app.tracing.base_tracer import BaseTracer
 from app.tracing.trace_context import TraceContext
 from app.tracing.trace_event import TraceEvent
@@ -21,7 +24,7 @@ class AgentRunner:
     def __init__(
         self,
         client: BaseClient,
-        tool_executor: ToolExecutor,
+        tool_executor: ToolExecutorProtocol,
         tracer: BaseTracer,
         clock: BaseClock,
         config: AgentConfig,
@@ -34,7 +37,7 @@ class AgentRunner:
 
     def run(
         self,
-        messages: list[Message],
+        messages: Sequence[Message],
     ) -> ClientResponse:
         agent_context = self._create_trace_context()
 

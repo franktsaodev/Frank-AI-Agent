@@ -2,6 +2,7 @@ from typing import Any
 
 from app.tools.base_tool import BaseTool
 from app.tools.tool_schema_adapter import ToolSchemaAdapter
+from app.types.json_types import JsonObject
 from tests.fakes.fake_tool import FakeTool
 
 
@@ -25,7 +26,7 @@ class ToolWithSharedSchema(BaseTool):
         return "A tool with a shared schema."
 
     @property
-    def input_schema(self) -> dict[str, Any]:
+    def input_schema(self) -> JsonObject:
         return self.schema
 
     def execute(self, **kwargs: Any) -> Any:
@@ -42,7 +43,7 @@ class SecondFakeTool(BaseTool):
         return "A second fake tool."
 
     @property
-    def input_schema(self) -> dict[str, Any]:
+    def input_schema(self) -> JsonObject:
         return {
             "type": "object",
             "properties": {},
@@ -78,7 +79,16 @@ def test_adapt_copies_input_schema() -> None:
 
     result = adapter.adapt(tool)
 
-    result["function"]["parameters"]["properties"].clear()
+    parameters = result["function"]["parameters"]
+
+    properties = parameters["properties"]
+
+    assert isinstance(
+        properties,
+        dict,
+    )
+
+    properties.clear()
 
     assert tool.schema["properties"] == {
         "message": {
