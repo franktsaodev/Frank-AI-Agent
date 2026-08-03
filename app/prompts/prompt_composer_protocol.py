@@ -12,5 +12,4 @@ class PromptComposerProtocol(Protocol):
         history_messages: Sequence[Message],
         facts: Mapping[str, str],
         user_message: Message,
-    ) -> list[Message]:
-        ...
+    ) -> list[Message]: ...

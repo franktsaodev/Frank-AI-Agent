@@ -101,35 +101,36 @@ def test_execute_raises_error_when_operation_is_missing() -> None:
 def test_input_schema_describes_calculator_arguments() -> None:
     tool = CalculatorTool()
 
-    assert tool.input_schema == {
-        "type": "object",
-        "properties": {
-            "operation": {
-                "type": "string",
-                "description": "The arithmetic operation to perform.",
-                "enum": [
-                    "add",
-                    "subtract",
-                    "multiply",
-                    "divide",
-                ],
-            },
-            "a": {
-                "type": "number",
-                "description": "The first number.",
-            },
-            "b": {
-                "type": "number",
-                "description": "The second number.",
-            },
-        },
-        "required": [
-            "operation",
-            "a",
-            "b",
-        ],
-        "additionalProperties": False,
+    schema = tool.input_schema
+
+    assert schema["type"] == "object"
+    assert schema["required"] == [
+        "operation",
+        "a",
+        "b",
+    ]
+    assert schema["additionalProperties"] is False
+
+    properties = schema["properties"]
+
+    assert isinstance(properties, dict)
+
+    assert set(properties) == {
+        "operation",
+        "a",
+        "b",
     }
+
+    operation_schema = properties["operation"]
+
+    assert isinstance(operation_schema, dict)
+    assert operation_schema["type"] == "string"
+    assert operation_schema["enum"] == [
+        "add",
+        "subtract",
+        "multiply",
+        "divide",
+    ]
 
 
 def test_input_schema_returns_independent_dictionary() -> None:
@@ -140,24 +141,81 @@ def test_input_schema_returns_independent_dictionary() -> None:
 
     first_properties = first_schema["properties"]
 
-    assert isinstance(
-        first_properties,
-        dict,
-    )
+    assert isinstance(first_properties, dict)
 
     first_properties.clear()
 
     second_properties = second_schema["properties"]
 
-    assert isinstance(
-        second_properties,
-        dict,
-    )
+    assert isinstance(second_properties, dict)
 
-    assert second_properties != {}
-
-    assert second_schema["required"] == [
+    assert list(second_properties) == [
         "operation",
         "a",
         "b",
+    ]
+
+
+def test_description_should_limit_tool_to_numeric_calculations() -> None:
+    tool = CalculatorTool()
+
+    description = tool.description.lower()
+
+    assert "numerical calculation" in description
+    assert "general conversation" in description
+    assert "memory retrieval" in description
+
+
+def test_input_schema_should_reject_additional_properties() -> None:
+    tool = CalculatorTool()
+
+    schema = tool.input_schema
+
+    assert schema["additionalProperties"] is False
+
+
+def test_input_schema_should_describe_calculator_operands() -> None:
+    tool = CalculatorTool()
+
+    properties = tool.input_schema["properties"]
+
+    assert isinstance(properties, dict)
+
+    operation_schema = properties["operation"]
+    first_operand_schema = properties["a"]
+    second_operand_schema = properties["b"]
+
+    assert isinstance(operation_schema, dict)
+    assert isinstance(first_operand_schema, dict)
+    assert isinstance(second_operand_schema, dict)
+
+    operation_description = operation_schema["description"]
+    first_operand_description = first_operand_schema["description"]
+    second_operand_description = second_operand_schema["description"]
+
+    assert isinstance(operation_description, str)
+    assert isinstance(first_operand_description, str)
+    assert isinstance(second_operand_description, str)
+
+    assert "arithmetic operation" in operation_description.lower()
+    assert "first numeric operand" in first_operand_description.lower()
+    assert "second numeric operand" in second_operand_description.lower()
+
+
+def test_input_schema_should_define_supported_operations() -> None:
+    tool = CalculatorTool()
+
+    properties = tool.input_schema["properties"]
+
+    assert isinstance(properties, dict)
+
+    operation_schema = properties["operation"]
+
+    assert isinstance(operation_schema, dict)
+
+    assert operation_schema["enum"] == [
+        "add",
+        "subtract",
+        "multiply",
+        "divide",
     ]

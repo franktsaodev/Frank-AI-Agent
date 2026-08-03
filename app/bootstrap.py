@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from app.agent.agent_runner import AgentRunner
@@ -20,6 +21,8 @@ from app.memory.sliding_window_memory import SlidingWindowMemory
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
 from app.prompts.prompt_composer import PromptComposer
 from app.prompts.prompt_template import PromptTemplate
+from app.tools.plugins.core_tool_plugin import CoreToolPlugin
+from app.tools.plugins.tool_plugin_loader import ToolPluginLoader
 from app.tools.tool_executor import ToolExecutor
 from app.tools.tool_provider import ToolProvider
 from app.tools.tool_registry import ToolRegistry
@@ -28,12 +31,18 @@ from app.tracing.base_tracer import BaseTracer
 from app.tracing.exporter_tracer import ExporterTracer
 from app.tracing.trace_exporter_factory import TraceExporterFactory
 
+logger = logging.getLogger(__name__)
+
 
 def create_chat_agent() -> ChatAgent:
     clock = SystemClock()
     tracer = _create_tracer()
 
     registry = ToolRegistry()
+
+    _load_tool_plugins(
+        registry=registry,
+    )
 
     tool_provider = _create_tool_provider(
         registry=registry,
@@ -174,4 +183,25 @@ def _create_memory_policy() -> SimpleMemoryPolicy:
                 }
             ),
         ),
+    )
+
+
+def _load_tool_plugins(
+    registry: ToolRegistry,
+) -> None:
+    loader = ToolPluginLoader(
+        registry=registry,
+    )
+
+    result = loader.load(
+        plugins=(CoreToolPlugin(),),
+    )
+
+    tool_names = ", ".join(result.tool_names) if result.tool_names else "none"
+
+    logger.info(
+        "Loaded %d tool plugin(s) with %d tool(s): %s",
+        result.plugin_count,
+        result.tool_count,
+        tool_names,
     )

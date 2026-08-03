@@ -3,10 +3,12 @@ from collections.abc import Iterable
 from app.agent.chat_agent import ChatAgent
 
 DEFAULT_MESSAGES = (
-    "How are you?",
-    "What are you doing?",
-    "Tell me something interesting.",
+    # "How are you?",
+    # "What are you doing?",
+    # "Tell me something interesting.",
+    "My name is Frank.",
     "What is my name?",
+    "What is 125 * 8?",
 )
 
 

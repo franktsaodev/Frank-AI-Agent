@@ -11,7 +11,13 @@ class CalculatorTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return "Perform basic arithmetic calculations."
+        return (
+            "Evaluate an explicit arithmetic expression containing numbers "
+            "and supported mathematical operators. Use this tool only when "
+            "the user asks for a numerical calculation. Do not use it for "
+            "general conversation, personal information, memory retrieval, "
+            "or non-mathematical questions."
+        )
 
     @property
     def input_schema(self) -> JsonObject:
@@ -30,11 +36,11 @@ class CalculatorTool(BaseTool):
                 },
                 "a": {
                     "type": "number",
-                    "description": "The first number.",
+                    "description": "The first numeric operand in the calculation.",
                 },
                 "b": {
                     "type": "number",
-                    "description": "The second number.",
+                    "description": "The second numeric operand in the calculation.",
                 },
             },
             "required": [
