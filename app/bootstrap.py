@@ -7,13 +7,20 @@ from app.clients.base_client import BaseClient
 from app.clients.groq_client import GroqClient
 from app.clock.base_clock import BaseClock
 from app.clock.system_clock import SystemClock
-from app.config import GROQ_API_KEY, GROQ_MODEL
+from app.config import (
+    GROQ_API_KEY,
+    GROQ_MODEL,
+)
+from app.config_loaders.tool_plugin_config_loader import (
+    ToolPluginConfigLoader,
+)
 from app.config_models.agent_config import AgentConfig
 from app.config_models.groq_config import GroqConfig
 from app.config_models.memory_config import MemoryConfig
 from app.config_models.memory_policy_config import MemoryPolicyConfig
 from app.config_models.prompt_config import PromptConfig
 from app.config_models.retry_config import RetryConfig
+from app.config_models.tool_plugin_config import ToolPluginConfig
 from app.config_models.tracing_config import TracingConfig
 from app.extractors.regex_fact_extractor import RegexFactExtractor
 from app.memory.in_memory_fact_memory import InMemoryFactMemory
@@ -21,7 +28,7 @@ from app.memory.sliding_window_memory import SlidingWindowMemory
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
 from app.prompts.prompt_composer import PromptComposer
 from app.prompts.prompt_template import PromptTemplate
-from app.tools.plugins.core_tool_plugin import CoreToolPlugin
+from app.tools.plugins.tool_plugin_factory import ToolPluginFactory
 from app.tools.plugins.tool_plugin_loader import ToolPluginLoader
 from app.tools.tool_executor import ToolExecutor
 from app.tools.tool_provider import ToolProvider
@@ -42,6 +49,7 @@ def create_chat_agent() -> ChatAgent:
 
     _load_tool_plugins(
         registry=registry,
+        config=ToolPluginConfigLoader().load(),
     )
 
     tool_provider = _create_tool_provider(
@@ -188,13 +196,16 @@ def _create_memory_policy() -> SimpleMemoryPolicy:
 
 def _load_tool_plugins(
     registry: ToolRegistry,
+    config: ToolPluginConfig,
 ) -> None:
-    loader = ToolPluginLoader(
-        registry=registry,
+    plugins = ToolPluginFactory().create_all(
+        config.enabled_plugins,
     )
 
-    result = loader.load(
-        plugins=(CoreToolPlugin(),),
+    result = ToolPluginLoader(
+        registry=registry,
+    ).load(
+        plugins=plugins,
     )
 
     tool_names = ", ".join(result.tool_names) if result.tool_names else "none"
