@@ -7,6 +7,7 @@ from app.tools.base_tool import BaseTool
 from app.tools.plugins.tool_plugin_loader import (
     ToolPluginLoader,
 )
+from app.tools.tool_execution_context import ToolExecutionContext
 from app.tools.tool_registry import ToolRegistry
 from app.types.json_types import JsonObject
 from tests.fakes.fake_tool import FakeTool
@@ -61,8 +62,13 @@ class SecondFakeTool(BaseTool):
 
     def execute(
         self,
+        *,
+        context: ToolExecutionContext,
         **kwargs: Any,
     ) -> str:
+        del context
+        del kwargs
+
         return "second fake result"
 
 

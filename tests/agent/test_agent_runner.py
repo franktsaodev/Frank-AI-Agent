@@ -3,6 +3,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.agent.agent_run_context import (
+    AgentRunContext,
+)
 from app.agent.agent_runner import AgentRunner
 from app.clients.base_client import BaseClient
 from app.clock.base_clock import BaseClock
@@ -961,3 +964,60 @@ def test_run_should_trace_agent_duration_when_failed(
     assert events[-1].event_type == TraceEventType.AGENT_FAILED
 
     assert events[-1].metadata["duration_ms"] == pytest.approx(400.0)
+
+
+def test_run_should_pass_context_metadata_to_tool_executor(
+    create_agent_runner: AgentRunnerFactory,
+) -> None:
+    client = MagicMock(spec=BaseClient)
+
+    client.chat.side_effect = [
+        ClientResponse(
+            content=None,
+            tool_calls=(
+                ToolCall(
+                    call_id="call-123",
+                    name="calculator",
+                    arguments={
+                        "operation": "add",
+                        "a": 1,
+                        "b": 2,
+                    },
+                ),
+            ),
+        ),
+        ClientResponse(
+            content="3",
+            tool_calls=(),
+        ),
+    ]
+
+    tool_executor = FakeToolExecutor(
+        result=3,
+    )
+
+    runner = create_agent_runner(
+        client=client,
+        tool_executor=tool_executor,
+    )
+
+    context = AgentRunContext(
+        metadata={
+            "request_id": "request-123",
+            "user_id": "frank",
+        },
+    )
+
+    runner.run(
+        messages=(
+            Message(
+                role=MessageRole.USER,
+                content="Calculate 1 + 2",
+            ),
+        ),
+        context=context,
+    )
+
+    assert tool_executor.received_metadata == [
+        context.metadata,
+    ]

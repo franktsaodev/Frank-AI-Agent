@@ -1,6 +1,27 @@
 import pytest
 
 from app.tools.calculator_tool import CalculatorTool
+from app.tools.tool_execution_context import (
+    ToolExecutionContext,
+)
+from app.tracing.trace_context import TraceContext
+from tests.fakes.fake_clock import FakeClock
+
+
+@pytest.fixture
+def tool_execution_context() -> ToolExecutionContext:
+    return ToolExecutionContext(
+        trace_context=TraceContext(
+            trace_id="test-trace-id",
+            span_id="tool-span-id",
+            parent_span_id="agent-span-id",
+        ),
+        tool_name="calculator",
+        tool_call_id="call-calculator-123",
+        clock=FakeClock.for_duration(
+            1.0,
+        ),
+    )
 
 
 def test_name_returns_calculator() -> None:
@@ -15,10 +36,13 @@ def test_description_is_not_empty() -> None:
     assert tool.description
 
 
-def test_execute_adds_two_numbers() -> None:
+def test_execute_adds_two_numbers(
+    tool_execution_context: ToolExecutionContext,
+) -> None:
     tool = CalculatorTool()
 
     result = tool.execute(
+        context=tool_execution_context,
         operation="add",
         a=10,
         b=20,
@@ -27,10 +51,13 @@ def test_execute_adds_two_numbers() -> None:
     assert result == 30
 
 
-def test_execute_subtracts_two_numbers() -> None:
+def test_execute_subtracts_two_numbers(
+    tool_execution_context: ToolExecutionContext,
+) -> None:
     tool = CalculatorTool()
 
     result = tool.execute(
+        context=tool_execution_context,
         operation="subtract",
         a=20,
         b=5,
@@ -39,10 +66,13 @@ def test_execute_subtracts_two_numbers() -> None:
     assert result == 15
 
 
-def test_execute_multiplies_two_numbers() -> None:
+def test_execute_multiplies_two_numbers(
+    tool_execution_context: ToolExecutionContext,
+) -> None:
     tool = CalculatorTool()
 
     result = tool.execute(
+        context=tool_execution_context,
         operation="multiply",
         a=6,
         b=7,
@@ -51,10 +81,13 @@ def test_execute_multiplies_two_numbers() -> None:
     assert result == 42
 
 
-def test_execute_divides_two_numbers() -> None:
+def test_execute_divides_two_numbers(
+    tool_execution_context: ToolExecutionContext,
+) -> None:
     tool = CalculatorTool()
 
     result = tool.execute(
+        context=tool_execution_context,
         operation="divide",
         a=20,
         b=4,
@@ -63,29 +96,40 @@ def test_execute_divides_two_numbers() -> None:
     assert result == 5
 
 
-def test_execute_raises_error_for_unsupported_operation() -> None:
+def test_execute_raises_error_for_unsupported_operation(
+    tool_execution_context: ToolExecutionContext,
+) -> None:
     tool = CalculatorTool()
 
     with pytest.raises(ValueError):
         tool.execute(
+            context=tool_execution_context,
             operation="power",
             a=2,
             b=3,
         )
 
 
-def test_execute_raises_error_when_dividing_by_zero() -> None:
+def test_execute_raises_error_when_dividing_by_zero(
+    tool_execution_context: ToolExecutionContext,
+) -> None:
     tool = CalculatorTool()
 
-    with pytest.raises(ZeroDivisionError):
+    with pytest.raises(
+        ZeroDivisionError,
+        match="Division by zero is not allowed",
+    ):
         tool.execute(
+            context=tool_execution_context,
             operation="divide",
             a=10,
             b=0,
         )
 
 
-def test_execute_raises_error_when_operation_is_missing() -> None:
+def test_execute_raises_error_when_operation_is_missing(
+    tool_execution_context: ToolExecutionContext,
+) -> None:
     tool = CalculatorTool()
 
     with pytest.raises(
@@ -93,6 +137,7 @@ def test_execute_raises_error_when_operation_is_missing() -> None:
         match="Missing required argument: operation",
     ):
         tool.execute(
+            context=tool_execution_context,
             a=10,
             b=20,
         )

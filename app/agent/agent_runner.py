@@ -1,6 +1,7 @@
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
+from app.agent.agent_run_context import AgentRunContext
 from app.clients.base_client import BaseClient
 from app.clock.base_clock import BaseClock
 from app.config_models.agent_config import AgentConfig
@@ -18,6 +19,7 @@ from app.tracing.base_tracer import BaseTracer
 from app.tracing.trace_context import TraceContext
 from app.tracing.trace_event import TraceEvent
 from app.tracing.trace_event_type import TraceEventType
+from app.types.json_types import JsonValue
 
 
 class AgentRunner:
@@ -38,7 +40,10 @@ class AgentRunner:
     def run(
         self,
         messages: Sequence[Message],
+        context: AgentRunContext | None = None,
     ) -> ClientResponse:
+        actual_context = context if context is not None else AgentRunContext()
+
         agent_context = self._create_trace_context()
 
         start_time = self._clock.now()
@@ -97,6 +102,7 @@ class AgentRunner:
                     self._execute_tool_calls(
                         tool_calls=response.tool_calls,
                         trace_context=agent_context,
+                        metadata=actual_context.metadata,
                     )
                 )
 
@@ -135,6 +141,7 @@ class AgentRunner:
         self,
         tool_calls: tuple[ToolCall, ...],
         trace_context: TraceContext,
+        metadata: Mapping[str, JsonValue],
     ) -> list[Message]:
         tool_messages: list[Message] = []
 
@@ -142,6 +149,7 @@ class AgentRunner:
             tool_result = self._tool_executor.execute(
                 tool_call=tool_call,
                 trace_context=trace_context,
+                metadata=metadata,
             )
 
             tool_messages.append(

@@ -1,12 +1,16 @@
 from typing import Any
 
 from app.tools.base_tool import BaseTool
+from app.tools.tool_execution_context import (
+    ToolExecutionContext,
+)
 from app.types.json_types import JsonObject
 
 
 class FakeTool(BaseTool):
     def __init__(self) -> None:
-        self.received_arguments: dict[str, Any] | None = None
+        self.received_arguments: dict[str, Any] = {}
+        self.received_context: ToolExecutionContext | None = None
 
     @property
     def name(self) -> str:
@@ -24,6 +28,13 @@ class FakeTool(BaseTool):
             "additionalProperties": True,
         }
 
-    def execute(self, **kwargs: Any) -> str:
-        self.received_arguments = dict(kwargs)
+    def execute(
+        self,
+        *,
+        context: ToolExecutionContext,
+        **kwargs: Any,
+    ) -> str:
+        self.received_context = context
+        self.received_arguments = kwargs
+
         return "fake result"

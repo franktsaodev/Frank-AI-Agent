@@ -1,6 +1,9 @@
 from typing import Any
 
 from app.tools.base_tool import BaseTool
+from app.tools.tool_execution_context import (
+    ToolExecutionContext,
+)
 from app.tools.tool_schema_adapter import ToolSchemaAdapter
 from app.types.json_types import JsonObject
 from tests.fakes.fake_tool import FakeTool
@@ -8,7 +11,7 @@ from tests.fakes.fake_tool import FakeTool
 
 class ToolWithSharedSchema(BaseTool):
     def __init__(self) -> None:
-        self.schema = {
+        self.schema: JsonObject = {
             "type": "object",
             "properties": {
                 "message": {
@@ -29,8 +32,14 @@ class ToolWithSharedSchema(BaseTool):
     def input_schema(self) -> JsonObject:
         return self.schema
 
-    def execute(self, **kwargs: Any) -> Any:
-        return None
+    def execute(
+        self,
+        *,
+        context: ToolExecutionContext,
+        **kwargs: Any,
+    ) -> None:
+        del context
+        del kwargs
 
 
 class SecondFakeTool(BaseTool):
@@ -49,8 +58,16 @@ class SecondFakeTool(BaseTool):
             "properties": {},
         }
 
-    def execute(self, **kwargs: Any) -> str:
-        return "second result"
+    def execute(
+        self,
+        *,
+        context: ToolExecutionContext,
+        **kwargs: Any,
+    ) -> str:
+        del context
+        del kwargs
+
+        return "second fake result"
 
 
 def test_adapt_returns_function_tool_schema() -> None:

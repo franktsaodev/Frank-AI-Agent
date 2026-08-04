@@ -404,3 +404,187 @@ def test_execute_should_trace_tool_duration_when_failed(
 
     assert events[-1].event_type == TraceEventType.TOOL_FAILED
     assert events[-1].metadata["duration_ms"] == pytest.approx(400.0)
+
+
+@patch("app.tracing.trace_context.uuid.uuid4")
+def test_execute_should_pass_execution_context_to_tool(
+    mock_uuid4: MagicMock,
+    create_tool_executor: ToolExecutorFactory,
+    registry: ToolRegistry,
+    trace_context: TraceContext,
+) -> None:
+    mock_uuid4.return_value.hex = "tool-span-id"
+
+    clock = FakeClock.for_duration(
+        1.0,
+    )
+
+    fake_tool = FakeTool()
+    registry.register(fake_tool)
+
+    executor = create_tool_executor(
+        clock=clock,
+    )
+
+    executor.execute(
+        tool_call=ToolCall(
+            call_id="call-123",
+            name="fake",
+            arguments={},
+        ),
+        trace_context=trace_context,
+    )
+
+    assert fake_tool.received_context is not None
+
+    execution_context = fake_tool.received_context
+
+    assert execution_context.tool_name == "fake"
+    assert execution_context.tool_call_id == "call-123"
+    assert execution_context.clock is clock
+
+    assert execution_context.trace_context.trace_id == "test-trace-id"
+    assert execution_context.trace_context.span_id == "tool-span-id"
+    assert execution_context.trace_context.parent_span_id == "agent-span-id"
+
+
+def test_execute_should_pass_metadata_to_tool(
+    create_tool_executor: ToolExecutorFactory,
+    registry: ToolRegistry,
+    trace_context: TraceContext,
+) -> None:
+    fake_tool = FakeTool()
+    registry.register(fake_tool)
+
+    executor = create_tool_executor()
+
+    metadata = {
+        "request_id": "request-123",
+        "user_id": "frank",
+    }
+
+    executor.execute(
+        tool_call=ToolCall(
+            call_id="call-123",
+            name="fake",
+            arguments={},
+        ),
+        trace_context=trace_context,
+        metadata=metadata,
+    )
+
+    assert fake_tool.received_context is not None
+    assert fake_tool.received_context.metadata == metadata
+
+
+def test_execute_should_use_empty_metadata_by_default(
+    create_tool_executor: ToolExecutorFactory,
+    registry: ToolRegistry,
+    trace_context: TraceContext,
+) -> None:
+    fake_tool = FakeTool()
+    registry.register(fake_tool)
+
+    executor = create_tool_executor()
+
+    executor.execute(
+        tool_call=ToolCall(
+            call_id="call-123",
+            name="fake",
+            arguments={},
+        ),
+        trace_context=trace_context,
+    )
+
+    assert fake_tool.received_context is not None
+    assert fake_tool.received_context.metadata == {}
+
+
+def test_execute_should_copy_metadata(
+    create_tool_executor: ToolExecutorFactory,
+    registry: ToolRegistry,
+    trace_context: TraceContext,
+) -> None:
+    fake_tool = FakeTool()
+    registry.register(fake_tool)
+
+    executor = create_tool_executor()
+
+    metadata = {
+        "request_id": "request-123",
+    }
+
+    executor.execute(
+        tool_call=ToolCall(
+            call_id="call-123",
+            name="fake",
+            arguments={},
+        ),
+        trace_context=trace_context,
+        metadata=metadata,
+    )
+
+    metadata["request_id"] = "changed"
+
+    assert fake_tool.received_context is not None
+    assert fake_tool.received_context.metadata["request_id"] == "request-123"
+
+
+def test_execute_should_pass_metadata_to_tool_context(
+    create_tool_executor: ToolExecutorFactory,
+    registry: ToolRegistry,
+    trace_context: TraceContext,
+) -> None:
+    fake_tool = FakeTool()
+    registry.register(fake_tool)
+
+    executor = create_tool_executor()
+
+    metadata = {
+        "request_id": "request-123",
+        "user_id": "frank",
+        "source": "test",
+    }
+
+    executor.execute(
+        tool_call=ToolCall(
+            call_id="call-123",
+            name="fake",
+            arguments={},
+        ),
+        trace_context=trace_context,
+        metadata=metadata,
+    )
+
+    assert fake_tool.received_context is not None
+    assert fake_tool.received_context.metadata == metadata
+
+
+def test_execute_should_copy_metadata_before_passing_to_tool(
+    create_tool_executor: ToolExecutorFactory,
+    registry: ToolRegistry,
+    trace_context: TraceContext,
+) -> None:
+    fake_tool = FakeTool()
+    registry.register(fake_tool)
+
+    executor = create_tool_executor()
+
+    metadata = {
+        "request_id": "request-123",
+    }
+
+    executor.execute(
+        tool_call=ToolCall(
+            call_id="call-123",
+            name="fake",
+            arguments={},
+        ),
+        trace_context=trace_context,
+        metadata=metadata,
+    )
+
+    metadata["request_id"] = "changed"
+
+    assert fake_tool.received_context is not None
+    assert fake_tool.received_context.metadata["request_id"] == "request-123"

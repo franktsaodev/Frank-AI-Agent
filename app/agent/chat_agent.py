@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Mapping
 
+from app.agent.agent_run_context import AgentRunContext
 from app.agent.agent_runner_protocol import (
     AgentRunnerProtocol,
 )
@@ -14,6 +15,7 @@ from app.prompts.base_prompt_template import BasePromptTemplate
 from app.prompts.prompt_composer_protocol import (
     PromptComposerProtocol,
 )
+from app.types.json_types import JsonValue
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,8 @@ class ChatAgent:
     def chat(
         self,
         message: str,
+        *,
+        metadata: Mapping[str, JsonValue] | None = None,
     ) -> str:
         if not message.strip():
             raise ValueError("User message cannot be empty")
@@ -73,14 +77,21 @@ class ChatAgent:
         history_messages = self._memory.get_messages()
         known_facts = self._fact_memory.get_all()
 
-        messages = self._prompt_composer.compose(
+        composed_messages = self._prompt_composer.compose(
             system_message=self.system_message,
             history_messages=history_messages,
             facts=known_facts,
             user_message=user_message,
         )
 
-        response = self._agent_runner.run(messages)
+        run_context = AgentRunContext(
+            metadata=(metadata if metadata is not None else {}),
+        )
+
+        response = self._agent_runner.run(
+            messages=composed_messages,
+            context=run_context,
+        )
 
         if response.content is None:
             raise ValueError("Client response does not contain text content.")

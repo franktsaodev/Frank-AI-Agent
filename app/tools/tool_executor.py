@@ -1,10 +1,17 @@
+from collections.abc import Mapping
+from types import MappingProxyType
+
 from app.clock.base_clock import BaseClock
 from app.tools.tool_call import ToolCall
+from app.tools.tool_execution_context import (
+    ToolExecutionContext,
+)
 from app.tools.tool_registry import ToolRegistry
 from app.tracing.base_tracer import BaseTracer
 from app.tracing.trace_context import TraceContext
 from app.tracing.trace_event import TraceEvent
 from app.tracing.trace_event_type import TraceEventType
+from app.types.json_types import JsonValue
 
 
 class ToolExecutor:
@@ -22,16 +29,15 @@ class ToolExecutor:
         self,
         tool_call: ToolCall,
         trace_context: TraceContext,
+        metadata: Mapping[str, JsonValue] | None = None,
     ) -> object:
-        tool_context = trace_context.create_child()
-
-        start_time = self._clock.now()
+        tool_trace_context = trace_context.create_child()
 
         self._tracer.trace(
             TraceEvent(
-                trace_id=tool_context.trace_id,
-                span_id=tool_context.span_id,
-                parent_span_id=tool_context.parent_span_id,
+                trace_id=tool_trace_context.trace_id,
+                span_id=tool_trace_context.span_id,
+                parent_span_id=tool_trace_context.parent_span_id,
                 event_type=TraceEventType.TOOL_STARTED,
                 metadata={
                     "tool_name": tool_call.name,
@@ -40,17 +46,37 @@ class ToolExecutor:
             )
         )
 
+        start_time = self._clock.now()
+
         try:
-            tool = self._registry.get(tool_call.name)
-            result = tool.execute(**tool_call.arguments)
+            tool = self._registry.get(
+                tool_call.name,
+            )
+
+            metadata_copy = dict(metadata) if metadata is not None else {}
+
+            execution_context = ToolExecutionContext(
+                trace_context=tool_trace_context,
+                tool_name=tool_call.name,
+                tool_call_id=tool_call.call_id,
+                clock=self._clock,
+                metadata=MappingProxyType(
+                    metadata_copy,
+                ),
+            )
+
+            result = tool.execute(
+                context=execution_context,
+                **tool_call.arguments,
+            )
         except Exception as error:
             duration_ms = (self._clock.now() - start_time) * 1000
 
             self._tracer.trace(
                 TraceEvent(
-                    trace_id=tool_context.trace_id,
-                    span_id=tool_context.span_id,
-                    parent_span_id=tool_context.parent_span_id,
+                    trace_id=tool_trace_context.trace_id,
+                    span_id=tool_trace_context.span_id,
+                    parent_span_id=tool_trace_context.parent_span_id,
                     event_type=TraceEventType.TOOL_FAILED,
                     metadata={
                         "tool_name": tool_call.name,
@@ -67,9 +93,9 @@ class ToolExecutor:
 
         self._tracer.trace(
             TraceEvent(
-                trace_id=tool_context.trace_id,
-                span_id=tool_context.span_id,
-                parent_span_id=tool_context.parent_span_id,
+                trace_id=tool_trace_context.trace_id,
+                span_id=tool_trace_context.span_id,
+                parent_span_id=tool_trace_context.parent_span_id,
                 event_type=TraceEventType.TOOL_FINISHED,
                 metadata={
                     "tool_name": tool_call.name,

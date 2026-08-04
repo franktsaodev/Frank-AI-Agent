@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+from app.tools.tool_execution_context import (
+    ToolExecutionContext,
+)
 from app.types.json_types import JsonObject
 
 
@@ -21,5 +24,10 @@ class BaseTool(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def execute(self, **kwargs: Any) -> Any:
+    def execute(
+        self,
+        *,
+        context: ToolExecutionContext,
+        **kwargs: Any,
+    ) -> Any:
         raise NotImplementedError

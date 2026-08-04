@@ -1,10 +1,47 @@
 from typing import Any
 
 from app.tools.base_tool import BaseTool
+from app.tools.tool_execution_context import ToolExecutionContext
 from app.types.json_types import JsonObject
 
 
 class CalculatorTool(BaseTool):
+    def execute(
+        self,
+        *,
+        context: ToolExecutionContext,
+        **kwargs: Any,
+    ) -> int | float:
+        del context
+
+        operation = self._get_required_argument(
+            kwargs,
+            "operation",
+        )
+        a = self._get_required_argument(
+            kwargs,
+            "a",
+        )
+        b = self._get_required_argument(
+            kwargs,
+            "b",
+        )
+
+        if not isinstance(operation, str):
+            raise TypeError("Argument 'operation' must be a string.")
+
+        if not self._is_number(a):
+            raise TypeError("Argument 'a' must be a number.")
+
+        if not self._is_number(b):
+            raise TypeError("Argument 'b' must be a number.")
+
+        return self._calculate(
+            operation=operation,
+            a=a,
+            b=b,
+        )
+
     @property
     def name(self) -> str:
         return "calculator"
@@ -51,20 +88,32 @@ class CalculatorTool(BaseTool):
             "additionalProperties": False,
         }
 
-    def execute(self, **kwargs: Any) -> float:
-        operation = kwargs.get("operation")
-        a = kwargs.get("a")
-        b = kwargs.get("b")
+    def _get_required_argument(
+        self,
+        arguments: dict[str, Any],
+        name: str,
+    ) -> Any:
+        if name not in arguments:
+            raise ValueError(f"Missing required argument: {name}")
 
-        if operation is None:
-            raise ValueError("Missing required argument: operation")
+        return arguments[name]
 
-        if a is None:
-            raise ValueError("Missing required argument: a")
+    def _is_number(
+        self,
+        value: object,
+    ) -> bool:
+        return isinstance(
+            value,
+            (int, float),
+        ) and not isinstance(value, bool)
 
-        if b is None:
-            raise ValueError("Missing required argument: b")
-
+    def _calculate(
+        self,
+        *,
+        operation: str,
+        a: float,
+        b: float,
+    ) -> int | float:
         match operation:
             case "add":
                 return a + b
@@ -73,6 +122,9 @@ class CalculatorTool(BaseTool):
             case "multiply":
                 return a * b
             case "divide":
+                if b == 0:
+                    raise ZeroDivisionError("Division by zero is not allowed.")
+
                 return a / b
             case _:
                 raise ValueError(f"Unsupported operation: {operation}")

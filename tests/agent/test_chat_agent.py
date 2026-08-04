@@ -168,3 +168,58 @@ def test_clear_history_should_remove_conversation_messages(
     agent.clear_history()
 
     assert agent.get_history() == ()
+
+
+def test_chat_should_pass_metadata_to_agent_runner(
+    create_agent: ChatAgentFactory,
+) -> None:
+    agent_runner = FakeAgentRunner(
+        response=ClientResponse(
+            content="Hello!",
+        ),
+    )
+
+    agent = create_agent(
+        agent_runner=agent_runner,
+    )
+
+    metadata = {
+        "request_id": "request-123",
+        "user_id": "frank",
+        "source": "test",
+    }
+
+    agent.chat(
+        "Hello",
+        metadata=metadata,
+    )
+
+    assert len(agent_runner.received_contexts) == 1
+
+    context = agent_runner.received_contexts[0]
+
+    assert context is not None
+    assert context.metadata == metadata
+
+
+def test_chat_should_use_empty_metadata_by_default(
+    create_agent: ChatAgentFactory,
+) -> None:
+    agent_runner = FakeAgentRunner(
+        response=ClientResponse(
+            content="Hello!",
+        ),
+    )
+
+    agent = create_agent(
+        agent_runner=agent_runner,
+    )
+
+    agent.chat(
+        "Hello",
+    )
+
+    context = agent_runner.received_contexts[0]
+
+    assert context is not None
+    assert context.metadata == {}

@@ -1,11 +1,9 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 from app.agent.chat_agent import ChatAgent
+from app.types.json_types import JsonValue
 
 DEFAULT_MESSAGES = (
-    # "How are you?",
-    # "What are you doing?",
-    # "Tell me something interesting.",
     "My name is Frank.",
     "What is my name?",
     "What is 125 * 8?",
@@ -15,10 +13,15 @@ DEFAULT_MESSAGES = (
 def print_chat(
     agent: ChatAgent,
     message: str,
+    *,
+    metadata: Mapping[str, JsonValue] | None = None,
 ) -> None:
     print(f"\nYou: {message}")
 
-    response = agent.chat(message)
+    response = agent.chat(
+        message,
+        metadata=metadata,
+    )
 
     print(f"Agent: {response}")
 
@@ -29,6 +32,11 @@ def run_fact_memory_demo(
     print_chat(
         agent,
         "My name is Frank.",
+        metadata={
+            "source": "fact_memory_demo",
+            "user_id": "frank",
+            "request_id": "fact-demo-1",
+        },
     )
 
     print(f"Remembered user name: {agent.get_fact('user_name')}")
@@ -36,6 +44,11 @@ def run_fact_memory_demo(
     print_chat(
         agent,
         "What is my name?",
+        metadata={
+            "source": "fact_memory_demo",
+            "user_id": "frank",
+            "request_id": "fact-demo-2",
+        },
     )
 
 
@@ -43,10 +56,18 @@ def run_conversation_demo(
     agent: ChatAgent,
     messages: Iterable[str] = DEFAULT_MESSAGES,
 ) -> None:
-    for message in messages:
+    for index, message in enumerate(
+        messages,
+        start=1,
+    ):
         print_chat(
             agent,
             message,
+            metadata={
+                "source": "conversation_demo",
+                "user_id": "frank",
+                "request_id": f"conversation-demo-{index}",
+            },
         )
 
 
