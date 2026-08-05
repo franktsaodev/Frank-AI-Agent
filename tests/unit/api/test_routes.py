@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 from app.agent.chat_agent import ChatAgent
 from app.api.app import create_app
 from app.api.dependencies import get_chat_agent
+from app.api.runtime import RuntimeInfo
+from app.api.runtime_provider import get_runtime_info
 
 
 @pytest.fixture
@@ -44,6 +46,8 @@ def test_health_should_return_ok(
     assert response.status_code == 200
     assert response.json() == {
         "status": "ok",
+        "service": "Frank AI Agent",
+        "version": "0.1.0",
     }
 
 
@@ -143,3 +147,26 @@ def test_chat_should_reject_blank_message(
 
     assert response.status_code == 422
     mock_agent.chat.assert_not_called()
+
+
+def test_health_should_use_runtime_dependency() -> None:
+    app = create_app()
+
+    app.dependency_overrides[get_runtime_info] = lambda: RuntimeInfo(
+        service_name="Test Agent",
+        version="9.9.9",
+    )
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/health",
+        )
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "service": "Test Agent",
+        "version": "9.9.9",
+    }

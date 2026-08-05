@@ -1,0 +1,43 @@
+# Git
+.git/
+.gitignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment variables
+.env
+
+# Tests and development files
+tests/
+requirements-dev.txt
+pyrightconfig.json
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs and runtime files
+logs/
+*.log
+
+# Documentation
+docs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker files not needed inside image
+Dockerfile
+.dockerignore

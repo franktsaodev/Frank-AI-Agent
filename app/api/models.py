@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -57,3 +57,9 @@ class ChatResponse(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
     message: str
+
+
+class HealthResponse(BaseModel):
+    status: Literal["ok"]
+    service: str
+    version: str

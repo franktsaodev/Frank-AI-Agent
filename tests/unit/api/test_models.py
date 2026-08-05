@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.api.models import ChatRequest, ChatResponse
+from app.api.models import ChatRequest, ChatResponse, HealthResponse
 
 
 def test_chat_request_should_store_message() -> None:
@@ -93,3 +93,15 @@ def test_chat_response_should_store_response() -> None:
     )
 
     assert response.response == "Hello Frank!"
+
+
+def test_health_response_should_store_runtime_information() -> None:
+    response = HealthResponse(
+        status="ok",
+        service="Frank AI Agent",
+        version="0.1.0",
+    )
+
+    assert response.status == "ok"
+    assert response.service == "Frank AI Agent"
+    assert response.version == "0.1.0"
