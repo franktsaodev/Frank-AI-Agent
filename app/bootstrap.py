@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 
 from app.agent.agent_runner import AgentRunner
 from app.agent.chat_agent import ChatAgent
@@ -7,12 +6,30 @@ from app.clients.base_client import BaseClient
 from app.clients.groq_client import GroqClient
 from app.clock.base_clock import BaseClock
 from app.clock.system_clock import SystemClock
-from app.config import (
-    GROQ_API_KEY,
-    GROQ_MODEL,
+from app.config import load_environment
+from app.config_loaders.agent_config_loader import (
+    AgentConfigLoader,
+)
+from app.config_loaders.groq_config_loader import (
+    GroqConfigLoader,
+)
+from app.config_loaders.memory_config_loader import (
+    MemoryConfigLoader,
+)
+from app.config_loaders.memory_policy_config_loader import (
+    MemoryPolicyConfigLoader,
+)
+from app.config_loaders.prompt_config_loader import (
+    PromptConfigLoader,
+)
+from app.config_loaders.retry_config_loader import (
+    RetryConfigLoader,
 )
 from app.config_loaders.tool_plugin_config_loader import (
     ToolPluginConfigLoader,
+)
+from app.config_loaders.tracing_config_loader import (
+    TracingConfigLoader,
 )
 from app.config_models.agent_config import AgentConfig
 from app.config_models.groq_config import GroqConfig
@@ -42,14 +59,28 @@ logger = logging.getLogger(__name__)
 
 
 def create_chat_agent() -> ChatAgent:
+    load_environment()
+
+    tracing_config = TracingConfigLoader().load()
+    tool_plugin_config = ToolPluginConfigLoader().load()
+    groq_config = GroqConfigLoader().load()
+    retry_config = RetryConfigLoader().load()
+    agent_config = AgentConfigLoader().load()
+    memory_config = MemoryConfigLoader().load()
+    memory_policy_config = MemoryPolicyConfigLoader().load()
+    prompt_config = PromptConfigLoader().load()
+
     clock = SystemClock()
-    tracer = _create_tracer()
+
+    tracer = _create_tracer(
+        config=tracing_config,
+    )
 
     registry = ToolRegistry()
 
     _load_tool_plugins(
         registry=registry,
-        config=ToolPluginConfigLoader().load(),
+        config=tool_plugin_config,
     )
 
     tool_provider = _create_tool_provider(
@@ -63,6 +94,8 @@ def create_chat_agent() -> ChatAgent:
     )
 
     client = _create_groq_client(
+        groq_config=groq_config,
+        retry_config=retry_config,
         tool_provider=tool_provider,
         tracer=tracer,
         clock=clock,
@@ -73,29 +106,37 @@ def create_chat_agent() -> ChatAgent:
         tool_executor=tool_executor,
         tracer=tracer,
         clock=clock,
+        agent_config=agent_config,
+    )
+
+    memory = _create_memory(
+        config=memory_config,
+    )
+
+    memory_policy = _create_memory_policy(
+        config=memory_policy_config,
+    )
+
+    prompt_template = _create_prompt_template(
+        config=prompt_config,
     )
 
     return ChatAgent(
-        prompt_template=_create_prompt_template(),
+        prompt_template=prompt_template,
         agent_runner=agent_runner,
-        memory=_create_memory(),
+        memory=memory,
         fact_memory=InMemoryFactMemory(),
         fact_extractor=RegexFactExtractor(),
-        memory_policy=_create_memory_policy(),
+        memory_policy=memory_policy,
         prompt_composer=PromptComposer(),
     )
 
 
-def _create_tracer() -> BaseTracer:
-    tracing_config = TracingConfig(
-        enable_logging=True,
-        json_file_path=Path(
-            "logs/traces.jsonl",
-        ),
-    )
-
+def _create_tracer(
+    config: TracingConfig,
+) -> BaseTracer:
     trace_exporter = TraceExporterFactory().create(
-        config=tracing_config,
+        config=config,
     )
 
     return ExporterTracer(
@@ -125,20 +166,15 @@ def _create_tool_executor(
 
 
 def _create_groq_client(
+    groq_config: GroqConfig,
+    retry_config: RetryConfig,
     tool_provider: ToolProvider,
     tracer: BaseTracer,
     clock: BaseClock,
 ) -> GroqClient:
     return GroqClient(
-        groq_config=GroqConfig(
-            api_key=GROQ_API_KEY,
-            model=GROQ_MODEL,
-        ),
-        retry_config=RetryConfig(
-            max_attempts=3,
-            initial_delay_seconds=1,
-            backoff_multiplier=2.0,
-        ),
+        groq_config=groq_config,
+        retry_config=retry_config,
         tool_provider=tool_provider,
         tracer=tracer,
         clock=clock,
@@ -150,47 +186,38 @@ def _create_agent_runner(
     tool_executor: ToolExecutor,
     tracer: BaseTracer,
     clock: BaseClock,
+    agent_config: AgentConfig,
 ) -> AgentRunner:
     return AgentRunner(
         client=client,
         tool_executor=tool_executor,
         tracer=tracer,
         clock=clock,
-        config=AgentConfig(
-            max_iterations=10,
-        ),
+        config=agent_config,
     )
 
 
-def _create_prompt_template() -> PromptTemplate:
+def _create_prompt_template(
+    config: PromptConfig,
+) -> PromptTemplate:
     return PromptTemplate(
-        config=PromptConfig(
-            prompt_name="system_prompt.txt",
-            user_name="Frank",
-            language="Traditional Chinese",
-        ),
+        config=config,
     )
 
 
-def _create_memory() -> SlidingWindowMemory:
+def _create_memory(
+    config: MemoryConfig,
+) -> SlidingWindowMemory:
     return SlidingWindowMemory(
-        config=MemoryConfig(
-            max_history_rounds=2,
-        ),
+        config=config,
     )
 
 
-def _create_memory_policy() -> SimpleMemoryPolicy:
+def _create_memory_policy(
+    config: MemoryPolicyConfig,
+) -> SimpleMemoryPolicy:
     return SimpleMemoryPolicy(
-        config=MemoryPolicyConfig(
-            allowed_keys=frozenset(
-                {
-                    "user_name",
-                    "favorite_music",
-                    "occupation",
-                }
-            ),
-        ),
+        config=config,
     )
 
 
