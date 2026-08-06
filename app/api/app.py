@@ -1,18 +1,29 @@
 from fastapi import FastAPI
 
+from app.api.application_lifespan import (
+    application_lifespan,
+)
 from app.api.exception_handlers import (
     register_exception_handlers,
 )
+from app.api.lifespan_types import Lifespan
 from app.api.routes import router as health_router
 from app.api.runtime_provider import get_runtime_info
-from app.api.v1.routes import router as v1_router
+from app.api.v1.session_routes import (
+    router as session_router,
+)
 from app.core.logging_config import configure_logging
 
 
-def create_app() -> FastAPI:
+def create_app(
+    *,
+    lifespan: Lifespan | None = None,
+) -> FastAPI:
     configure_logging()
 
     runtime = get_runtime_info()
+
+    actual_lifespan = lifespan if lifespan is not None else application_lifespan
 
     app = FastAPI(
         title=f"{runtime.service_name} API",
@@ -25,6 +36,7 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+        lifespan=actual_lifespan,
     )
 
     register_exception_handlers(
@@ -36,7 +48,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(
-        v1_router,
+        session_router,
         prefix="/api/v1",
     )
 

@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import datetime
 
 from app.tracing.serializers.trace_event_serializer import (
     TraceEventSerializer,
@@ -8,24 +8,17 @@ from app.tracing.trace_event import TraceEvent
 from app.tracing.trace_event_type import TraceEventType
 
 
-def test_to_dict_should_serialize_trace_event() -> None:
+def test_to_dict_should_serialize_trace_event(
+    session_timestamp: datetime,
+) -> None:
     serializer = TraceEventSerializer()
-
-    timestamp = datetime(
-        2026,
-        8,
-        2,
-        7,
-        30,
-        tzinfo=UTC,
-    )
 
     event = TraceEvent(
         trace_id="trace-123",
         span_id="span-123",
         parent_span_id="parent-span-123",
         event_type=TraceEventType.TOOL_FINISHED,
-        timestamp=timestamp,
+        timestamp=session_timestamp,
         metadata={
             "tool_name": "calculator",
             "duration_ms": 125.5,
@@ -35,7 +28,7 @@ def test_to_dict_should_serialize_trace_event() -> None:
     result = serializer.to_dict(event)
 
     assert result == {
-        "timestamp": "2026-08-02T07:30:00+00:00",
+        "timestamp": session_timestamp.isoformat(),
         "trace_id": "trace-123",
         "span_id": "span-123",
         "parent_span_id": "parent-span-123",

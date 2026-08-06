@@ -2,6 +2,10 @@ import logging
 
 from app.agent.agent_runner import AgentRunner
 from app.agent.chat_agent import ChatAgent
+from app.agent.chat_agent_dependencies import (
+    ChatAgentDependencies,
+)
+from app.agent.chat_agent_factory import ChatAgentFactory
 from app.clients.base_client import BaseClient
 from app.clients.groq_client import GroqClient
 from app.clock.base_clock import BaseClock
@@ -40,7 +44,6 @@ from app.config_models.retry_config import RetryConfig
 from app.config_models.tool_plugin_config import ToolPluginConfig
 from app.config_models.tracing_config import TracingConfig
 from app.extractors.regex_fact_extractor import RegexFactExtractor
-from app.memory.in_memory_fact_memory import InMemoryFactMemory
 from app.memory.sliding_window_memory import SlidingWindowMemory
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
 from app.prompts.prompt_composer import PromptComposer
@@ -59,6 +62,10 @@ logger = logging.getLogger(__name__)
 
 
 def create_chat_agent() -> ChatAgent:
+    return create_chat_agent_factory().create()
+
+
+def create_chat_agent_factory() -> ChatAgentFactory:
     load_environment()
 
     tracing_config = TracingConfigLoader().load()
@@ -109,10 +116,6 @@ def create_chat_agent() -> ChatAgent:
         agent_config=agent_config,
     )
 
-    memory = _create_memory(
-        config=memory_config,
-    )
-
     memory_policy = _create_memory_policy(
         config=memory_policy_config,
     )
@@ -121,14 +124,17 @@ def create_chat_agent() -> ChatAgent:
         config=prompt_config,
     )
 
-    return ChatAgent(
+    dependencies = ChatAgentDependencies(
         prompt_template=prompt_template,
         agent_runner=agent_runner,
-        memory=memory,
-        fact_memory=InMemoryFactMemory(),
+        memory_config=memory_config,
         fact_extractor=RegexFactExtractor(),
         memory_policy=memory_policy,
         prompt_composer=PromptComposer(),
+    )
+
+    return ChatAgentFactory(
+        dependencies=dependencies,
     )
 
 
@@ -242,4 +248,21 @@ def _load_tool_plugins(
         result.plugin_count,
         result.tool_count,
         tool_names,
+    )
+
+
+def _create_chat_agent_dependencies(
+    *,
+    prompt_template: PromptTemplate,
+    agent_runner: AgentRunner,
+    memory_config: MemoryConfig,
+    memory_policy: SimpleMemoryPolicy,
+) -> ChatAgentDependencies:
+    return ChatAgentDependencies(
+        prompt_template=prompt_template,
+        agent_runner=agent_runner,
+        memory_config=memory_config,
+        fact_extractor=RegexFactExtractor(),
+        memory_policy=memory_policy,
+        prompt_composer=PromptComposer(),
     )

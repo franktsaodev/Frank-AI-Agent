@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -63,3 +64,32 @@ class HealthResponse(BaseModel):
     status: Literal["ok"]
     service: str
     version: str
+
+
+class CreateSessionResponse(BaseModel):
+    session_id: str
+
+
+class DeleteSessionResponse(BaseModel):
+    deleted: bool
+
+
+class HistoryMessageResponse(BaseModel):
+    role: str
+    content: str | None
+
+
+class SessionHistoryResponse(BaseModel):
+    session_id: str
+    messages: list[HistoryMessageResponse]
+
+
+class ClearSessionHistoryResponse(BaseModel):
+    cleared: bool
+
+
+class SessionDetailResponse(BaseModel):
+    session_id: str
+    created_at: datetime
+    last_activity_at: datetime
+    message_count: int

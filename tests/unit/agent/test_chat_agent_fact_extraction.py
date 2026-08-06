@@ -127,7 +127,6 @@ def create_agent(
             prompt_template=PromptTemplate(
                 config=PromptConfig(
                     prompt_name="system_prompt.txt",
-                    user_name="Frank",
                     language="Traditional Chinese",
                 ),
             ),

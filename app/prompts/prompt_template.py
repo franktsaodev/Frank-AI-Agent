@@ -25,6 +25,5 @@ class PromptTemplate(BasePromptTemplate):
         template = self._load_template()
 
         return template.format(
-            user_name=self.config.user_name,
             language=self.config.language,
         )

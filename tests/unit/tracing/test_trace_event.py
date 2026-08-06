@@ -58,24 +58,17 @@ def test_trace_event_should_allow_no_parent_span() -> None:
     assert event.parent_span_id is None
 
 
-def test_trace_event_should_store_timestamp() -> None:
-    timestamp = datetime(
-        2026,
-        8,
-        1,
-        9,
-        30,
-        tzinfo=UTC,
-    )
-
+def test_trace_event_should_store_timestamp(
+    session_timestamp: datetime,
+) -> None:
     event = TraceEvent(
         trace_id="trace-123",
         span_id="span-123",
         event_type=TraceEventType.AGENT_STARTED,
-        timestamp=timestamp,
+        timestamp=session_timestamp,
     )
 
-    assert event.timestamp == timestamp
+    assert event.timestamp == session_timestamp
 
 
 def test_trace_event_should_create_timestamp_by_default() -> None:

@@ -9,6 +9,12 @@ from app.exceptions.client_exceptions import (
     ClientConnectionError,
     ClientTimeoutError,
 )
+from app.session.session_expired_error import (
+    SessionExpiredError,
+)
+from app.session.session_not_found_error import (
+    SessionNotFoundError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,5 +99,45 @@ def register_exception_handlers(
             content={
                 "error": "ai_client_error",
                 "message": ("The AI service returned an error."),
+            },
+        )
+
+    @app.exception_handler(SessionNotFoundError)
+    async def handle_session_not_found_error(
+        request: Request,
+        error: SessionNotFoundError,
+    ) -> JSONResponse:
+        del request
+
+        logger.info(
+            "Session not found: %s",
+            error.session_id.value,
+        )
+
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "session_not_found",
+                "message": "Session not found.",
+            },
+        )
+
+    @app.exception_handler(SessionExpiredError)
+    async def handle_session_expired_error(
+        request: Request,
+        error: SessionExpiredError,
+    ) -> JSONResponse:
+        del request
+
+        logger.info(
+            "Session expired: %s",
+            error.session_id.value,
+        )
+
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "session_expired",
+                "message": ("The session has expired."),
             },
         )

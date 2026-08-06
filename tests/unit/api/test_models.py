@@ -1,7 +1,17 @@
+from datetime import datetime
+
 import pytest
 from pydantic import ValidationError
 
-from app.api.models import ChatRequest, ChatResponse, HealthResponse
+from app.api.models import (
+    ChatRequest,
+    ChatResponse,
+    ClearSessionHistoryResponse,
+    HealthResponse,
+    HistoryMessageResponse,
+    SessionDetailResponse,
+    SessionHistoryResponse,
+)
 
 
 def test_chat_request_should_store_message() -> None:
@@ -105,3 +115,48 @@ def test_health_response_should_store_runtime_information() -> None:
     assert response.status == "ok"
     assert response.service == "Frank AI Agent"
     assert response.version == "0.1.0"
+
+
+def test_session_history_response_should_store_messages() -> None:
+    response = SessionHistoryResponse(
+        session_id="session-123",
+        messages=[
+            HistoryMessageResponse(
+                role="user",
+                content="Hello",
+            ),
+            HistoryMessageResponse(
+                role="assistant",
+                content="Hi!",
+            ),
+        ],
+    )
+
+    assert response.session_id == "session-123"
+    assert len(response.messages) == 2
+    assert response.messages[0].role == "user"
+    assert response.messages[1].content == "Hi!"
+
+
+def test_clear_session_history_response_should_store_result() -> None:
+    response = ClearSessionHistoryResponse(
+        cleared=True,
+    )
+
+    assert response.cleared is True
+
+
+def test_session_detail_response_should_store_session_information(
+    session_timestamp: datetime,
+) -> None:
+    response = SessionDetailResponse(
+        session_id="session-123",
+        created_at=session_timestamp,
+        last_activity_at=session_timestamp,
+        message_count=2,
+    )
+
+    assert response.session_id == "session-123"
+    assert response.created_at == session_timestamp
+    assert response.last_activity_at == session_timestamp
+    assert response.message_count == 2

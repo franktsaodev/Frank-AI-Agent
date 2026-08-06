@@ -23,10 +23,6 @@ class PromptConfigLoader:
                 name="PROMPT_NAME",
                 default="system_prompt.txt",
             ),
-            user_name=self._environment_reader.get_str(
-                name="PROMPT_USER_NAME",
-                default="Frank",
-            ),
             language=self._environment_reader.get_str(
                 name="PROMPT_LANGUAGE",
                 default="Traditional Chinese",

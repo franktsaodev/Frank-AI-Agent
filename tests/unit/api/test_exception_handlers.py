@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -6,13 +7,17 @@ from fastapi.testclient import TestClient
 
 from app.agent.chat_agent import ChatAgent
 from app.api.app import create_app
-from app.api.dependencies import get_chat_agent
+from app.api.session_dependencies import get_session_manager
 from app.exceptions.client_exceptions import (
     AIClientError,
     ClientAuthenticationError,
     ClientConnectionError,
     ClientTimeoutError,
 )
+from app.session.agent_session import AgentSession
+from app.session.session_id import SessionId
+from tests.fakes.fake_session_manager import FakeSessionManager
+from tests.helpers.lifespan import empty_lifespan
 
 
 @pytest.fixture
@@ -23,12 +28,33 @@ def mock_agent() -> MagicMock:
 
 
 @pytest.fixture
-def client(
+def fake_session_manager(
     mock_agent: MagicMock,
-) -> Iterator[TestClient]:
-    app = create_app()
+    session_timestamp: datetime,
+) -> FakeSessionManager:
+    return FakeSessionManager(
+        sessions=[
+            AgentSession(
+                session_id=SessionId(
+                    value="session-123",
+                ),
+                agent=mock_agent,
+                created_at=session_timestamp,
+                last_activity_at=session_timestamp,
+            ),
+        ],
+    )
 
-    app.dependency_overrides[get_chat_agent] = lambda: mock_agent
+
+@pytest.fixture
+def client(
+    fake_session_manager: FakeSessionManager,
+) -> Iterator[TestClient]:
+    app = create_app(
+        lifespan=empty_lifespan,
+    )
+
+    app.dependency_overrides[get_session_manager] = lambda: fake_session_manager
 
     with TestClient(
         app,
@@ -48,7 +74,7 @@ def test_chat_should_return_gateway_timeout_when_client_times_out(
     )
 
     response = client.post(
-        "/api/v1/chat",
+        "/api/v1/sessions/session-123/chat",
         json={
             "message": "Hello",
         },
@@ -70,7 +96,7 @@ def test_chat_should_return_service_unavailable_when_connection_fails(
     )
 
     response = client.post(
-        "/api/v1/chat",
+        "/api/v1/sessions/session-123/chat",
         json={
             "message": "Hello",
         },
@@ -92,7 +118,7 @@ def test_chat_should_return_bad_gateway_when_authentication_fails(
     )
 
     response = client.post(
-        "/api/v1/chat",
+        "/api/v1/sessions/session-123/chat",
         json={
             "message": "Hello",
         },
@@ -114,7 +140,7 @@ def test_chat_should_return_bad_gateway_for_ai_client_error(
     )
 
     response = client.post(
-        "/api/v1/chat",
+        "/api/v1/sessions/session-123/chat",
         json={
             "message": "Hello",
         },
@@ -124,4 +150,18 @@ def test_chat_should_return_bad_gateway_for_ai_client_error(
     assert response.json() == {
         "error": "ai_client_error",
         "message": ("The AI service returned an error."),
+    }
+
+
+def test_session_route_should_return_not_found_for_unknown_session(
+    client: TestClient,
+) -> None:
+    response = client.get(
+        "/api/v1/sessions/unknown-session/history",
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": "session_not_found",
+        "message": "Session not found.",
     }

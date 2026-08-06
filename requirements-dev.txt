@@ -2,3 +2,4 @@ pytest
 ruff
 pyright==1.1.411
 httpx2==2.9.1
+pytest-asyncio==1.4.0
