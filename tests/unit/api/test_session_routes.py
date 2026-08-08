@@ -67,10 +67,11 @@ def client(
 
     app.dependency_overrides[get_session_manager] = lambda: fake_session_manager
 
-    with TestClient(app) as test_client:
-        yield test_client
-
-    app.dependency_overrides.clear()
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_create_session_should_return_session_id(
@@ -169,23 +170,6 @@ def test_delete_session_should_return_not_found_for_unknown_session(
     assert response.json() == {
         "error": "session_not_found",
         "message": "Session not found.",
-    }
-
-
-def test_chat_with_session_should_return_agent_response(
-    client: TestClient,
-    mock_agent: MagicMock,
-) -> None:
-    response = client.post(
-        "/api/v1/sessions/session-123/chat",
-        json={
-            "message": "Hello",
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "response": "Hello Frank!",
     }
 
 

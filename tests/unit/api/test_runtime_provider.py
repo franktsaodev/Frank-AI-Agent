@@ -31,7 +31,7 @@ def test_runtime_provider_should_return_runtime_information(
     runtime = get_runtime_info()
 
     assert runtime.service_name == "Frank AI Agent"
-    assert runtime.version == "0.1.0"
+    assert runtime.version == "1.0.0"
 
 
 def test_runtime_provider_should_use_runtime_configuration(

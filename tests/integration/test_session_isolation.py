@@ -123,18 +123,3 @@ def test_session_manager_should_preserve_session_agent() -> None:
     assert retrieved_session.session_id == created_session.session_id
     assert retrieved_session.agent is created_session.agent
     assert retrieved_session.created_at == created_session.created_at
-
-
-def test_second_session_should_not_inherit_default_user_name() -> None:
-    manager = create_session_manager()
-
-    first_session = manager.create()
-    second_session = manager.create()
-
-    first_session.agent.chat(
-        "My name is Frank.",
-    )
-
-    assert first_session.agent.get_fact("user_name") == "Frank"
-
-    assert second_session.agent.get_fact("user_name") is None

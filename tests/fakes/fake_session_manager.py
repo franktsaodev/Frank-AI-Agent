@@ -10,7 +10,11 @@ class FakeSessionManager:
         self,
         sessions: list[AgentSession] | None = None,
     ) -> None:
-        self._sessions = {session.session_id: session for session in (sessions or [])}
+        sessions = sessions or []
+
+        self._sessions = {session.session_id: session for session in sessions}
+
+        self._sessions_to_create = list(sessions)
 
         self.created_sessions: list[AgentSession] = []
         self.deleted_session_ids: list[SessionId] = []
@@ -18,14 +22,12 @@ class FakeSessionManager:
     def create(
         self,
     ) -> AgentSession:
-        if not self._sessions:
-            raise RuntimeError("No fake session is available.")
+        if not self._sessions_to_create:
+            raise RuntimeError("No fake session available for creation.")
 
-        session = next(iter(self._sessions.values()))
+        session = self._sessions_to_create.pop(0)
 
-        self.created_sessions.append(
-            session,
-        )
+        self.created_sessions.append(session)
 
         return session
 

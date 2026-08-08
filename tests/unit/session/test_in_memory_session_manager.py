@@ -24,6 +24,22 @@ from tests.fakes.fake_session_clock import (
 )
 
 
+def create_manager(
+    *,
+    agents: list[ChatAgent],
+    clock: FakeSessionClock,
+    config: SessionConfig,
+) -> InMemorySessionManager:
+    return InMemorySessionManager(
+        session_factory=SessionFactory(),
+        agent_factory=FakeChatAgentFactory(
+            agents=agents,
+        ),
+        clock=clock,
+        config=config,
+    )
+
+
 def test_create_should_store_new_session(
     session_clock: FakeSessionClock,
     session_config: SessionConfig,
@@ -32,13 +48,10 @@ def test_create_should_store_new_session(
         spec=ChatAgent,
     )
 
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[
-                agent,
-            ],
-        ),
+    manager = create_manager(
+        agents=[
+            agent,
+        ],
         clock=session_clock,
         config=session_config,
     )
@@ -57,13 +70,10 @@ def test_get_should_return_created_session(
         spec=ChatAgent,
     )
 
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[
-                agent,
-            ],
-        ),
+    manager = create_manager(
+        agents=[
+            agent,
+        ],
         clock=session_clock,
         config=session_config,
     )
@@ -91,14 +101,11 @@ def test_create_should_use_different_agent_for_each_session(
         spec=ChatAgent,
     )
 
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[
-                first_agent,
-                second_agent,
-            ],
-        ),
+    manager = create_manager(
+        agents=[
+            first_agent,
+            second_agent,
+        ],
         clock=session_clock,
         config=session_config,
     )
@@ -115,11 +122,8 @@ def test_contains_should_return_false_for_unknown_session(
     session_clock: FakeSessionClock,
     session_config: SessionConfig,
 ) -> None:
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[],
-        ),
+    manager = create_manager(
+        agents=[],
         clock=session_clock,
         config=session_config,
     )
@@ -138,11 +142,8 @@ def test_get_should_reject_unknown_session(
     session_clock: FakeSessionClock,
     session_config: SessionConfig,
 ) -> None:
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[],
-        ),
+    manager = create_manager(
+        agents=[],
         clock=session_clock,
         config=session_config,
     )
@@ -170,13 +171,10 @@ def test_delete_should_remove_session(
         spec=ChatAgent,
     )
 
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[
-                agent,
-            ],
-        ),
+    manager = create_manager(
+        agents=[
+            agent,
+        ],
         clock=session_clock,
         config=session_config,
     )
@@ -194,11 +192,8 @@ def test_delete_should_reject_unknown_session(
     session_clock: FakeSessionClock,
     session_config: SessionConfig,
 ) -> None:
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[],
-        ),
+    manager = create_manager(
+        agents=[],
         clock=session_clock,
         config=session_config,
     )
@@ -223,13 +218,10 @@ def test_create_should_store_session_timestamps(
         spec=ChatAgent,
     )
 
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[
-                agent,
-            ],
-        ),
+    manager = create_manager(
+        agents=[
+            agent,
+        ],
         clock=session_clock,
         config=session_config,
     )
@@ -269,13 +261,10 @@ def test_get_should_update_last_activity_time(
         current_time=created_at,
     )
 
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[
-                agent,
-            ],
-        ),
+    manager = create_manager(
+        agents=[
+            agent,
+        ],
         clock=clock,
         config=session_config,
     )
@@ -307,13 +296,10 @@ def test_get_should_return_session_before_expiration(
         current_time=session_timestamp,
     )
 
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[
-                agent,
-            ],
-        ),
+    manager = create_manager(
+        agents=[
+            agent,
+        ],
         clock=clock,
         config=SessionConfig(
             ttl_seconds=3600,
@@ -348,13 +334,10 @@ def test_get_should_reject_expired_session(
         current_time=session_timestamp,
     )
 
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[
-                agent,
-            ],
-        ),
+    manager = create_manager(
+        agents=[
+            agent,
+        ],
         clock=clock,
         config=SessionConfig(
             ttl_seconds=3600,
@@ -398,13 +381,10 @@ def test_get_should_extend_session_lifetime_after_activity(
         current_time=session_timestamp,
     )
 
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[
-                agent,
-            ],
-        ),
+    manager = create_manager(
+        agents=[
+            agent,
+        ],
         clock=clock,
         config=SessionConfig(
             ttl_seconds=3600,
@@ -448,13 +428,10 @@ def test_purge_expired_should_return_zero_when_no_session_is_expired(
         spec=ChatAgent,
     )
 
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[
-                agent,
-            ],
-        ),
+    manager = create_manager(
+        agents=[
+            agent,
+        ],
         clock=session_clock,
         config=session_config,
     )
@@ -480,13 +457,10 @@ def test_purge_expired_should_remove_expired_session(
         current_time=session_timestamp,
     )
 
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[
-                agent,
-            ],
-        ),
+    manager = create_manager(
+        agents=[
+            agent,
+        ],
         clock=clock,
         config=SessionConfig(
             ttl_seconds=3600,
@@ -528,14 +502,11 @@ def test_purge_expired_should_keep_active_sessions(
         current_time=session_timestamp,
     )
 
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[
-                first_agent,
-                second_agent,
-            ],
-        ),
+    manager = create_manager(
+        agents=[
+            first_agent,
+            second_agent,
+        ],
         clock=clock,
         config=SessionConfig(
             ttl_seconds=3600,
@@ -591,13 +562,10 @@ def test_purge_expired_should_keep_recently_active_session(
         current_time=session_timestamp,
     )
 
-    manager = InMemorySessionManager(
-        session_factory=SessionFactory(),
-        agent_factory=FakeChatAgentFactory(
-            agents=[
-                agent,
-            ],
-        ),
+    manager = create_manager(
+        agents=[
+            agent,
+        ],
         clock=clock,
         config=SessionConfig(
             ttl_seconds=3600,
