@@ -484,7 +484,7 @@ environment.
 | Variable | Default | Description |
 |---|---|---|
 | `APP_SERVICE_NAME` | `Frank AI Agent` | Service name exposed by runtime information and health checks |
-| `APP_VERSION` | `1.0.0` | Application version exposed by the running service |
+| `APP_VERSION` | `1.0.1` | Application version exposed by the running service |
 
 ### Session
 
@@ -722,8 +722,8 @@ docker run --rm `
   --name frank-ai-agent `
   -p 8000:8000 `
   --env-file .env `
-  -e APP_VERSION=1.0.0 `
-  frank-ai-agent:1.0.0
+  -e APP_VERSION=1.0.1 `
+  frank-ai-agent:1.0.1
 ```
 
 **macOS / Linux**
@@ -733,8 +733,8 @@ docker run --rm \
   --name frank-ai-agent \
   -p 8000:8000 \
   --env-file .env \
-  -e APP_VERSION=1.0.0 \
-  frank-ai-agent:1.0.0
+  -e APP_VERSION=1.0.1 \
+  frank-ai-agent:1.0.1
 ```
 
 > [!NOTE]

@@ -20,7 +20,7 @@ def test_load_should_use_default_values(
     config = ApiRuntimeConfigLoader().load()
 
     assert config.service_name == "Frank AI Agent"
-    assert config.version == "1.0.0"
+    assert config.version == "1.0.1"
 
 
 def test_load_should_parse_environment_values(
@@ -56,4 +56,4 @@ def test_load_should_use_defaults_for_blank_values(
     config = ApiRuntimeConfigLoader().load()
 
     assert config.service_name == "Frank AI Agent"
-    assert config.version == "1.0.0"
+    assert config.version == "1.0.1"
