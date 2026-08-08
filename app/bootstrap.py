@@ -249,20 +249,3 @@ def _load_tool_plugins(
         result.tool_count,
         tool_names,
     )
-
-
-def _create_chat_agent_dependencies(
-    *,
-    prompt_template: PromptTemplate,
-    agent_runner: AgentRunner,
-    memory_config: MemoryConfig,
-    memory_policy: SimpleMemoryPolicy,
-) -> ChatAgentDependencies:
-    return ChatAgentDependencies(
-        prompt_template=prompt_template,
-        agent_runner=agent_runner,
-        memory_config=memory_config,
-        fact_extractor=RegexFactExtractor(),
-        memory_policy=memory_policy,
-        prompt_composer=PromptComposer(),
-    )

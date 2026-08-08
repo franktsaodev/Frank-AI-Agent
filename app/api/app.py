@@ -6,8 +6,8 @@ from app.api.application_lifespan import (
 from app.api.exception_handlers import (
     register_exception_handlers,
 )
+from app.api.health_routes import router as health_router
 from app.api.lifespan_types import Lifespan
-from app.api.routes import router as health_router
 from app.api.runtime_provider import get_runtime_info
 from app.api.v1.session_routes import (
     router as session_router,
