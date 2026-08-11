@@ -16,6 +16,8 @@ from app.prompts.base_prompt_template import (
 from app.prompts.prompt_composer_protocol import (
     PromptComposerProtocol,
 )
+from app.retrieval.policies.retrieval_policy import RetrievalPolicy
+from app.retrieval.retrievers.retriever import Retriever
 
 
 @dataclass(frozen=True)
@@ -26,3 +28,5 @@ class ChatAgentDependencies:
     fact_extractor: BaseFactExtractor
     memory_policy: BaseMemoryPolicy
     prompt_composer: PromptComposerProtocol
+    retriever: Retriever
+    retrieval_policy: RetrievalPolicy

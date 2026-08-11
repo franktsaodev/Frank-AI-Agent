@@ -16,8 +16,18 @@ from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
 from app.prompts.prompt_composer import PromptComposer
+from app.prompts.prompt_composer_protocol import PromptComposerProtocol
 from app.prompts.prompt_template import PromptTemplate
+from app.retrieval.document import Document
+from app.retrieval.policies.always_retrieve_policy import AlwaysRetrievePolicy
+from app.retrieval.policies.never_retrieve_policy import NeverRetrievePolicy
+from app.retrieval.policies.retrieval_policy import RetrievalPolicy
+from app.retrieval.retrieved_context import RetrievedContext
+from app.retrieval.retrievers.retriever import Retriever
+from app.retrieval.vector_stores.search_result import SearchResult
 from tests.fakes.fake_agent_runner import FakeAgentRunner
+from tests.fakes.fake_prompt_composer import FakePromptComposer
+from tests.fakes.fake_retriever import FakeRetriever
 
 
 class ChatAgentFactory(Protocol):
@@ -26,6 +36,9 @@ class ChatAgentFactory(Protocol):
         *,
         agent_runner: FakeAgentRunner | None = None,
         memory: SlidingWindowMemory | None = None,
+        prompt_composer: PromptComposerProtocol | None = None,
+        retriever: Retriever | None = None,
+        retrieval_policy: RetrievalPolicy | None = None,
     ) -> ChatAgent: ...
 
 
@@ -35,6 +48,9 @@ def create_agent() -> ChatAgentFactory:
         *,
         agent_runner: FakeAgentRunner | None = None,
         memory: SlidingWindowMemory | None = None,
+        prompt_composer: PromptComposerProtocol | None = None,
+        retriever: Retriever | None = None,
+        retrieval_policy: RetrievalPolicy | None = None,
     ) -> ChatAgent:
         actual_agent_runner = agent_runner or FakeAgentRunner(
             response=ClientResponse(
@@ -46,6 +62,10 @@ def create_agent() -> ChatAgentFactory:
             config=MemoryConfig(
                 max_history_rounds=10,
             ),
+        )
+
+        actual_prompt_composer = (
+            prompt_composer if prompt_composer is not None else PromptComposer()
         )
 
         return ChatAgent(
@@ -70,7 +90,13 @@ def create_agent() -> ChatAgentFactory:
                     ),
                 ),
             ),
-            prompt_composer=PromptComposer(),
+            prompt_composer=actual_prompt_composer,
+            retriever=retriever or FakeRetriever(),
+            retrieval_policy=(
+                retrieval_policy
+                if retrieval_policy is not None
+                else NeverRetrievePolicy()
+            ),
         )
 
     return _create_agent
@@ -222,3 +248,93 @@ def test_chat_should_use_empty_metadata_by_default(
 
     assert context is not None
     assert context.metadata == {}
+
+
+def test_should_not_retrieve_when_policy_returns_false(
+    create_agent: ChatAgentFactory,
+) -> None:
+    retriever = FakeRetriever()
+
+    agent = create_agent(
+        retriever=retriever,
+        retrieval_policy=NeverRetrievePolicy(),
+    )
+
+    agent.chat("Hello")
+
+    assert retriever.call_count == 0
+
+
+def test_should_retrieve_when_policy_returns_true(
+    create_agent: ChatAgentFactory,
+) -> None:
+    retriever = FakeRetriever()
+
+    agent = create_agent(
+        retriever=retriever,
+        retrieval_policy=AlwaysRetrievePolicy(),
+    )
+
+    agent.chat("What is the session TTL?")
+
+    assert retriever.call_count == 1
+    assert retriever.last_query == "What is the session TTL?"
+
+
+def test_chat_passes_retrieved_contexts_to_prompt_composer(
+    create_agent: ChatAgentFactory,
+) -> None:
+    retriever = FakeRetriever(
+        results=[
+            SearchResult(
+                document=Document(
+                    content="Session TTL is 3600 seconds.",
+                    metadata={
+                        "source": "README.md",
+                    },
+                ),
+                score=0.9,
+            ),
+            SearchResult(
+                document=Document(
+                    content="Sessions use sliding expiration.",
+                    metadata={
+                        "source": "architecture.md",
+                    },
+                ),
+                score=0.8,
+            ),
+        ],
+    )
+
+    fake_prompt_composer = FakePromptComposer(
+        composed_messages=[
+            Message(
+                role=MessageRole.SYSTEM,
+                content="Composed system prompt",
+            ),
+            Message(
+                role=MessageRole.USER,
+                content="How do sessions expire?",
+            ),
+        ],
+    )
+
+    agent = create_agent(
+        retriever=retriever,
+        retrieval_policy=AlwaysRetrievePolicy(),
+        prompt_composer=fake_prompt_composer,
+    )
+
+    agent.chat("How do sessions expire?")
+
+    assert fake_prompt_composer.received_retrieved_contexts == [
+        RetrievedContext(
+            content="Session TTL is 3600 seconds.",
+            source="README.md",
+        ),
+        RetrievedContext(
+            content="Sessions use sliding expiration.",
+            source="architecture.md",
+        ),
+    ]

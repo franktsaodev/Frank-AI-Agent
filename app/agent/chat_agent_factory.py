@@ -30,4 +30,6 @@ class ChatAgentFactory:
             fact_extractor=self._dependencies.fact_extractor,
             memory_policy=self._dependencies.memory_policy,
             prompt_composer=self._dependencies.prompt_composer,
+            retriever=self._dependencies.retriever,
+            retrieval_policy=self._dependencies.retrieval_policy,
         )

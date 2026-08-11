@@ -48,6 +48,8 @@ from app.memory.sliding_window_memory import SlidingWindowMemory
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
 from app.prompts.prompt_composer import PromptComposer
 from app.prompts.prompt_template import PromptTemplate
+from app.retrieval.policies.never_retrieve_policy import NeverRetrievePolicy
+from app.retrieval.retrievers.no_op_retriever import NoOpRetriever
 from app.tools.plugins.tool_plugin_factory import ToolPluginFactory
 from app.tools.plugins.tool_plugin_loader import ToolPluginLoader
 from app.tools.tool_executor import ToolExecutor
@@ -131,6 +133,8 @@ def create_chat_agent_factory() -> ChatAgentFactory:
         fact_extractor=RegexFactExtractor(),
         memory_policy=memory_policy,
         prompt_composer=PromptComposer(),
+        retriever=NoOpRetriever(),
+        retrieval_policy=NeverRetrievePolicy(),
     )
 
     return ChatAgentFactory(

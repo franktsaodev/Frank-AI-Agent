@@ -1,9 +1,47 @@
 from collections.abc import Mapping, Sequence
 
 from app.models.message import Message
+from app.retrieval.retrieved_context import RetrievedContext
 
 
 class PromptComposer:
+    def compose(
+        self,
+        *,
+        system_message: Message,
+        history_messages: Sequence[Message],
+        facts: Mapping[str, str],
+        user_message: Message,
+        retrieved_contexts: Sequence[RetrievedContext] = (),
+    ) -> list[Message]:
+        system_content = system_message.content
+
+        if system_content is None:
+            raise ValueError("System message content cannot be None.")
+
+        context_parts = [system_content]
+
+        facts_content = self._format_facts(facts)
+
+        if facts_content is not None:
+            context_parts.append(facts_content)
+
+        retrieved_content = self._format_retrieved_contexts(retrieved_contexts)
+
+        if retrieved_content is not None:
+            context_parts.append(retrieved_content)
+
+        composed_system_message = Message(
+            role=system_message.role,
+            content="\n\n".join(context_parts),
+        )
+
+        return [
+            composed_system_message,
+            *history_messages,
+            user_message,
+        ]
+
     def _format_facts(
         self,
         facts: Mapping[str, str],
@@ -15,33 +53,19 @@ class PromptComposer:
 
         return f"User facts:\n{formatted_facts}"
 
-    def compose(
+    def _format_retrieved_contexts(
         self,
-        *,
-        system_message: Message,
-        history_messages: Sequence[Message],
-        facts: Mapping[str, str],
-        user_message: Message,
-    ) -> list[Message]:
-        composed_system_message = system_message
+        contexts: Sequence[RetrievedContext],
+    ) -> str | None:
+        if not contexts:
+            return None
 
-        facts_content = self._format_facts(
-            facts,
-        )
+        parts: list[str] = ["Retrieved knowledge:"]
 
-        if facts_content is not None:
-            system_content = system_message.content
+        for context in contexts:
+            if context.source is not None:
+                parts.append(f"Source: {context.source}")
 
-            if system_content is None:
-                raise ValueError("System message content cannot be None.")
+            parts.append(context.content)
 
-            composed_system_message = Message(
-                role=system_message.role,
-                content=(f"{system_content}\n\n{facts_content}"),
-            )
-
-        return [
-            composed_system_message,
-            *history_messages,
-            user_message,
-        ]
+        return "\n".join(parts)

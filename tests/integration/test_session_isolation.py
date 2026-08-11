@@ -19,11 +19,13 @@ from app.policies.simple_memory_policy import (
 )
 from app.prompts.prompt_composer import PromptComposer
 from app.prompts.prompt_template import PromptTemplate
+from app.retrieval.policies.never_retrieve_policy import NeverRetrievePolicy
 from app.session.in_memory_session_manager import (
     InMemorySessionManager,
 )
 from app.session.session_factory import SessionFactory
 from tests.fakes.fake_agent_runner import FakeAgentRunner
+from tests.fakes.fake_retriever import FakeRetriever
 from tests.fakes.fake_session_clock import (
     FakeSessionClock,
 )
@@ -56,6 +58,8 @@ def create_session_manager() -> InMemorySessionManager:
             ),
         ),
         prompt_composer=PromptComposer(),
+        retriever=FakeRetriever(),
+        retrieval_policy=NeverRetrievePolicy(),
     )
 
     return InMemorySessionManager(

@@ -10,7 +10,9 @@ from app.models.client_response import ClientResponse
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
 from app.prompts.prompt_composer import PromptComposer
 from app.prompts.prompt_template import PromptTemplate
+from app.retrieval.policies.never_retrieve_policy import NeverRetrievePolicy
 from tests.fakes.fake_agent_runner import FakeAgentRunner
+from tests.fakes.fake_retriever import FakeRetriever
 
 prompt_template = (
     PromptTemplate(
@@ -49,6 +51,8 @@ def create_dependencies() -> ChatAgentDependencies:
             ),
         ),
         prompt_composer=PromptComposer(),
+        retriever=FakeRetriever(),
+        retrieval_policy=NeverRetrievePolicy(),
     )
 
 

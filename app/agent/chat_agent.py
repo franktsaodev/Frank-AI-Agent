@@ -15,6 +15,9 @@ from app.prompts.base_prompt_template import BasePromptTemplate
 from app.prompts.prompt_composer_protocol import (
     PromptComposerProtocol,
 )
+from app.retrieval.policies.retrieval_policy import RetrievalPolicy
+from app.retrieval.retrieved_context import RetrievedContext
+from app.retrieval.retrievers.retriever import Retriever
 from app.types.json_types import JsonValue
 
 logger = logging.getLogger(__name__)
@@ -30,6 +33,8 @@ class ChatAgent:
         fact_extractor: BaseFactExtractor,
         memory_policy: BaseMemoryPolicy,
         prompt_composer: PromptComposerProtocol,
+        retriever: Retriever,
+        retrieval_policy: RetrievalPolicy,
     ) -> None:
         logger.info("ChatAgent initialized")
 
@@ -40,6 +45,8 @@ class ChatAgent:
         self._fact_extractor = fact_extractor
         self._memory_policy = memory_policy
         self._prompt_composer = prompt_composer
+        self._retriever = retriever
+        self._retrieval_policy = retrieval_policy
 
         rendered_prompt = self._prompt_template.render()
 
@@ -76,12 +83,14 @@ class ChatAgent:
 
         history_messages = self._memory.get_messages()
         known_facts = self._fact_memory.get_all()
+        retrieved_contexts = self._retrieve_contexts(message)
 
         composed_messages = self._prompt_composer.compose(
             system_message=self.system_message,
             history_messages=history_messages,
             facts=known_facts,
             user_message=user_message,
+            retrieved_contexts=retrieved_contexts,
         )
 
         run_context = AgentRunContext(
@@ -171,3 +180,20 @@ class ChatAgent:
                 key,
                 value,
             )
+
+    def _retrieve_contexts(
+        self,
+        user_input: str,
+    ) -> list[RetrievedContext]:
+        if not self._retrieval_policy.should_retrieve(user_input):
+            return []
+
+        results = self._retriever.retrieve(user_input)
+
+        return [
+            RetrievedContext(
+                content=result.document.content,
+                source=result.document.metadata.get("source"),
+            )
+            for result in results
+        ]

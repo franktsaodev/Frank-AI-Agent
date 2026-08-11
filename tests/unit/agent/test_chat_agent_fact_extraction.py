@@ -29,6 +29,9 @@ from app.prompts.prompt_composer_protocol import (
     PromptComposerProtocol,
 )
 from app.prompts.prompt_template import PromptTemplate
+from app.retrieval.policies.never_retrieve_policy import NeverRetrievePolicy
+from app.retrieval.policies.retrieval_policy import RetrievalPolicy
+from app.retrieval.retrievers.retriever import Retriever
 from app.tools.tool_executor_protocol import (
     ToolExecutorProtocol,
 )
@@ -36,6 +39,7 @@ from app.tracing.base_tracer import BaseTracer
 from tests.fakes.fake_client import FakeClient
 from tests.fakes.fake_memory_policy import FakeMemoryPolicy
 from tests.fakes.fake_prompt_composer import FakePromptComposer
+from tests.fakes.fake_retriever import FakeRetriever
 from tests.fakes.fake_tool_executor import FakeToolExecutor
 
 
@@ -50,6 +54,8 @@ class ChatAgentFactory(Protocol):
         fact_extractor: BaseFactExtractor | None = None,
         memory_policy: BaseMemoryPolicy | None = None,
         prompt_composer: PromptComposerProtocol | None = None,
+        retriever: Retriever | None = None,
+        retrieval_policy: RetrievalPolicy | None = None,
     ) -> ChatAgent: ...
 
 
@@ -66,6 +72,8 @@ def create_agent(
         fact_extractor: BaseFactExtractor | None = None,
         memory_policy: BaseMemoryPolicy | None = None,
         prompt_composer: PromptComposerProtocol | None = None,
+        retriever: Retriever | None = None,
+        retrieval_policy: RetrievalPolicy | None = None,
     ) -> ChatAgent:
         actual_client = (
             client
@@ -123,6 +131,12 @@ def create_agent(
             config=AgentConfig(),
         )
 
+        actual_retriever = retriever if retriever is not None else FakeRetriever()
+
+        actual_retrieval_policy = (
+            retrieval_policy if retrieval_policy is not None else NeverRetrievePolicy()
+        )
+
         return ChatAgent(
             prompt_template=PromptTemplate(
                 config=PromptConfig(
@@ -136,6 +150,8 @@ def create_agent(
             fact_extractor=actual_fact_extractor,
             memory_policy=actual_memory_policy,
             prompt_composer=actual_prompt_composer,
+            retriever=actual_retriever,
+            retrieval_policy=actual_retrieval_policy,
         )
 
     return _create_agent
@@ -374,3 +390,5 @@ def test_chat_passes_context_to_prompt_composer_and_sends_composed_messages_to_c
     )
 
     assert client.received_messages == composed_messages
+
+    assert fake_prompt_composer.received_retrieved_contexts == []
