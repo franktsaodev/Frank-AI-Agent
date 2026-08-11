@@ -1,6 +1,7 @@
 from collections.abc import Mapping, Sequence
 
 from app.models.message import Message
+from app.retrieval.retrieved_context import RetrievedContext
 
 
 class FakePromptComposer:
@@ -16,6 +17,7 @@ class FakePromptComposer:
         self.received_history_messages: list[Message] | None = None
         self.received_facts: dict[str, str] | None = None
         self.received_user_message: Message | None = None
+        self.received_retrieved_contexts: list[RetrievedContext] | None = None
 
     def compose(
         self,
@@ -24,6 +26,7 @@ class FakePromptComposer:
         history_messages: Sequence[Message],
         facts: Mapping[str, str],
         user_message: Message,
+        retrieved_contexts: Sequence[RetrievedContext] = (),
     ) -> list[Message]:
         self.received_system_message = system_message
         self.received_history_messages = list(
@@ -31,6 +34,9 @@ class FakePromptComposer:
         )
         self.received_facts = dict(facts)
         self.received_user_message = user_message
+        self.received_retrieved_contexts = list(
+            retrieved_contexts,
+        )
 
         return list(
             self._composed_messages,
