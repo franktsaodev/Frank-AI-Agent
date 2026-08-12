@@ -14,6 +14,7 @@ from app.config import load_environment
 from app.config_loaders.agent_config_loader import (
     AgentConfigLoader,
 )
+from app.config_loaders.environment_reader import EnvironmentReader
 from app.config_loaders.groq_config_loader import (
     GroqConfigLoader,
 )
@@ -26,6 +27,7 @@ from app.config_loaders.memory_policy_config_loader import (
 from app.config_loaders.prompt_config_loader import (
     PromptConfigLoader,
 )
+from app.config_loaders.retrieval_config_loader import RetrievalConfigLoader
 from app.config_loaders.retry_config_loader import (
     RetryConfigLoader,
 )
@@ -48,8 +50,7 @@ from app.memory.sliding_window_memory import SlidingWindowMemory
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
 from app.prompts.prompt_composer import PromptComposer
 from app.prompts.prompt_template import PromptTemplate
-from app.retrieval.policies.never_retrieve_policy import NeverRetrievePolicy
-from app.retrieval.retrievers.no_op_retriever import NoOpRetriever
+from app.retrieval.retrieval_runtime_factory import RetrievalRuntimeFactory
 from app.tools.plugins.tool_plugin_factory import ToolPluginFactory
 from app.tools.plugins.tool_plugin_loader import ToolPluginLoader
 from app.tools.tool_executor import ToolExecutor
@@ -70,6 +71,8 @@ def create_chat_agent() -> ChatAgent:
 def create_chat_agent_factory() -> ChatAgentFactory:
     load_environment()
 
+    environment_reader = EnvironmentReader()
+
     tracing_config = TracingConfigLoader().load()
     tool_plugin_config = ToolPluginConfigLoader().load()
     groq_config = GroqConfigLoader().load()
@@ -78,6 +81,9 @@ def create_chat_agent_factory() -> ChatAgentFactory:
     memory_config = MemoryConfigLoader().load()
     memory_policy_config = MemoryPolicyConfigLoader().load()
     prompt_config = PromptConfigLoader().load()
+    retrieval_config = RetrievalConfigLoader(
+        environment_reader=environment_reader,
+    ).load()
 
     clock = SystemClock()
 
@@ -126,6 +132,10 @@ def create_chat_agent_factory() -> ChatAgentFactory:
         config=prompt_config,
     )
 
+    retrieval_runtime = RetrievalRuntimeFactory().create(
+        retrieval_config,
+    )
+
     dependencies = ChatAgentDependencies(
         prompt_template=prompt_template,
         agent_runner=agent_runner,
@@ -133,8 +143,8 @@ def create_chat_agent_factory() -> ChatAgentFactory:
         fact_extractor=RegexFactExtractor(),
         memory_policy=memory_policy,
         prompt_composer=PromptComposer(),
-        retriever=NoOpRetriever(),
-        retrieval_policy=NeverRetrievePolicy(),
+        retriever=retrieval_runtime.retriever,
+        retrieval_policy=retrieval_runtime.retrieval_policy,
     )
 
     return ChatAgentFactory(
