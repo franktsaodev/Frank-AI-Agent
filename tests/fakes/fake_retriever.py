@@ -14,9 +14,13 @@ class FakeRetriever:
         self,
         query: str,
         *,
-        limit: int = 5,
+        limit: int | None = None,
     ) -> list[SearchResult]:
         self.call_count += 1
         self.last_query = query
+        self.last_limit = limit
+
+        if limit is None:
+            return list(self._results)
 
         return self._results[:limit]

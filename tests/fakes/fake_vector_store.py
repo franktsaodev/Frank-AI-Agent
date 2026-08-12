@@ -6,13 +6,16 @@ class FakeVectorStore:
     def __init__(self) -> None:
         self.last_query_embedding: list[float] | None = None
         self.last_limit: int | None = None
+        self.added_documents: list[Document] = []
+        self.added_embeddings: list[list[float]] = []
 
     def add(
         self,
         documents: list[Document],
         embeddings: list[list[float]],
     ) -> None:
-        pass
+        self.added_documents = list(documents)
+        self.added_embeddings = [list(embedding) for embedding in embeddings]
 
     def search(
         self,
