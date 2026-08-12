@@ -6,6 +6,6 @@ class NoOpRetriever:
         self,
         query: str,
         *,
-        limit: int = 5,
+        limit: int | None = None,
     ) -> list[SearchResult]:
         return []

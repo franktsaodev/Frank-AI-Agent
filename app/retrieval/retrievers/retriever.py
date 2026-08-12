@@ -8,5 +8,5 @@ class Retriever(Protocol):
         self,
         query: str,
         *,
-        limit: int = 5,
+        limit: int | None = None,
     ) -> list[SearchResult]: ...
