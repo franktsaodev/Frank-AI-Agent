@@ -1,0 +1,5 @@
+Deployment
+
+Frank AI Agent uses Docker to package and deploy the application.
+
+The API service runs inside a Docker container.
