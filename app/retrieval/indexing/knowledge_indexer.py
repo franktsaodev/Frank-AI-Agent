@@ -19,7 +19,7 @@ class KnowledgeIndexer:
     def index(
         self,
         loader: DocumentLoader,
-    ) -> None:
+    ) -> int:
         documents = loader.load()
 
         chunks = [
@@ -27,7 +27,7 @@ class KnowledgeIndexer:
         ]
 
         if not chunks:
-            return
+            return 0
 
         embeddings = self._embedding_provider.embed([chunk.content for chunk in chunks])
 
@@ -35,3 +35,5 @@ class KnowledgeIndexer:
             chunks,
             embeddings,
         )
+
+        return len(chunks)

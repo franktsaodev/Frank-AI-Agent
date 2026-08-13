@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,6 +24,8 @@ from app.retrieval.vector_stores.in_memory_vector_store import (
     InMemoryVectorStore,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class RetrievalRuntime:
@@ -36,6 +39,8 @@ class RetrievalRuntimeFactory:
         config: RetrievalConfig,
     ) -> RetrievalRuntime:
         if not config.enabled:
+            logger.info("Retrieval is disabled")
+
             return RetrievalRuntime(
                 retriever=NoOpRetriever(),
                 retrieval_policy=NeverRetrievePolicy(),
@@ -47,6 +52,12 @@ class RetrievalRuntimeFactory:
             raise RuntimeError(
                 f"Retrieval knowledge path does not exist: {knowledge_path}"
             )
+
+        logger.info(
+            "Initializing retrieval runtime with knowledge_path=%s embedding_model=%s",
+            knowledge_path,
+            config.embedding_model,
+        )
 
         embedding_provider = SentenceTransformerEmbeddingProvider(
             model_name=config.embedding_model,
@@ -72,12 +83,29 @@ class RetrievalRuntimeFactory:
                 f"Unsupported retrieval knowledge path: {knowledge_path}"
             )
 
-        indexer.index(loader)
+        indexed_chunk_count = indexer.index(loader)
+
+        if indexed_chunk_count == 0:
+            raise RuntimeError(
+                f"No supported knowledge documents were indexed from: {knowledge_path}"
+            )
+
+        logger.info(
+            "Indexed %d knowledge chunk(s) from %s",
+            indexed_chunk_count,
+            knowledge_path,
+        )
 
         retriever = VectorStoreRetriever(
             embedding_provider=embedding_provider,
             vector_store=vector_store,
             default_limit=config.top_k,
+        )
+
+        logger.info(
+            "Retrieval runtime ready with chunks=%d top_k=%d",
+            indexed_chunk_count,
+            config.top_k,
         )
 
         return RetrievalRuntime(

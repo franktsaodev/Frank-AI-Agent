@@ -1,6 +1,8 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from app.retrieval.document import Document
 from app.retrieval.loaders.directory_document_loader import DirectoryDocumentLoader
 
@@ -106,3 +108,38 @@ def test_should_load_pdf_files(
     loader_instance.load.assert_called_once_with()
 
     assert documents == expected_documents
+
+
+def test_should_skip_document_when_loader_fails(
+    tmp_path: Path,
+) -> None:
+    valid_path = tmp_path / "valid.txt"
+    valid_path.write_text(
+        "Valid knowledge",
+        encoding="utf-8",
+    )
+
+    broken_pdf = tmp_path / "broken.pdf"
+    broken_pdf.write_bytes(
+        b"not a real pdf",
+    )
+
+    documents = DirectoryDocumentLoader(tmp_path).load()
+
+    assert len(documents) == 1
+    assert documents[0].content == "Valid knowledge"
+
+
+def test_should_log_warning_when_document_loading_fails(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    broken_pdf = tmp_path / "broken.pdf"
+    broken_pdf.write_bytes(
+        b"not a real pdf",
+    )
+
+    DirectoryDocumentLoader(tmp_path).load()
+
+    assert "Failed to load knowledge document" in caplog.text
+    assert "broken.pdf" in caplog.text

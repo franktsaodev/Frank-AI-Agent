@@ -69,3 +69,46 @@ def test_should_not_embed_or_store_when_loader_returns_no_documents() -> None:
 
     assert vector_store.added_documents == []
     assert vector_store.added_embeddings == []
+
+
+def test_should_return_zero_when_no_documents_are_indexed() -> None:
+    loader = FakeDocumentLoader(
+        documents=[],
+    )
+
+    embedding_provider = FakeEmbeddingProvider()
+    vector_store = FakeVectorStore()
+
+    indexer = KnowledgeIndexer(
+        splitter=FixedSizeTextSplitter(
+            chunk_size=100,
+        ),
+        embedding_provider=embedding_provider,
+        vector_store=vector_store,
+    )
+
+    indexed_count = indexer.index(loader)
+
+    assert indexed_count == 0
+
+
+def test_should_return_indexed_chunk_count() -> None:
+    loader = FakeDocumentLoader(
+        documents=[
+            Document(
+                content="abcdefgh",
+            )
+        ]
+    )
+
+    indexer = KnowledgeIndexer(
+        splitter=FixedSizeTextSplitter(
+            chunk_size=4,
+        ),
+        embedding_provider=FakeEmbeddingProvider(),
+        vector_store=FakeVectorStore(),
+    )
+
+    indexed_count = indexer.index(loader)
+
+    assert indexed_count == 2

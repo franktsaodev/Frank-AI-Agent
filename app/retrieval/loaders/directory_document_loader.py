@@ -1,8 +1,11 @@
+import logging
 from pathlib import Path
 
 from app.retrieval.document import Document
 from app.retrieval.loaders.pdf_document_loader import PDFDocumentLoader
 from app.retrieval.loaders.text_file_loader import TextFileLoader
+
+logger = logging.getLogger(__name__)
 
 
 class DirectoryDocumentLoader:
@@ -31,6 +34,13 @@ class DirectoryDocumentLoader:
             else:
                 continue
 
-            documents.extend(loader.load())
+            try:
+                documents.extend(loader.load())
+            except Exception:
+                logger.warning(
+                    "Failed to load knowledge document: %s",
+                    file_path,
+                    exc_info=True,
+                )
 
         return documents
