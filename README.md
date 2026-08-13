@@ -12,8 +12,9 @@ A modular AI agent framework built with **Python** and **FastAPI** for developin
 stateful, extensible, and observable LLM applications.
 
 Frank AI Agent provides a structured foundation for building AI agent services
-with isolated sessions, conversation and fact memory, iterative tool execution,
-plugin-based extensibility, structured tracing, runtime configuration, and REST APIs.
+with isolated sessions, conversation and fact memory, retrieval-augmented
+generation, iterative tool execution, plugin-based extensibility, structured
+tracing, runtime configuration, and REST APIs.
 
 Rather than coupling these capabilities into a single chat application, the
 framework separates agent execution, memory, tools, sessions, configuration,
@@ -65,6 +66,25 @@ long-term facts.
 - Memory policies control which facts are allowed to persist
 - Prompt composition combines system instructions, remembered facts, and
   conversation history before agent execution
+
+### Retrieval-Augmented Generation
+
+The framework supports retrieval-augmented generation using a configurable
+local knowledge base.
+
+The retrieval system provides:
+
+- Recursive knowledge directory loading
+- TXT, Markdown, and text-based PDF document support
+- Fixed-size text chunking with configurable overlap
+- Local sentence-transformer embeddings
+- In-memory vector search using cosine similarity
+- Source metadata preservation
+- Configurable top-k semantic retrieval
+- Retrieval policies for controlling when knowledge lookup is performed
+
+Retrieved knowledge is injected into the prompt only when the active retrieval
+policy determines that external context is required.
 
 ### Iterative Tool Calling
 
@@ -132,6 +152,7 @@ Configuration includes:
 - LLM provider settings
 - Agent iteration limits
 - Conversation memory limits
+- Retrieval and knowledge base settings
 - Session TTL and cleanup intervals
 - Retry policies
 - Tool plugins
@@ -174,8 +195,9 @@ construction are kept separate from the agent's business flow.
 |---|---|
 | API | Exposes health, session, and chat endpoints through FastAPI |
 | Session | Manages isolated agent sessions and session lifetime |
-| Agent | Coordinates prompt composition, memory, and agent execution |
+| Agent | Coordinates prompt composition, memory, retrieval, and agent execution |
 | Memory | Stores conversation history and structured user facts |
+| Retrieval | Loads, indexes, and retrieves external knowledge for prompt augmentation |
 | Tool System | Registers, exposes, and executes plugin-based tools |
 | Tracing | Records agent, LLM, and tool lifecycle events |
 | Configuration | Loads runtime settings and constructs dependencies |
@@ -190,17 +212,20 @@ memory processing, prompt construction, agent orchestration, and tool execution.
 1. The `ChatAgent` receives and validates the user message.
 2. The fact extractor identifies structured facts from the message.
 3. The memory policy determines which extracted facts should be persisted.
-4. The prompt composer combines the system prompt, remembered facts,
-   conversation history, and the current user message.
-5. The `AgentRunner` sends the composed messages to the configured LLM client.
-6. If the model requests a tool, the tool executor resolves and executes it
+4. The retrieval policy determines whether external knowledge should be queried.
+5. When retrieval is enabled for the request, the retriever performs semantic
+   search against the indexed knowledge base.
+6. The prompt composer combines the system prompt, remembered facts,
+   conversation history, retrieved context, and the current user message.
+7. The `AgentRunner` sends the composed messages to the configured LLM client.
+8. If the model requests a tool, the tool executor resolves and executes it
    through the tool registry.
-7. The tool result is appended to the execution context and sent back to the
+9. The tool result is appended to the execution context and sent back to the
    LLM for another iteration.
-8. Execution continues until the model produces a final response or the
-   configured iteration limit is reached.
-9. The completed user and assistant messages are stored in conversation memory.
-10. Structured trace events record the agent, LLM, and tool execution lifecycle.
+10. Execution continues until the model produces a final response or the
+    configured iteration limit is reached.
+11. The completed user and assistant messages are stored in conversation memory.
+12. Structured trace events record the agent, LLM, and tool execution lifecycle.
 
 ### Tool Execution Loop
 
@@ -283,6 +308,115 @@ This keeps the runtime simple and makes session isolation explicit, while the
 session management abstraction leaves room for a persistent or distributed
 session store in a future version.
 
+## Retrieval-Augmented Generation (RAG)
+
+Frank AI Agent supports retrieval-augmented generation using a configurable
+local knowledge base.
+
+### Supported Knowledge Sources
+
+The knowledge path can point to either a supported file or a directory.
+
+Supported document types:
+
+- `.txt`
+- `.md`
+- `.pdf`
+
+Directories are scanned recursively for supported documents.
+
+PDF support currently uses text extraction and does not perform OCR on scanned
+or image-only PDFs.
+
+### Knowledge Ingestion Pipeline
+
+```text
+Knowledge Files
+      │
+      ▼
+Document Loaders
+      │
+      ▼
+Documents
+      │
+      ▼
+Text Splitter
+      │
+      ▼
+Chunks
+      │
+      ▼
+Embedding Provider
+      │
+      ▼
+In-Memory Vector Store
+      │
+      ▼
+VectorStoreRetriever
+```
+
+Documents are split into overlapping chunks and converted into vector
+embeddings using a local sentence-transformer model. The resulting embeddings
+are stored in an in-memory vector store and searched using semantic similarity.
+
+Source metadata is preserved throughout the pipeline. PDF documents also retain
+their page number when available.
+
+### Retrieval Flow
+
+```text
+User Message
+     │
+     ▼
+Retrieval Policy
+     │
+     ├── Skip ────────────────┐
+     │                        │
+     └── Retrieve             │
+            │                 │
+            ▼                 │
+     VectorStoreRetriever     │
+            │                 │
+            ▼                 │
+     Retrieved Context        │
+            │                 │
+            └─────────┬───────┘
+                      ▼
+               Prompt Composer
+                      │
+                      ▼
+                 Agent Runner
+```
+
+The retrieval policy determines whether knowledge lookup is required for the
+current request. Retrieved contexts are added to the composed prompt before
+agent execution.
+
+### Example Knowledge Directory
+
+```text
+knowledge/
+├── session.md
+├── deployment.txt
+└── architecture.pdf
+```
+
+### Runtime Behavior
+
+Retrieval is optional and disabled by default.
+
+When disabled, the runtime uses `NoOpRetriever` and `NeverRetrievePolicy`,
+preserving the standard agent behavior without initializing the embedding
+pipeline.
+
+When enabled, supported knowledge documents are indexed during application
+startup.
+
+The runtime fails fast when the configured knowledge path does not exist or no
+supported knowledge can be indexed. Individual documents that fail to load are
+skipped and reported through warning logs while valid documents continue to be
+processed.
+
 ## Tech Stack
 
 | Category | Technology |
@@ -296,6 +430,9 @@ session store in a future version.
 | Linting & Formatting | Ruff |
 | Static Type Checking | Pyright |
 | Containerization | Docker & Docker Compose |
+| Embeddings | Sentence Transformers |
+| Vector Search | In-Memory Cosine Similarity |
+| Document Processing | TXT, Markdown, PDF (PyPDF) |
 
 ## Project Structure
 
@@ -314,10 +451,12 @@ Frank-AI-Agent/
 │   ├── memory/             # Conversation and fact memory
 │   ├── policies/           # Memory persistence policies
 │   ├── prompts/            # Prompt templates and composition
+│   ├── retrieval/          # RAG ingestion, embeddings, indexing, and retrieval
 │   ├── session/            # Session lifecycle management
 │   ├── tools/              # Tool registry, execution, and plugins
 │   └── tracing/            # Structured tracing and exporters
 │
+├── knowledge/              # Local retrieval knowledge sources
 ├── assets/
 │   └── images/             # Architecture documentation
 │
@@ -459,6 +598,17 @@ environment.
 | `MEMORY_MAX_HISTORY_ROUNDS` | `2` | Maximum number of conversation rounds retained in short-term memory |
 | `MEMORY_ALLOWED_KEYS` | `user_name,favorite_music,occupation` | Fact keys allowed to persist in fact memory |
 
+### Retrieval
+
+| Variable | Default | Description |
+|---|---|---|
+| `RETRIEVAL_ENABLED` | `false` | Enables or disables retrieval-augmented generation |
+| `RETRIEVAL_KNOWLEDGE_PATH` | `knowledge` | File or directory used as the knowledge source |
+| `RETRIEVAL_CHUNK_SIZE` | `500` | Maximum text chunk size used during indexing |
+| `RETRIEVAL_CHUNK_OVERLAP` | `50` | Overlap between adjacent text chunks |
+| `RETRIEVAL_TOP_K` | `5` | Maximum number of semantic search results returned |
+| `RETRIEVAL_EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Sentence-transformer model used to generate embeddings |
+
 ### Prompt
 
 | Variable | Default | Description |
@@ -484,7 +634,7 @@ environment.
 | Variable | Default | Description |
 |---|---|---|
 | `APP_SERVICE_NAME` | `Frank AI Agent` | Service name exposed by runtime information and health checks |
-| `APP_VERSION` | `1.0.1` | Application version exposed by the running service |
+| `APP_VERSION` | `1.1.0` | Application version exposed by the running service |
 
 ### Session
 
@@ -710,7 +860,7 @@ docker compose down
 ### Build the Docker Image Manually
 
 ```bash
-docker build -t frank-ai-agent:1.0.0 .
+docker build -t frank-ai-agent:1.1.0 .
 ```
 
 ### Run the Image Manually
@@ -722,8 +872,8 @@ docker run --rm `
   --name frank-ai-agent `
   -p 8000:8000 `
   --env-file .env `
-  -e APP_VERSION=1.0.1 `
-  frank-ai-agent:1.0.1
+  -e APP_VERSION=1.1.0 `
+  frank-ai-agent:1.1.0
 ```
 
 **macOS / Linux**
@@ -733,8 +883,8 @@ docker run --rm \
   --name frank-ai-agent \
   -p 8000:8000 \
   --env-file .env \
-  -e APP_VERSION=1.0.1 \
-  frank-ai-agent:1.0.1
+  -e APP_VERSION=1.1.0 \
+  frank-ai-agent:1.1.0
 ```
 
 > [!NOTE]
@@ -792,9 +942,10 @@ Unit tests cover components such as:
 - Session management
 - FastAPI routes and exception handling
 - Structured tracing
+- Retrieval, document loading, embeddings, and vector search
 
 Integration tests verify behavior across component boundaries, including
-session isolation and independent agent memory.
+session isolation, independent agent memory, and semantic retrieval pipelines.
 
 ### Linting
 
@@ -868,12 +1019,26 @@ tool-enabled AI agent applications.
 - [x] Docker and Docker Compose deployment
 - [x] Unit and integration testing
 
+### v1.1 — Retrieval-Augmented Generation
+
+- [x] Document abstraction and loaders
+- [x] TXT and Markdown knowledge ingestion
+- [x] Text-based PDF ingestion
+- [x] Recursive knowledge directory loading
+- [x] Fixed-size text chunking
+- [x] Sentence-transformer embeddings
+- [x] In-memory vector search
+- [x] Semantic knowledge retrieval
+- [x] Source metadata preservation
+- [x] Retrieval policy abstraction
+- [x] ChatAgent retrieval integration
+- [x] Configurable retrieval runtime
+
 ### Future Development
 
 - [ ] Streaming responses
 - [ ] Persistent session storage
 - [ ] Redis-backed distributed sessions
-- [ ] Retrieval-Augmented Generation (RAG)
 - [ ] Model Context Protocol (MCP) integration
 - [ ] Multi-agent orchestration
 - [ ] Additional LLM providers

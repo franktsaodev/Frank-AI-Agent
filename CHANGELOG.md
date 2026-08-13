@@ -7,6 +7,34 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-13
+
+### Added
+
+- Added retrieval-augmented generation (RAG) support for local knowledge bases.
+- Added TXT, Markdown, and text-based PDF document loaders.
+- Added recursive directory loading for supported knowledge documents.
+- Added fixed-size text chunking with configurable overlap.
+- Added local sentence-transformer embeddings for semantic retrieval.
+- Added an in-memory vector store with cosine similarity search.
+- Added semantic retrieval through `VectorStoreRetriever`.
+- Added source metadata preservation for retrieved knowledge.
+- Added retrieval policy abstractions for controlling knowledge lookup.
+- Added retrieval context integration into `ChatAgent` and `PromptComposer`.
+- Added configurable retrieval runtime through environment variables.
+- Added sample knowledge documents for retrieval testing and demonstration.
+- Added unit and integration coverage for the retrieval pipeline.
+
+### Changed
+
+- Updated agent execution flow to optionally retrieve external knowledge before prompt composition.
+- Updated runtime bootstrap to construct retrieval dependencies through `RetrievalRuntimeFactory`.
+- Updated README documentation with RAG architecture, configuration, runtime behavior, and roadmap.
+- Improved retrieval configuration validation.
+- Improved startup validation for invalid or empty knowledge sources.
+- Improved document ingestion resilience by skipping individual documents that fail to load.
+- Improved retrieval runtime observability with startup logging.
+
 ## [1.0.1] - 2026-08-08
 
 ### Added
