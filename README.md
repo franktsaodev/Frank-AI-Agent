@@ -616,6 +616,16 @@ environment.
 | `PROMPT_NAME` | `system_prompt.txt` | System prompt template file |
 | `PROMPT_LANGUAGE` | `Traditional Chinese` | Default response language configured for the prompt |
 
+### Logging
+
+| Variable | Default | Description |
+|---|---|---|
+| `LOG_LEVEL` | `INFO` | Application log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`) |
+
+Third-party libraries such as Hugging Face, Sentence Transformers, HTTPX,
+and file-locking utilities are limited to warning-level output to keep runtime
+logs readable.
+
 ### Tracing
 
 | Variable | Default | Description |
@@ -901,6 +911,43 @@ GET /health
 
 A healthy container indicates that the FastAPI application is running and
 responding on port `8000`.
+
+The container health check uses an extended startup grace period so that the
+initial embedding-model download does not immediately mark the service as
+unhealthy.
+
+### Hugging Face Model Cache
+
+When retrieval is enabled, the configured sentence-transformer model is loaded
+during application startup.
+
+Docker Compose persists the Hugging Face model cache using a named volume:
+
+```text
+huggingface-cache
+```
+
+The cache is mounted at:
+
+```text
+/home/app/.cache/huggingface
+```
+
+The first retrieval-enabled startup may take longer while the embedding model
+is downloaded. Subsequent container recreations reuse the cached model and
+start significantly faster.
+
+The cache is preserved when running:
+
+```bash
+docker compose down
+```
+
+To remove the cache volume explicitly:
+
+```bash
+docker compose down -v
+```
 
 ## Testing & Code Quality
 
