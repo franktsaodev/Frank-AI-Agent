@@ -12,6 +12,8 @@ from app.api.runtime_provider import get_runtime_info
 from app.api.v1.session_routes import (
     router as session_router,
 )
+from app.config_loaders.environment_reader import EnvironmentReader
+from app.config_loaders.logging_config_loader import LoggingConfigLoader
 from app.core.logging_config import configure_logging
 
 
@@ -19,7 +21,15 @@ def create_app(
     *,
     lifespan: Lifespan | None = None,
 ) -> FastAPI:
-    configure_logging()
+    environment_reader = EnvironmentReader()
+
+    logging_config = LoggingConfigLoader(
+        environment_reader=environment_reader,
+    ).load()
+
+    configure_logging(
+        config=logging_config,
+    )
 
     runtime = get_runtime_info()
 
