@@ -10,13 +10,24 @@ class RetrievalConfigLoader:
         self._environment_reader = environment_reader
 
     def load(self) -> RetrievalConfig:
+        trigger_keywords_value = self._environment_reader.get_str(
+            name="RETRIEVAL_TRIGGER_KEYWORDS",
+            default="documentation,manual,session,deployment,architecture",
+        )
+
+        trigger_keywords = frozenset(
+            keyword.strip()
+            for keyword in trigger_keywords_value.split(",")
+            if keyword.strip()
+        )
+
         return RetrievalConfig(
             enabled=self._environment_reader.get_bool(
                 name="RETRIEVAL_ENABLED",
                 default=False,
             ),
             knowledge_path=self._environment_reader.get_str(
-                name="RETRIEVAL_KNOWLEDGE_FILE_PATH",
+                name="RETRIEVAL_KNOWLEDGE_PATH",
                 default="knowledge/knowledge.txt",
             ),
             chunk_size=self._environment_reader.get_int(
@@ -35,4 +46,5 @@ class RetrievalConfigLoader:
                 name="RETRIEVAL_EMBEDDING_MODEL",
                 default="sentence-transformers/all-MiniLM-L6-v2",
             ),
+            trigger_keywords=trigger_keywords,
         )

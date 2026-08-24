@@ -9,7 +9,9 @@ from app.retrieval.embeddings.sentence_transformer_embedding_provider import (
 from app.retrieval.indexing.knowledge_indexer import KnowledgeIndexer
 from app.retrieval.loaders.directory_document_loader import DirectoryDocumentLoader
 from app.retrieval.loaders.text_file_loader import TextFileLoader
-from app.retrieval.policies.always_retrieve_policy import AlwaysRetrievePolicy
+from app.retrieval.policies.keyword_retrieval_policy import (
+    KeywordRetrievalPolicy,
+)
 from app.retrieval.policies.never_retrieve_policy import NeverRetrievePolicy
 from app.retrieval.policies.retrieval_policy import RetrievalPolicy
 from app.retrieval.retrievers.no_op_retriever import NoOpRetriever
@@ -110,5 +112,7 @@ class RetrievalRuntimeFactory:
 
         return RetrievalRuntime(
             retriever=retriever,
-            retrieval_policy=AlwaysRetrievePolicy(),
+            retrieval_policy=KeywordRetrievalPolicy(
+                keywords=set(config.trigger_keywords),
+            ),
         )

@@ -3,6 +3,32 @@ import pytest
 from app.config_models.retrieval_config import RetrievalConfig
 
 
+def create_retrieval_config(
+    *,
+    knowledge_path: str = "knowledge",
+    chunk_size: int = 500,
+    chunk_overlap: int = 50,
+    top_k: int = 5,
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+    trigger_keywords: frozenset[str] = frozenset(
+        {
+            "documentation",
+            "manual",
+            "session",
+        }
+    ),
+) -> RetrievalConfig:
+    return RetrievalConfig(
+        enabled=True,
+        knowledge_path=knowledge_path,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        top_k=top_k,
+        embedding_model=embedding_model,
+        trigger_keywords=trigger_keywords,
+    )
+
+
 @pytest.mark.parametrize(
     ("chunk_size", "chunk_overlap"),
     [
@@ -18,13 +44,9 @@ def test_should_reject_invalid_chunk_configuration(
     chunk_overlap: int,
 ) -> None:
     with pytest.raises(ValueError):
-        RetrievalConfig(
-            enabled=True,
-            knowledge_path="knowledge",
+        create_retrieval_config(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            top_k=5,
-            embedding_model="sentence-transformers/all-MiniLM-L6-v2",
         )
 
 
@@ -39,13 +61,8 @@ def test_should_reject_invalid_top_k(
         ValueError,
         match="top_k must be greater than 0",
     ):
-        RetrievalConfig(
-            enabled=True,
-            knowledge_path="knowledge",
-            chunk_size=500,
-            chunk_overlap=50,
+        create_retrieval_config(
             top_k=top_k,
-            embedding_model="sentence-transformers/all-MiniLM-L6-v2",
         )
 
 
@@ -63,11 +80,15 @@ def test_should_reject_blank_required_values(
     embedding_model: str,
 ) -> None:
     with pytest.raises(ValueError):
-        RetrievalConfig(
-            enabled=True,
+        create_retrieval_config(
             knowledge_path=knowledge_path,
-            chunk_size=500,
-            chunk_overlap=50,
-            top_k=5,
             embedding_model=embedding_model,
         )
+
+
+def test_should_allow_empty_trigger_keywords() -> None:
+    config = create_retrieval_config(
+        trigger_keywords=frozenset(),
+    )
+
+    assert config.trigger_keywords == frozenset()

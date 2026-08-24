@@ -9,6 +9,7 @@ class RetrievalConfig:
     chunk_overlap: int
     top_k: int
     embedding_model: str
+    trigger_keywords: frozenset[str]
 
     def __post_init__(self) -> None:
         if not self.knowledge_path.strip():

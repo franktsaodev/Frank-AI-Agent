@@ -6,11 +6,15 @@ def test_load_should_use_default_values(
     monkeypatch,
 ) -> None:
     monkeypatch.delenv(
+        "RETRIEVAL_TRIGGER_KEYWORDS",
+        raising=False,
+    )
+    monkeypatch.delenv(
         "RETRIEVAL_ENABLED",
         raising=False,
     )
     monkeypatch.delenv(
-        "RETRIEVAL_KNOWLEDGE_FILE_PATH",
+        "RETRIEVAL_KNOWLEDGE_PATH",
         raising=False,
     )
     monkeypatch.delenv(
@@ -42,17 +46,30 @@ def test_load_should_use_default_values(
     assert config.chunk_overlap == 50
     assert config.top_k == 5
     assert config.embedding_model == "sentence-transformers/all-MiniLM-L6-v2"
+    assert config.trigger_keywords == frozenset(
+        {
+            "documentation",
+            "manual",
+            "session",
+            "deployment",
+            "architecture",
+        }
+    )
 
 
 def test_load_should_read_environment_values(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv(
+        "RETRIEVAL_TRIGGER_KEYWORDS",
+        "docs,manual,system design",
+    )
+    monkeypatch.setenv(
         "RETRIEVAL_ENABLED",
         "true",
     )
     monkeypatch.setenv(
-        "RETRIEVAL_KNOWLEDGE_FILE_PATH",
+        "RETRIEVAL_KNOWLEDGE_PATH",
         "docs/knowledge.txt",
     )
     monkeypatch.setenv(
@@ -84,3 +101,33 @@ def test_load_should_read_environment_values(
     assert config.chunk_overlap == 100
     assert config.top_k == 3
     assert config.embedding_model == "custom-model"
+    assert config.trigger_keywords == frozenset(
+        {
+            "docs",
+            "manual",
+            "system design",
+        }
+    )
+
+
+def test_load_should_trim_and_ignore_empty_trigger_keywords(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(
+        "RETRIEVAL_TRIGGER_KEYWORDS",
+        " docs , manual , , architecture ",
+    )
+
+    loader = RetrievalConfigLoader(
+        environment_reader=EnvironmentReader(),
+    )
+
+    config = loader.load()
+
+    assert config.trigger_keywords == frozenset(
+        {
+            "docs",
+            "manual",
+            "architecture",
+        }
+    )

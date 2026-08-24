@@ -417,6 +417,19 @@ supported knowledge can be indexed. Individual documents that fail to load are
 skipped and reported through warning logs while valid documents continue to be
 processed.
 
+When retrieval is enabled, `KeywordRetrievalPolicy` determines whether the
+current query should trigger semantic retrieval.
+
+If the query contains one of the configured trigger keywords, the retriever
+searches the indexed knowledge base and adds the retrieved context to the
+composed prompt.
+
+Queries that do not match any configured trigger keyword skip retrieval and
+continue through the standard agent flow.
+
+Keyword-based routing is intentionally simple and may miss semantically related
+queries that do not contain one of the configured trigger keywords.
+
 ## Tech Stack
 
 | Category | Technology |
@@ -608,6 +621,7 @@ environment.
 | `RETRIEVAL_CHUNK_OVERLAP` | `50` | Overlap between adjacent text chunks |
 | `RETRIEVAL_TOP_K` | `5` | Maximum number of semantic search results returned |
 | `RETRIEVAL_EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Sentence-transformer model used to generate embeddings |
+| `RETRIEVAL_TRIGGER_KEYWORDS` | `documentation,manual,session,deployment,architecture` | Comma-separated keywords that trigger knowledge retrieval |
 
 ### Prompt
 
@@ -992,7 +1006,8 @@ Unit tests cover components such as:
 - Retrieval, document loading, embeddings, and vector search
 
 Integration tests verify behavior across component boundaries, including
-session isolation, independent agent memory, and semantic retrieval pipelines.
+session isolation, independent agent memory, semantic retrieval pipelines,
+and conditional retrieval routing.
 
 ### Linting
 
@@ -1078,6 +1093,7 @@ tool-enabled AI agent applications.
 - [x] Semantic knowledge retrieval
 - [x] Source metadata preservation
 - [x] Retrieval policy abstraction
+- [x] Keyword-based conditional retrieval
 - [x] ChatAgent retrieval integration
 - [x] Configurable retrieval runtime
 

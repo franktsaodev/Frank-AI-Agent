@@ -17,6 +17,11 @@ from app.retrieval.embeddings.sentence_transformer_embedding_provider import (
 from app.retrieval.indexing.knowledge_indexer import KnowledgeIndexer
 from app.retrieval.loaders.text_file_loader import TextFileLoader
 from app.retrieval.policies.always_retrieve_policy import AlwaysRetrievePolicy
+from app.retrieval.policies.keyword_retrieval_policy import (
+    KeywordRetrievalPolicy,
+)
+from app.retrieval.policies.retrieval_policy import RetrievalPolicy
+from app.retrieval.retrievers.retriever import Retriever
 from app.retrieval.retrievers.vector_store_retriever import (
     VectorStoreRetriever,
 )
@@ -27,6 +32,43 @@ from app.retrieval.vector_stores.in_memory_vector_store import (
     InMemoryVectorStore,
 )
 from tests.fakes.fake_agent_runner import FakeAgentRunner
+from tests.fakes.fake_retriever import FakeRetriever
+
+
+def create_test_agent(
+    *,
+    agent_runner: FakeAgentRunner,
+    retriever: Retriever,
+    retrieval_policy: RetrievalPolicy,
+) -> ChatAgent:
+    return ChatAgent(
+        prompt_template=PromptTemplate(
+            config=PromptConfig(
+                prompt_name="system_prompt.txt",
+                language="Traditional Chinese",
+            ),
+        ),
+        agent_runner=agent_runner,
+        memory=SlidingWindowMemory(
+            config=MemoryConfig(
+                max_history_rounds=10,
+            ),
+        ),
+        fact_memory=InMemoryFactMemory(),
+        fact_extractor=RegexFactExtractor(),
+        memory_policy=SimpleMemoryPolicy(
+            config=MemoryPolicyConfig(
+                allowed_keys=frozenset(
+                    {
+                        "user_name",
+                    }
+                ),
+            ),
+        ),
+        prompt_composer=PromptComposer(),
+        retriever=retriever,
+        retrieval_policy=retrieval_policy,
+    )
 
 
 def test_chat_should_include_retrieved_knowledge_in_agent_runner_messages(
@@ -75,31 +117,8 @@ def test_chat_should_include_retrieved_knowledge_in_agent_runner_messages(
         ),
     )
 
-    agent = ChatAgent(
-        prompt_template=PromptTemplate(
-            config=PromptConfig(
-                prompt_name="system_prompt.txt",
-                language="Traditional Chinese",
-            ),
-        ),
+    agent = create_test_agent(
         agent_runner=agent_runner,
-        memory=SlidingWindowMemory(
-            config=MemoryConfig(
-                max_history_rounds=10,
-            ),
-        ),
-        fact_memory=InMemoryFactMemory(),
-        fact_extractor=RegexFactExtractor(),
-        memory_policy=SimpleMemoryPolicy(
-            config=MemoryPolicyConfig(
-                allowed_keys=frozenset(
-                    {
-                        "user_name",
-                    }
-                ),
-            ),
-        ),
-        prompt_composer=PromptComposer(),
         retriever=retriever,
         retrieval_policy=AlwaysRetrievePolicy(),
     )
@@ -116,3 +135,48 @@ def test_chat_should_include_retrieved_knowledge_in_agent_runner_messages(
     assert "Retrieved knowledge:" in system_message.content
     assert "sliding expiration" in system_message.content
     assert "knowledge.txt" in system_message.content
+
+
+def test_chat_should_skip_retrieval_when_keyword_does_not_match() -> None:
+    retriever = FakeRetriever()
+
+    agent_runner = FakeAgentRunner(
+        response=ClientResponse(
+            content="Hello!",
+        ),
+    )
+
+    agent = create_test_agent(
+        agent_runner=agent_runner,
+        retriever=retriever,
+        retrieval_policy=KeywordRetrievalPolicy(
+            keywords={"session"},
+        ),
+    )
+
+    agent.chat("Hello, how are you?")
+
+    assert retriever.call_count == 0
+
+
+def test_chat_should_retrieve_when_keyword_matches() -> None:
+    retriever = FakeRetriever()
+
+    agent_runner = FakeAgentRunner(
+        response=ClientResponse(
+            content="Sessions use sliding expiration.",
+        ),
+    )
+
+    agent = create_test_agent(
+        agent_runner=agent_runner,
+        retriever=retriever,
+        retrieval_policy=KeywordRetrievalPolicy(
+            keywords={"session"},
+        ),
+    )
+
+    agent.chat("How do sessions expire?")
+
+    assert retriever.call_count == 1
+    assert retriever.last_query == "How do sessions expire?"

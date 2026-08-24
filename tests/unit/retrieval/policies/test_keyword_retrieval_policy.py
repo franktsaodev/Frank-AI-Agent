@@ -26,3 +26,11 @@ def test_should_not_retrieve_when_no_keyword_matches() -> None:
     )
 
     assert policy.should_retrieve("Hello, how are you?") is False
+
+
+def test_should_not_retrieve_when_keywords_are_empty() -> None:
+    policy = KeywordRetrievalPolicy(
+        keywords=set(),
+    )
+
+    assert policy.should_retrieve("What does the documentation say?") is False

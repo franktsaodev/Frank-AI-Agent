@@ -4,6 +4,9 @@ from pathlib import Path
 import pytest
 
 from app.config_models.retrieval_config import RetrievalConfig
+from app.retrieval.policies.keyword_retrieval_policy import (
+    KeywordRetrievalPolicy,
+)
 from app.retrieval.policies.never_retrieve_policy import NeverRetrievePolicy
 from app.retrieval.retrieval_runtime_factory import RetrievalRuntimeFactory
 from app.retrieval.retrievers.no_op_retriever import NoOpRetriever
@@ -17,6 +20,13 @@ def create_retrieval_config(
     chunk_overlap: int = 50,
     top_k: int = 5,
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+    trigger_keywords: frozenset[str] = frozenset(
+        {
+            "documentation",
+            "manual",
+            "session",
+        }
+    ),
 ) -> RetrievalConfig:
     return RetrievalConfig(
         enabled=enabled,
@@ -25,6 +35,7 @@ def create_retrieval_config(
         chunk_overlap=chunk_overlap,
         top_k=top_k,
         embedding_model=embedding_model,
+        trigger_keywords=trigger_keywords,
     )
 
 
@@ -94,3 +105,36 @@ def test_create_should_log_when_retrieval_is_disabled(
         )
 
     assert "Retrieval is disabled" in caplog.text
+
+
+def test_create_should_use_keyword_retrieval_policy_when_enabled(
+    tmp_path: Path,
+) -> None:
+    knowledge_file = tmp_path / "knowledge.txt"
+    knowledge_file.write_text(
+        "Frank AI Agent session documentation.",
+        encoding="utf-8",
+    )
+
+    factory = RetrievalRuntimeFactory()
+
+    runtime = factory.create(
+        create_retrieval_config(
+            knowledge_path=str(knowledge_file),
+            trigger_keywords=frozenset(
+                {
+                    "documentation",
+                    "session",
+                }
+            ),
+        )
+    )
+
+    assert isinstance(
+        runtime.retrieval_policy,
+        KeywordRetrievalPolicy,
+    )
+
+    assert runtime.retrieval_policy.should_retrieve("How do sessions expire?")
+
+    assert not runtime.retrieval_policy.should_retrieve("Hello, how are you?")
