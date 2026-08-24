@@ -575,7 +575,7 @@ environment.
 | Variable | Default | Description |
 |---|---|---|
 | `GROQ_API_KEY` | — | Groq API authentication key |
-| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model used by the agent |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model used by the agent |
 
 ### Retry Policy
 
