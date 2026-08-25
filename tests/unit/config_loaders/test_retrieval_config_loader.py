@@ -41,7 +41,7 @@ def test_load_should_use_default_values(
     config = loader.load()
 
     assert config.enabled is False
-    assert config.knowledge_path == "knowledge/knowledge.txt"
+    assert config.knowledge_path == "knowledge"
     assert config.chunk_size == 500
     assert config.chunk_overlap == 50
     assert config.top_k == 5

@@ -28,7 +28,7 @@ class RetrievalConfigLoader:
             ),
             knowledge_path=self._environment_reader.get_str(
                 name="RETRIEVAL_KNOWLEDGE_PATH",
-                default="knowledge/knowledge.txt",
+                default="knowledge",
             ),
             chunk_size=self._environment_reader.get_int(
                 name="RETRIEVAL_CHUNK_SIZE",
