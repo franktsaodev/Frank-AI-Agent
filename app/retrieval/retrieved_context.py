@@ -5,3 +5,4 @@ from dataclasses import dataclass
 class RetrievedContext:
     content: str
     source: str | None = None
+    page: int | None = None

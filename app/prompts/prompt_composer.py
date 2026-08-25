@@ -62,10 +62,31 @@ class PromptComposer:
 
         parts: list[str] = ["Retrieved knowledge:"]
 
+        if any(context.source is not None for context in contexts):
+            parts.append(
+                "When using the retrieved knowledge, cite the provided source "
+                "in your answer. Use only the source and page information shown "
+                "below. Do not invent source names or page numbers."
+            )
+
         for context in contexts:
-            if context.source is not None:
-                parts.append(f"Source: {context.source}")
+            source_label = self._format_source(context)
+
+            if source_label is not None:
+                parts.append(source_label)
 
             parts.append(context.content)
 
         return "\n".join(parts)
+
+    def _format_source(
+        self,
+        context: RetrievedContext,
+    ) -> str | None:
+        if context.source is None:
+            return None
+
+        if context.page is not None:
+            return f"Source: {context.source} (page {context.page})"
+
+        return f"Source: {context.source}"

@@ -193,7 +193,30 @@ class ChatAgent:
         return [
             RetrievedContext(
                 content=result.document.content,
-                source=result.document.metadata.get("source"),
+                source=self._get_source(result.document.metadata),
+                page=self._get_page(result.document.metadata),
             )
             for result in results
         ]
+
+    def _get_source(
+        self,
+        metadata: Mapping[str, object],
+    ) -> str | None:
+        source = metadata.get("source")
+
+        if isinstance(source, str):
+            return source
+
+        return None
+
+    def _get_page(
+        self,
+        metadata: Mapping[str, object],
+    ) -> int | None:
+        page = metadata.get("page")
+
+        if isinstance(page, int):
+            return page
+
+        return None

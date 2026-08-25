@@ -1,6 +1,7 @@
 from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.prompts.prompt_composer import PromptComposer
+from app.retrieval.retrieved_context import RetrievedContext
 
 
 def test_compose_returns_system_and_user_messages_without_history_or_facts() -> None:
@@ -184,3 +185,110 @@ def test_compose_does_not_modify_original_system_message() -> None:
     )
 
     assert system_message == original_system_message
+
+
+def test_compose_includes_source_and_page_for_retrieved_context() -> None:
+    system_message = Message(
+        role=MessageRole.SYSTEM,
+        content="You are a helpful assistant.",
+    )
+
+    user_message = Message(
+        role=MessageRole.USER,
+        content="Explain the architecture.",
+    )
+
+    composer = PromptComposer()
+
+    result = composer.compose(
+        system_message=system_message,
+        history_messages=[],
+        facts={},
+        user_message=user_message,
+        retrieved_contexts=[
+            RetrievedContext(
+                content="The application layer uses FastAPI.",
+                source="architecture.pdf",
+                page=2,
+            ),
+        ],
+    )
+
+    assert result[0].content == (
+        "You are a helpful assistant.\n\n"
+        "Retrieved knowledge:\n"
+        "When using the retrieved knowledge, cite the provided source "
+        "in your answer. Use only the source and page information shown "
+        "below. Do not invent source names or page numbers.\n"
+        "Source: architecture.pdf (page 2)\n"
+        "The application layer uses FastAPI."
+    )
+
+
+def test_compose_includes_source_without_page_for_retrieved_context() -> None:
+    system_message = Message(
+        role=MessageRole.SYSTEM,
+        content="You are a helpful assistant.",
+    )
+
+    user_message = Message(
+        role=MessageRole.USER,
+        content="How do sessions expire?",
+    )
+
+    composer = PromptComposer()
+
+    result = composer.compose(
+        system_message=system_message,
+        history_messages=[],
+        facts={},
+        user_message=user_message,
+        retrieved_contexts=[
+            RetrievedContext(
+                content="Sessions use sliding expiration.",
+                source="session.md",
+            ),
+        ],
+    )
+
+    assert result[0].content == (
+        "You are a helpful assistant.\n\n"
+        "Retrieved knowledge:\n"
+        "When using the retrieved knowledge, cite the provided source "
+        "in your answer. Use only the source and page information shown "
+        "below. Do not invent source names or page numbers.\n"
+        "Source: session.md\n"
+        "Sessions use sliding expiration."
+    )
+
+
+def test_compose_includes_retrieved_context_without_source() -> None:
+    system_message = Message(
+        role=MessageRole.SYSTEM,
+        content="You are a helpful assistant.",
+    )
+
+    user_message = Message(
+        role=MessageRole.USER,
+        content="Tell me about the system.",
+    )
+
+    composer = PromptComposer()
+
+    result = composer.compose(
+        system_message=system_message,
+        history_messages=[],
+        facts={},
+        user_message=user_message,
+        retrieved_contexts=[
+            RetrievedContext(
+                content="Some retrieved knowledge.",
+            ),
+        ],
+    )
+
+    assert result[0].content == (
+        "You are a helpful assistant.\n\n"
+        "Retrieved knowledge:\n"
+        "Some retrieved knowledge."
+    )

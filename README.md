@@ -430,6 +430,27 @@ continue through the standard agent flow.
 Keyword-based routing is intentionally simple and may miss semantically related
 queries that do not contain one of the configured trigger keywords.
 
+#### Source Attribution
+
+Retrieved knowledge preserves source metadata throughout the retrieval pipeline.
+
+For PDF documents, page metadata is also preserved so that generated responses
+can reference both the source document and page number.
+
+When retrieved knowledge includes source metadata, the prompt instructs the
+language model to cite only the provided source and page information and not to
+invent citations.
+
+Example source metadata presented to the model:
+
+```text
+The application layer uses FastAPI.
+
+Source: knowledge/architecture.pdf (page 1)
+```
+
+Text and Markdown documents include the source path without a page number.
+
 ## Tech Stack
 
 | Category | Technology |
@@ -1096,6 +1117,7 @@ tool-enabled AI agent applications.
 - [x] Keyword-based conditional retrieval
 - [x] ChatAgent retrieval integration
 - [x] Configurable retrieval runtime
+- [x] Source attribution with PDF page metadata
 
 ### Future Development
 

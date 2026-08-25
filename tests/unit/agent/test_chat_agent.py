@@ -290,7 +290,8 @@ def test_chat_passes_retrieved_contexts_to_prompt_composer(
                 document=Document(
                     content="Session TTL is 3600 seconds.",
                     metadata={
-                        "source": "README.md",
+                        "source": "session.pdf",
+                        "page": 2,
                     },
                 ),
                 score=0.9,
@@ -331,10 +332,12 @@ def test_chat_passes_retrieved_contexts_to_prompt_composer(
     assert fake_prompt_composer.received_retrieved_contexts == [
         RetrievedContext(
             content="Session TTL is 3600 seconds.",
-            source="README.md",
+            source="session.pdf",
+            page=2,
         ),
         RetrievedContext(
             content="Sessions use sliding expiration.",
             source="architecture.md",
+            page=None,
         ),
     ]
