@@ -49,7 +49,7 @@ def test_load_should_use_default_values(
     assert config.chunk_size == 500
     assert config.chunk_overlap == 50
     assert config.top_k == 5
-    assert config.min_score == 0.0
+    assert config.min_score == -1.0
     assert config.embedding_model == "sentence-transformers/all-MiniLM-L6-v2"
     assert config.trigger_keywords == frozenset(
         {

@@ -9,7 +9,7 @@ def create_retrieval_config(
     chunk_size: int = 500,
     chunk_overlap: int = 50,
     top_k: int = 5,
-    min_score: float = 0.0,
+    min_score: float = -1.0,
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
     trigger_keywords: frozenset[str] = frozenset(
         {
@@ -99,7 +99,7 @@ def test_should_allow_empty_trigger_keywords() -> None:
 @pytest.mark.parametrize(
     "min_score",
     [
-        -0.1,
+        -1.1,
         1.1,
     ],
 )
@@ -108,7 +108,7 @@ def test_should_reject_invalid_min_score(
 ) -> None:
     with pytest.raises(
         ValueError,
-        match="min_score must be between 0.0 and 1.0",
+        match="min_score must be between -1.0 and 1.0",
     ):
         create_retrieval_config(
             min_score=min_score,
@@ -118,7 +118,7 @@ def test_should_reject_invalid_min_score(
 @pytest.mark.parametrize(
     "min_score",
     [
-        0.0,
+        -1.0,
         1.0,
     ],
 )

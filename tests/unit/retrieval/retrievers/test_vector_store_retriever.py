@@ -165,12 +165,12 @@ def test_should_keep_result_when_score_equals_min_score() -> None:
 def test_should_keep_all_results_when_min_score_uses_default() -> None:
     search_results = [
         SearchResult(
-            document=Document(content="First document"),
+            document=Document(content="Positive-score document"),
             score=0.8,
         ),
         SearchResult(
-            document=Document(content="Second document"),
-            score=0.2,
+            document=Document(content="Negative-score document"),
+            score=-0.2,
         ),
     ]
     vector_store = FakeVectorStore(
@@ -189,7 +189,7 @@ def test_should_keep_all_results_when_min_score_uses_default() -> None:
 @pytest.mark.parametrize(
     "min_score",
     [
-        -0.1,
+        -1.1,
         1.1,
     ],
 )
@@ -198,7 +198,7 @@ def test_should_reject_invalid_min_score(
 ) -> None:
     with pytest.raises(
         ValueError,
-        match="min_score must be between 0.0 and 1.0",
+        match="min_score must be between -1.0 and 1.0",
     ):
         VectorStoreRetriever(
             embedding_provider=FakeEmbeddingProvider(),

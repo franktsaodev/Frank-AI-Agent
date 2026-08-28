@@ -641,7 +641,7 @@ environment.
 | `RETRIEVAL_CHUNK_SIZE` | `500` | Maximum text chunk size used during indexing |
 | `RETRIEVAL_CHUNK_OVERLAP` | `50` | Overlap between adjacent text chunks |
 | `RETRIEVAL_TOP_K` | `5` | Maximum number of semantic search results returned |
-| `RETRIEVAL_MIN_SCORE` | `0.0` | Minimum similarity score required to keep a retrieval result (`0.0` to `1.0`) |
+| `RETRIEVAL_MIN_SCORE` | `-1.0` | Minimum cosine similarity required to keep a retrieval result (`-1.0` to `1.0`) |
 | `RETRIEVAL_EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Sentence-transformer model used to generate embeddings |
 | `RETRIEVAL_TRIGGER_KEYWORDS` | `documentation,manual,session,deployment,architecture` | Comma-separated keywords that trigger knowledge retrieval |
 

@@ -22,7 +22,7 @@ def create_retrieval_config(
     chunk_size: int = 500,
     chunk_overlap: int = 50,
     top_k: int = 5,
-    min_score: float = 0.0,
+    min_score: float = -1.0,
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
     trigger_keywords: frozenset[str] = frozenset(
         {

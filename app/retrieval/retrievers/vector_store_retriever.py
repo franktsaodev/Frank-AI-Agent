@@ -10,13 +10,13 @@ class VectorStoreRetriever:
         embedding_provider: EmbeddingProvider,
         vector_store: VectorStore,
         default_limit: int = 5,
-        min_score: float = 0.0,
+        min_score: float = -1.0,
     ) -> None:
         if default_limit <= 0:
             raise ValueError("default_limit must be greater than 0")
 
-        if not 0.0 <= min_score <= 1.0:
-            raise ValueError("min_score must be between 0.0 and 1.0")
+        if not -1.0 <= min_score <= 1.0:
+            raise ValueError("min_score must be between -1.0 and 1.0")
 
         self._embedding_provider = embedding_provider
         self._vector_store = vector_store

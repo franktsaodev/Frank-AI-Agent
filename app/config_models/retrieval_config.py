@@ -28,8 +28,8 @@ class RetrievalConfig:
         if self.top_k <= 0:
             raise ValueError("top_k must be greater than 0")
 
-        if not 0.0 <= self.min_score <= 1.0:
-            raise ValueError("min_score must be between 0.0 and 1.0")
+        if not -1.0 <= self.min_score <= 1.0:
+            raise ValueError("min_score must be between -1.0 and 1.0")
 
         if not self.embedding_model.strip():
             raise ValueError("embedding_model cannot be empty")
