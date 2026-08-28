@@ -55,6 +55,7 @@ def semantic_retriever(
     return VectorStoreRetriever(
         embedding_provider=embedding_provider,
         vector_store=vector_store,
+        min_score=0.2,
     )
 
 
@@ -80,3 +81,14 @@ def test_should_retrieve_deployment_related_document(
 
     assert len(results) == 1
     assert "Docker" in results[0].document.content
+
+
+def test_should_filter_irrelevant_results_below_min_score(
+    semantic_retriever: VectorStoreRetriever,
+) -> None:
+    results = semantic_retriever.retrieve(
+        "What is the weather in Hanoi today?",
+        limit=3,
+    )
+
+    assert results == []
