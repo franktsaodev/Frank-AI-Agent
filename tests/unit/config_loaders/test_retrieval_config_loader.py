@@ -30,6 +30,10 @@ def test_load_should_use_default_values(
         raising=False,
     )
     monkeypatch.delenv(
+        "RETRIEVAL_MIN_SCORE",
+        raising=False,
+    )
+    monkeypatch.delenv(
         "RETRIEVAL_EMBEDDING_MODEL",
         raising=False,
     )
@@ -45,6 +49,7 @@ def test_load_should_use_default_values(
     assert config.chunk_size == 500
     assert config.chunk_overlap == 50
     assert config.top_k == 5
+    assert config.min_score == 0.0
     assert config.embedding_model == "sentence-transformers/all-MiniLM-L6-v2"
     assert config.trigger_keywords == frozenset(
         {
@@ -85,6 +90,10 @@ def test_load_should_read_environment_values(
         "3",
     )
     monkeypatch.setenv(
+        "RETRIEVAL_MIN_SCORE",
+        "0.65",
+    )
+    monkeypatch.setenv(
         "RETRIEVAL_EMBEDDING_MODEL",
         "custom-model",
     )
@@ -100,6 +109,7 @@ def test_load_should_read_environment_values(
     assert config.chunk_size == 800
     assert config.chunk_overlap == 100
     assert config.top_k == 3
+    assert config.min_score == 0.65
     assert config.embedding_model == "custom-model"
     assert config.trigger_keywords == frozenset(
         {

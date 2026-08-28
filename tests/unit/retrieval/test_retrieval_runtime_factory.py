@@ -10,6 +10,9 @@ from app.retrieval.policies.keyword_retrieval_policy import (
 from app.retrieval.policies.never_retrieve_policy import NeverRetrievePolicy
 from app.retrieval.retrieval_runtime_factory import RetrievalRuntimeFactory
 from app.retrieval.retrievers.no_op_retriever import NoOpRetriever
+from app.retrieval.retrievers.vector_store_retriever import (
+    VectorStoreRetriever,
+)
 
 
 def create_retrieval_config(
@@ -19,6 +22,7 @@ def create_retrieval_config(
     chunk_size: int = 500,
     chunk_overlap: int = 50,
     top_k: int = 5,
+    min_score: float = 0.0,
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
     trigger_keywords: frozenset[str] = frozenset(
         {
@@ -34,6 +38,7 @@ def create_retrieval_config(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
         top_k=top_k,
+        min_score=min_score,
         embedding_model=embedding_model,
         trigger_keywords=trigger_keywords,
     )
@@ -138,3 +143,28 @@ def test_create_should_use_keyword_retrieval_policy_when_enabled(
     assert runtime.retrieval_policy.should_retrieve("How do sessions expire?")
 
     assert not runtime.retrieval_policy.should_retrieve("Hello, how are you?")
+
+
+def test_create_should_pass_min_score_to_vector_store_retriever(
+    tmp_path: Path,
+) -> None:
+    knowledge_file = tmp_path / "knowledge.txt"
+    knowledge_file.write_text(
+        "Frank AI Agent retrieval documentation.",
+        encoding="utf-8",
+    )
+
+    factory = RetrievalRuntimeFactory()
+
+    runtime = factory.create(
+        create_retrieval_config(
+            knowledge_path=str(knowledge_file),
+            min_score=0.65,
+        )
+    )
+
+    assert isinstance(
+        runtime.retriever,
+        VectorStoreRetriever,
+    )
+    assert runtime.retriever._min_score == 0.65

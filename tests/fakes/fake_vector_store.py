@@ -3,11 +3,15 @@ from app.retrieval.vector_stores.search_result import SearchResult
 
 
 class FakeVectorStore:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        search_results: list[SearchResult] | None = None,
+    ) -> None:
         self.last_query_embedding: list[float] | None = None
         self.last_limit: int | None = None
         self.added_documents: list[Document] = []
         self.added_embeddings: list[list[float]] = []
+        self.search_results = list(search_results) if search_results is not None else []
 
     def add(
         self,
@@ -26,4 +30,4 @@ class FakeVectorStore:
         self.last_query_embedding = query_embedding
         self.last_limit = limit
 
-        return []
+        return list(self.search_results)

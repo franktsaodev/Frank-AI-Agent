@@ -42,6 +42,10 @@ class RetrievalConfigLoader:
                 name="RETRIEVAL_TOP_K",
                 default=5,
             ),
+            min_score=self._environment_reader.get_float(
+                name="RETRIEVAL_MIN_SCORE",
+                default=0.0,
+            ),
             embedding_model=self._environment_reader.get_str(
                 name="RETRIEVAL_EMBEDDING_MODEL",
                 default="sentence-transformers/all-MiniLM-L6-v2",

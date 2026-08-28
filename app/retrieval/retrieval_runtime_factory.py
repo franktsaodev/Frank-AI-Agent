@@ -102,12 +102,14 @@ class RetrievalRuntimeFactory:
             embedding_provider=embedding_provider,
             vector_store=vector_store,
             default_limit=config.top_k,
+            min_score=config.min_score,
         )
 
         logger.info(
-            "Retrieval runtime ready with chunks=%d top_k=%d",
+            "Retrieval runtime ready with chunks=%d top_k=%d min_score=%.2f",
             indexed_chunk_count,
             config.top_k,
+            config.min_score,
         )
 
         return RetrievalRuntime(
