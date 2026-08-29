@@ -7,6 +7,25 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Added configurable runtime log levels.
+- Added keyword-based conditional retrieval.
+- Added source attribution with PDF page metadata.
+- Added configurable minimum cosine similarity filtering for retrieval results.
+- Added recursive boundary-aware text splitting with paragraph, newline, word, and character fallbacks.
+
+### Changed
+
+- Changed Docker Compose to persist the Hugging Face model cache.
+- Changed the default retrieval knowledge path to the knowledge directory.
+- Changed the retrieval runtime to use recursive boundary-aware text splitting while retaining fixed-size splitter support.
+
+### Fixed
+
+- Updated the default Groq model configuration.
+- Aligned retrieval threshold validation with the cosine similarity range.
+
 ## [1.1.0] - 2026-08-13
 
 ### Added

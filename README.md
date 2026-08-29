@@ -76,7 +76,8 @@ The retrieval system provides:
 
 - Recursive knowledge directory loading
 - TXT, Markdown, and text-based PDF document support
-- Fixed-size text chunking with configurable overlap
+- Recursive boundary-aware text chunking with paragraph, newline, word, and character fallbacks
+- Configurable fixed-size text chunking remains available
 - Local sentence-transformer embeddings
 - In-memory vector search using cosine similarity
 - Source metadata preservation
@@ -1115,10 +1116,15 @@ tool-enabled AI agent applications.
 - [x] Semantic knowledge retrieval
 - [x] Source metadata preservation
 - [x] Retrieval policy abstraction
-- [x] Keyword-based conditional retrieval
 - [x] ChatAgent retrieval integration
 - [x] Configurable retrieval runtime
+
+### v1.2 — Retrieval Quality and Reliability
+
+- [x] Keyword-based conditional retrieval
 - [x] Source attribution with PDF page metadata
+- [x] Minimum similarity threshold
+- [x] Recursive boundary-aware text chunking
 
 ### Future Development
 

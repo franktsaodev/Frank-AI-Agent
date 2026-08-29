@@ -8,7 +8,9 @@ from app.retrieval.embeddings.sentence_transformer_embedding_provider import (
 from app.retrieval.indexing.knowledge_indexer import KnowledgeIndexer
 from app.retrieval.loaders.text_file_loader import TextFileLoader
 from app.retrieval.retrievers.vector_store_retriever import VectorStoreRetriever
-from app.retrieval.splitters.fixed_size_text_splitter import FixedSizeTextSplitter
+from app.retrieval.splitters.recursive_text_splitter import (
+    RecursiveTextSplitter,
+)
 from app.retrieval.vector_stores.in_memory_vector_store import InMemoryVectorStore
 
 
@@ -38,7 +40,7 @@ def semantic_retriever(
     vector_store = InMemoryVectorStore()
 
     indexer = KnowledgeIndexer(
-        splitter=FixedSizeTextSplitter(
+        splitter=RecursiveTextSplitter(
             chunk_size=120,
             chunk_overlap=20,
         ),

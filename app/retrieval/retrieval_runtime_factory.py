@@ -19,8 +19,8 @@ from app.retrieval.retrievers.retriever import Retriever
 from app.retrieval.retrievers.vector_store_retriever import (
     VectorStoreRetriever,
 )
-from app.retrieval.splitters.fixed_size_text_splitter import (
-    FixedSizeTextSplitter,
+from app.retrieval.splitters.recursive_text_splitter import (
+    RecursiveTextSplitter,
 )
 from app.retrieval.vector_stores.in_memory_vector_store import (
     InMemoryVectorStore,
@@ -68,7 +68,7 @@ class RetrievalRuntimeFactory:
         vector_store = InMemoryVectorStore()
 
         indexer = KnowledgeIndexer(
-            splitter=FixedSizeTextSplitter(
+            splitter=RecursiveTextSplitter(
                 chunk_size=config.chunk_size,
                 chunk_overlap=config.chunk_overlap,
             ),
