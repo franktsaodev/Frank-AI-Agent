@@ -12,6 +12,7 @@ Semantic Versioning.
 - Added configurable runtime log levels.
 - Added keyword-based conditional retrieval.
 - Added source attribution with PDF page metadata.
+- Added trusted citation tokens and response validation to prevent hallucinated source names and page numbers.
 - Added configurable minimum cosine similarity filtering for retrieval results.
 - Added recursive boundary-aware text splitting with paragraph, newline, word, and character fallbacks.
 

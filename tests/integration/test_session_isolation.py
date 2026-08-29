@@ -19,6 +19,7 @@ from app.policies.simple_memory_policy import (
 )
 from app.prompts.prompt_composer import PromptComposer
 from app.prompts.prompt_template import PromptTemplate
+from app.retrieval.citations.citation_guard import CitationGuard
 from app.retrieval.policies.never_retrieve_policy import NeverRetrievePolicy
 from app.session.in_memory_session_manager import (
     InMemorySessionManager,
@@ -58,6 +59,7 @@ def create_session_manager() -> InMemorySessionManager:
             ),
         ),
         prompt_composer=PromptComposer(),
+        citation_guard=CitationGuard(),
         retriever=FakeRetriever(),
         retrieval_policy=NeverRetrievePolicy(),
     )

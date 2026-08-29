@@ -11,6 +11,7 @@ from app.models.client_response import ClientResponse
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
 from app.prompts.prompt_composer import PromptComposer
 from app.prompts.prompt_template import PromptTemplate
+from app.retrieval.citations.citation_guard import CitationGuard
 from app.retrieval.embeddings.sentence_transformer_embedding_provider import (
     SentenceTransformerEmbeddingProvider,
 )
@@ -38,6 +39,7 @@ from tests.fakes.fake_retriever import FakeRetriever
 def create_test_agent(
     *,
     agent_runner: FakeAgentRunner,
+    citation_guard: CitationGuard,
     retriever: Retriever,
     retrieval_policy: RetrievalPolicy,
 ) -> ChatAgent:
@@ -66,6 +68,7 @@ def create_test_agent(
             ),
         ),
         prompt_composer=PromptComposer(),
+        citation_guard=citation_guard,
         retriever=retriever,
         retrieval_policy=retrieval_policy,
     )
@@ -113,28 +116,35 @@ def test_chat_should_include_retrieved_knowledge_in_agent_runner_messages(
 
     agent_runner = FakeAgentRunner(
         response=ClientResponse(
-            content="Sessions use sliding expiration.",
+            content=("Sessions use sliding expiration. [source:1]"),
         ),
     )
 
+    citation_guard = CitationGuard()
+
     agent = create_test_agent(
         agent_runner=agent_runner,
+        citation_guard=citation_guard,
         retriever=retriever,
         retrieval_policy=AlwaysRetrievePolicy(),
     )
 
-    agent.chat("How do sessions expire?")
+    response = agent.chat("How do sessions expire?")
 
     assert len(agent_runner.received_message_batches) == 1
 
     messages = agent_runner.received_message_batches[0]
-
     system_message = messages[0]
 
     assert system_message.content is not None
     assert "Retrieved knowledge:" in system_message.content
     assert "sliding expiration" in system_message.content
     assert "knowledge.txt" in system_message.content
+    assert "[source:1] Source:" in system_message.content
+
+    assert "[source:1]" not in response
+    assert "[Source:" in response
+    assert "knowledge.txt" in response
 
 
 def test_chat_should_skip_retrieval_when_keyword_does_not_match() -> None:
@@ -148,6 +158,7 @@ def test_chat_should_skip_retrieval_when_keyword_does_not_match() -> None:
 
     agent = create_test_agent(
         agent_runner=agent_runner,
+        citation_guard=CitationGuard(),
         retriever=retriever,
         retrieval_policy=KeywordRetrievalPolicy(
             keywords={"session"},
@@ -170,6 +181,7 @@ def test_chat_should_retrieve_when_keyword_matches() -> None:
 
     agent = create_test_agent(
         agent_runner=agent_runner,
+        citation_guard=CitationGuard(),
         retriever=retriever,
         retrieval_policy=KeywordRetrievalPolicy(
             keywords={"session"},

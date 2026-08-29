@@ -29,6 +29,8 @@ from app.prompts.prompt_composer_protocol import (
     PromptComposerProtocol,
 )
 from app.prompts.prompt_template import PromptTemplate
+from app.retrieval.citations.citation_guard import CitationGuard
+from app.retrieval.citations.citation_guard_protocol import CitationGuardProtocol
 from app.retrieval.policies.never_retrieve_policy import NeverRetrievePolicy
 from app.retrieval.policies.retrieval_policy import RetrievalPolicy
 from app.retrieval.retrievers.retriever import Retriever
@@ -54,6 +56,7 @@ class ChatAgentFactory(Protocol):
         fact_extractor: BaseFactExtractor | None = None,
         memory_policy: BaseMemoryPolicy | None = None,
         prompt_composer: PromptComposerProtocol | None = None,
+        citation_guard: CitationGuardProtocol | None = None,
         retriever: Retriever | None = None,
         retrieval_policy: RetrievalPolicy | None = None,
     ) -> ChatAgent: ...
@@ -72,6 +75,7 @@ def create_agent(
         fact_extractor: BaseFactExtractor | None = None,
         memory_policy: BaseMemoryPolicy | None = None,
         prompt_composer: PromptComposerProtocol | None = None,
+        citation_guard: CitationGuardProtocol | None = None,
         retriever: Retriever | None = None,
         retrieval_policy: RetrievalPolicy | None = None,
     ) -> ChatAgent:
@@ -137,6 +141,10 @@ def create_agent(
             retrieval_policy if retrieval_policy is not None else NeverRetrievePolicy()
         )
 
+        actual_citation_guard = (
+            citation_guard if citation_guard is not None else CitationGuard()
+        )
+
         return ChatAgent(
             prompt_template=PromptTemplate(
                 config=PromptConfig(
@@ -150,6 +158,7 @@ def create_agent(
             fact_extractor=actual_fact_extractor,
             memory_policy=actual_memory_policy,
             prompt_composer=actual_prompt_composer,
+            citation_guard=actual_citation_guard,
             retriever=actual_retriever,
             retrieval_policy=actual_retrieval_policy,
         )

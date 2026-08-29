@@ -1,0 +1,2 @@
+class InvalidCitationError(ValueError):
+    pass

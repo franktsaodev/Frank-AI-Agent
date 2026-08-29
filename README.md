@@ -431,24 +431,44 @@ continue through the standard agent flow.
 Keyword-based routing is intentionally simple and may miss semantically related
 queries that do not contain one of the configured trigger keywords.
 
-#### Source Attribution
+#### Source Attribution and Citation Guard
 
 Retrieved knowledge preserves source metadata throughout the retrieval pipeline.
 
 For PDF documents, page metadata is also preserved so that generated responses
 can reference both the source document and page number.
 
-When retrieved knowledge includes source metadata, the prompt instructs the
-language model to cite only the provided source and page information and not to
-invent citations.
+Each retrieved context with source metadata receives a trusted citation token
+such as `[source:1]`. The language model is instructed to cite retrieved
+knowledge using only these tokens instead of generating source names or page
+numbers directly.
 
-Example source metadata presented to the model:
+Example context presented to the model:
+
+```text
+[source:1] Source: knowledge/architecture.pdf (page 1)
+The application layer uses FastAPI.
+```
+
+Example model response:
+
+```text
+The application layer uses FastAPI. [source:1]
+```
+
+Before the response is returned or stored in conversation memory,
+`CitationGuard` replaces each valid token with source metadata from the
+retrieved context:
 
 ```text
 The application layer uses FastAPI.
-
-Source: knowledge/architecture.pdf (page 1)
+[Source: knowledge/architecture.pdf (page 1)]
 ```
+
+Unknown citation tokens, malformed tokens, and direct source labels are
+rejected. When citation validation fails, the unverified response is discarded
+and replaced with a safe response. Only the safe response is stored in
+conversation memory.
 
 Text and Markdown documents include the source path without a page number.
 
@@ -1123,6 +1143,7 @@ tool-enabled AI agent applications.
 
 - [x] Keyword-based conditional retrieval
 - [x] Source attribution with PDF page metadata
+- [x] Trusted citation token validation and hallucinated citation guard
 - [x] Minimum similarity threshold
 - [x] Recursive boundary-aware text chunking
 

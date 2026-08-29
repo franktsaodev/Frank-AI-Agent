@@ -50,6 +50,7 @@ from app.memory.sliding_window_memory import SlidingWindowMemory
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
 from app.prompts.prompt_composer import PromptComposer
 from app.prompts.prompt_template import PromptTemplate
+from app.retrieval.citations.citation_guard import CitationGuard
 from app.retrieval.retrieval_runtime_factory import RetrievalRuntimeFactory
 from app.tools.plugins.tool_plugin_factory import ToolPluginFactory
 from app.tools.plugins.tool_plugin_loader import ToolPluginLoader
@@ -143,6 +144,7 @@ def create_chat_agent_factory() -> ChatAgentFactory:
         fact_extractor=RegexFactExtractor(),
         memory_policy=memory_policy,
         prompt_composer=PromptComposer(),
+        citation_guard=CitationGuard(),
         retriever=retrieval_runtime.retriever,
         retrieval_policy=retrieval_runtime.retrieval_policy,
     )

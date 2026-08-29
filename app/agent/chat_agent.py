@@ -15,6 +15,12 @@ from app.prompts.base_prompt_template import BasePromptTemplate
 from app.prompts.prompt_composer_protocol import (
     PromptComposerProtocol,
 )
+from app.retrieval.citations.citation_guard_protocol import (
+    CitationGuardProtocol,
+)
+from app.retrieval.citations.invalid_citation_error import (
+    InvalidCitationError,
+)
 from app.retrieval.policies.retrieval_policy import RetrievalPolicy
 from app.retrieval.retrieved_context import RetrievedContext
 from app.retrieval.retrievers.retriever import Retriever
@@ -33,6 +39,7 @@ class ChatAgent:
         fact_extractor: BaseFactExtractor,
         memory_policy: BaseMemoryPolicy,
         prompt_composer: PromptComposerProtocol,
+        citation_guard: CitationGuardProtocol,
         retriever: Retriever,
         retrieval_policy: RetrievalPolicy,
     ) -> None:
@@ -47,7 +54,7 @@ class ChatAgent:
         self._prompt_composer = prompt_composer
         self._retriever = retriever
         self._retrieval_policy = retrieval_policy
-
+        self._citation_guard = citation_guard
         rendered_prompt = self._prompt_template.render()
 
         if not rendered_prompt.strip():
@@ -105,9 +112,24 @@ class ChatAgent:
         if response.content is None:
             raise ValueError("Client response does not contain text content.")
 
+        try:
+            guarded_response = self._citation_guard.apply(
+                response.content,
+                retrieved_contexts,
+            )
+        except InvalidCitationError as error:
+            logger.warning(
+                "Rejected response with invalid citation: %s",
+                error,
+            )
+            guarded_response = (
+                "I could not provide a response because its citations "
+                "could not be verified."
+            )
+
         assistant_message = Message(
             role=MessageRole.ASSISTANT,
-            content=response.content,
+            content=guarded_response,
         )
 
         self._memory.add_turn(
@@ -117,7 +139,7 @@ class ChatAgent:
 
         logger.info("Chat request completed")
 
-        return response.content
+        return guarded_response
 
     def remember_fact(
         self,

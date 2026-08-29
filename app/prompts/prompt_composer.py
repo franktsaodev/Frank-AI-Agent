@@ -64,16 +64,23 @@ class PromptComposer:
 
         if any(context.source is not None for context in contexts):
             parts.append(
-                "When using the retrieved knowledge, cite the provided source "
-                "in your answer. Use only the source and page information shown "
-                "below. Do not invent source names or page numbers."
+                "When using the retrieved knowledge, cite it with the "
+                "corresponding [source:N] token. Use only the citation tokens "
+                "shown below. Do not invent citation tokens, source names, "
+                "or page numbers."
             )
 
+        citation_number = 1
+
         for context in contexts:
-            source_label = self._format_source(context)
+            source_label = self._format_source(
+                context,
+                citation_number=citation_number,
+            )
 
             if source_label is not None:
                 parts.append(source_label)
+                citation_number += 1
 
             parts.append(context.content)
 
@@ -82,11 +89,15 @@ class PromptComposer:
     def _format_source(
         self,
         context: RetrievedContext,
+        *,
+        citation_number: int,
     ) -> str | None:
         if context.source is None:
             return None
 
-        if context.page is not None:
-            return f"Source: {context.source} (page {context.page})"
+        citation_token = f"[source:{citation_number}]"
 
-        return f"Source: {context.source}"
+        if context.page is not None:
+            return f"{citation_token} Source: {context.source} (page {context.page})"
+
+        return f"{citation_token} Source: {context.source}"

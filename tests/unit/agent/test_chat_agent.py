@@ -18,6 +18,8 @@ from app.policies.simple_memory_policy import SimpleMemoryPolicy
 from app.prompts.prompt_composer import PromptComposer
 from app.prompts.prompt_composer_protocol import PromptComposerProtocol
 from app.prompts.prompt_template import PromptTemplate
+from app.retrieval.citations.citation_guard import CitationGuard
+from app.retrieval.citations.citation_guard_protocol import CitationGuardProtocol
 from app.retrieval.document import Document
 from app.retrieval.policies.always_retrieve_policy import AlwaysRetrievePolicy
 from app.retrieval.policies.never_retrieve_policy import NeverRetrievePolicy
@@ -37,6 +39,7 @@ class ChatAgentFactory(Protocol):
         agent_runner: FakeAgentRunner | None = None,
         memory: SlidingWindowMemory | None = None,
         prompt_composer: PromptComposerProtocol | None = None,
+        citation_guard: CitationGuardProtocol | None = None,
         retriever: Retriever | None = None,
         retrieval_policy: RetrievalPolicy | None = None,
     ) -> ChatAgent: ...
@@ -49,6 +52,7 @@ def create_agent() -> ChatAgentFactory:
         agent_runner: FakeAgentRunner | None = None,
         memory: SlidingWindowMemory | None = None,
         prompt_composer: PromptComposerProtocol | None = None,
+        citation_guard: CitationGuardProtocol | None = None,
         retriever: Retriever | None = None,
         retrieval_policy: RetrievalPolicy | None = None,
     ) -> ChatAgent:
@@ -66,6 +70,10 @@ def create_agent() -> ChatAgentFactory:
 
         actual_prompt_composer = (
             prompt_composer if prompt_composer is not None else PromptComposer()
+        )
+
+        actual_citation_guard = (
+            citation_guard if citation_guard is not None else CitationGuard()
         )
 
         return ChatAgent(
@@ -91,6 +99,7 @@ def create_agent() -> ChatAgentFactory:
                 ),
             ),
             prompt_composer=actual_prompt_composer,
+            citation_guard=actual_citation_guard,
             retriever=retriever or FakeRetriever(),
             retrieval_policy=(
                 retrieval_policy
@@ -341,3 +350,79 @@ def test_chat_passes_retrieved_contexts_to_prompt_composer(
             page=None,
         ),
     ]
+
+
+def test_chat_should_replace_citation_token_with_trusted_source(
+    create_agent: ChatAgentFactory,
+) -> None:
+    agent_runner = FakeAgentRunner(
+        response=ClientResponse(
+            content=("Sessions use sliding expiration. [source:1]"),
+        ),
+    )
+    retriever = FakeRetriever(
+        results=[
+            SearchResult(
+                document=Document(
+                    content="Sessions use sliding expiration.",
+                    metadata={
+                        "source": "session.pdf",
+                        "page": 2,
+                    },
+                ),
+                score=0.9,
+            ),
+        ],
+    )
+    agent = create_agent(
+        agent_runner=agent_runner,
+        retriever=retriever,
+        retrieval_policy=AlwaysRetrievePolicy(),
+    )
+
+    result = agent.chat("How do sessions expire?")
+
+    expected_response = (
+        "Sessions use sliding expiration. [Source: session.pdf (page 2)]"
+    )
+
+    assert result == expected_response
+    assert agent.get_history()[-1].content == expected_response
+
+
+def test_chat_should_use_safe_response_for_unknown_citation_token(
+    create_agent: ChatAgentFactory,
+) -> None:
+    agent_runner = FakeAgentRunner(
+        response=ClientResponse(
+            content=("Sessions use sliding expiration. [source:2]"),
+        ),
+    )
+    retriever = FakeRetriever(
+        results=[
+            SearchResult(
+                document=Document(
+                    content="Sessions use sliding expiration.",
+                    metadata={
+                        "source": "session.pdf",
+                        "page": 2,
+                    },
+                ),
+                score=0.9,
+            ),
+        ],
+    )
+    agent = create_agent(
+        agent_runner=agent_runner,
+        retriever=retriever,
+        retrieval_policy=AlwaysRetrievePolicy(),
+    )
+
+    result = agent.chat("How do sessions expire?")
+
+    expected_response = (
+        "I could not provide a response because its citations could not be verified."
+    )
+
+    assert result == expected_response
+    assert agent.get_history()[-1].content == expected_response
