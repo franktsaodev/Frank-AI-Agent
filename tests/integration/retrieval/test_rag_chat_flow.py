@@ -39,7 +39,6 @@ from tests.fakes.fake_retriever import FakeRetriever
 def create_test_agent(
     *,
     agent_runner: FakeAgentRunner,
-    citation_guard: CitationGuard,
     retriever: Retriever,
     retrieval_policy: RetrievalPolicy,
 ) -> ChatAgent:
@@ -68,7 +67,7 @@ def create_test_agent(
             ),
         ),
         prompt_composer=PromptComposer(),
-        citation_guard=citation_guard,
+        citation_guard=CitationGuard(),
         retriever=retriever,
         retrieval_policy=retrieval_policy,
     )
@@ -120,11 +119,8 @@ def test_chat_should_include_retrieved_knowledge_in_agent_runner_messages(
         ),
     )
 
-    citation_guard = CitationGuard()
-
     agent = create_test_agent(
         agent_runner=agent_runner,
-        citation_guard=citation_guard,
         retriever=retriever,
         retrieval_policy=AlwaysRetrievePolicy(),
     )
@@ -158,7 +154,6 @@ def test_chat_should_skip_retrieval_when_keyword_does_not_match() -> None:
 
     agent = create_test_agent(
         agent_runner=agent_runner,
-        citation_guard=CitationGuard(),
         retriever=retriever,
         retrieval_policy=KeywordRetrievalPolicy(
             keywords={"session"},
@@ -181,7 +176,6 @@ def test_chat_should_retrieve_when_keyword_matches() -> None:
 
     agent = create_test_agent(
         agent_runner=agent_runner,
-        citation_guard=CitationGuard(),
         retriever=retriever,
         retrieval_policy=KeywordRetrievalPolicy(
             keywords={"session"},
@@ -192,3 +186,71 @@ def test_chat_should_retrieve_when_keyword_matches() -> None:
 
     assert retriever.call_count == 1
     assert retriever.last_query == "How do sessions expire?"
+
+
+def test_chat_should_use_grounded_fallback_when_results_are_below_threshold(
+    tmp_path: Path,
+) -> None:
+    knowledge_file = tmp_path / "knowledge.txt"
+
+    knowledge_file.write_text(
+        (
+            "Session Management\n"
+            "Frank AI Agent sessions use sliding expiration. "
+            "Each session has a configurable time-to-live value. "
+            "Expired sessions are removed from the session manager.\n\n"
+            "Deployment\n"
+            "Frank AI Agent uses Docker to package and deploy "
+            "the application."
+        ),
+        encoding="utf-8",
+    )
+
+    embedding_provider = SentenceTransformerEmbeddingProvider()
+    vector_store = InMemoryVectorStore()
+
+    indexer = KnowledgeIndexer(
+        splitter=FixedSizeTextSplitter(
+            chunk_size=120,
+            chunk_overlap=20,
+        ),
+        embedding_provider=embedding_provider,
+        vector_store=vector_store,
+    )
+
+    indexer.index(
+        TextFileLoader(
+            knowledge_file,
+        )
+    )
+
+    retriever = VectorStoreRetriever(
+        embedding_provider=embedding_provider,
+        vector_store=vector_store,
+        min_score=0.2,
+    )
+
+    agent_runner = FakeAgentRunner(
+        response=ClientResponse(
+            content="Hallucinated weather answer.",
+        ),
+    )
+
+    agent = create_test_agent(
+        agent_runner=agent_runner,
+        retriever=retriever,
+        retrieval_policy=AlwaysRetrievePolicy(),
+    )
+
+    response = agent.chat(
+        "What is the weather in Hanoi today?",
+    )
+
+    expected_response = (
+        "I could not find enough information in the retrieved "
+        "knowledge to answer this question."
+    )
+
+    assert response == expected_response
+    assert agent_runner.received_message_batches == []
+    assert agent.get_history()[-1].content == expected_response

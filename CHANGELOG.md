@@ -15,6 +15,7 @@ Semantic Versioning.
 - Added trusted citation tokens and response validation to prevent hallucinated source names and page numbers.
 - Added configurable minimum cosine similarity filtering for retrieval results.
 - Added recursive boundary-aware text splitting with paragraph, newline, word, and character fallbacks.
+- Added a deterministic grounded fallback when triggered retrieval returns no usable context.
 
 ### Changed
 

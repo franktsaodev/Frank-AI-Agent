@@ -263,15 +263,23 @@ def test_should_not_retrieve_when_policy_returns_false(
     create_agent: ChatAgentFactory,
 ) -> None:
     retriever = FakeRetriever()
+    agent_runner = FakeAgentRunner(
+        response=ClientResponse(
+            content="General response.",
+        ),
+    )
 
     agent = create_agent(
+        agent_runner=agent_runner,
         retriever=retriever,
         retrieval_policy=NeverRetrievePolicy(),
     )
 
-    agent.chat("Hello")
+    result = agent.chat("Hello")
 
     assert retriever.call_count == 0
+    assert len(agent_runner.received_message_batches) == 1
+    assert result == "General response."
 
 
 def test_should_retrieve_when_policy_returns_true(
@@ -288,6 +296,37 @@ def test_should_retrieve_when_policy_returns_true(
 
     assert retriever.call_count == 1
     assert retriever.last_query == "What is the session TTL?"
+
+
+def test_chat_should_use_grounded_fallback_when_retrieval_returns_no_results(
+    create_agent: ChatAgentFactory,
+) -> None:
+    agent_runner = FakeAgentRunner(
+        response=ClientResponse(
+            content="Hallucinated answer.",
+        ),
+    )
+    retriever = FakeRetriever()
+
+    agent = create_agent(
+        agent_runner=agent_runner,
+        retriever=retriever,
+        retrieval_policy=AlwaysRetrievePolicy(),
+    )
+
+    result = agent.chat(
+        "What is the session TTL?",
+    )
+
+    expected_response = (
+        "I could not find enough information in the retrieved "
+        "knowledge to answer this question."
+    )
+
+    assert retriever.call_count == 1
+    assert agent_runner.received_message_batches == []
+    assert result == expected_response
+    assert agent.get_history()[-1].content == expected_response
 
 
 def test_chat_passes_retrieved_contexts_to_prompt_composer(

@@ -28,6 +28,11 @@ from app.types.json_types import JsonValue
 
 logger = logging.getLogger(__name__)
 
+_GROUNDED_FALLBACK_RESPONSE = (
+    "I could not find enough information in the retrieved "
+    "knowledge to answer this question."
+)
+
 
 class ChatAgent:
     def __init__(
@@ -88,9 +93,22 @@ class ChatAgent:
 
         self._remember_extracted_facts(extracted_facts)
 
+        retrieval_attempted = self._retrieval_policy.should_retrieve(message)
+
+        retrieved_contexts = (
+            self._retrieve_contexts(message) if retrieval_attempted else []
+        )
+
+        if retrieval_attempted and not retrieved_contexts:
+            logger.info("Using grounded fallback because retrieval returned no results")
+
+            return self._complete_turn(
+                user_message=user_message,
+                response_content=_GROUNDED_FALLBACK_RESPONSE,
+            )
+
         history_messages = self._memory.get_messages()
         known_facts = self._fact_memory.get_all()
-        retrieved_contexts = self._retrieve_contexts(message)
 
         composed_messages = self._prompt_composer.compose(
             system_message=self.system_message,
@@ -127,19 +145,10 @@ class ChatAgent:
                 "could not be verified."
             )
 
-        assistant_message = Message(
-            role=MessageRole.ASSISTANT,
-            content=guarded_response,
-        )
-
-        self._memory.add_turn(
+        return self._complete_turn(
             user_message=user_message,
-            assistant_message=assistant_message,
+            response_content=guarded_response,
         )
-
-        logger.info("Chat request completed")
-
-        return guarded_response
 
     def remember_fact(
         self,
@@ -169,6 +178,26 @@ class ChatAgent:
         self,
     ) -> None:
         self._memory.clear()
+
+    def _complete_turn(
+        self,
+        *,
+        user_message: Message,
+        response_content: str,
+    ) -> str:
+        assistant_message = Message(
+            role=MessageRole.ASSISTANT,
+            content=response_content,
+        )
+
+        self._memory.add_turn(
+            user_message=user_message,
+            assistant_message=assistant_message,
+        )
+
+        logger.info("Chat request completed")
+
+        return response_content
 
     def _remember_extracted_facts(
         self,
@@ -207,9 +236,6 @@ class ChatAgent:
         self,
         user_input: str,
     ) -> list[RetrievedContext]:
-        if not self._retrieval_policy.should_retrieve(user_input):
-            return []
-
         results = self._retriever.retrieve(user_input)
 
         return [

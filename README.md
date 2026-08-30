@@ -472,6 +472,21 @@ conversation memory.
 
 Text and Markdown documents include the source path without a page number.
 
+#### Grounded Retrieval Fallback
+
+When a retrieval policy triggers knowledge retrieval but the retriever returns
+no usable context, such as when no results satisfy the configured similarity
+threshold, `ChatAgent` returns a deterministic grounded fallback without
+invoking the language model.
+
+This prevents the model from answering document-specific questions when no
+trusted retrieval evidence is available. The fallback response is stored in
+conversation memory so that the API response and session history remain
+consistent.
+
+Queries that do not trigger retrieval continue through the standard agent flow
+and can still use general conversation and tool calling.
+
 ## Tech Stack
 
 | Category | Technology |
@@ -1145,6 +1160,7 @@ tool-enabled AI agent applications.
 - [x] Source attribution with PDF page metadata
 - [x] Trusted citation token validation and hallucinated citation guard
 - [x] Minimum similarity threshold
+- [x] Grounded fallback for empty retrieval results
 - [x] Recursive boundary-aware text chunking
 
 ### Future Development
