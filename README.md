@@ -487,6 +487,18 @@ consistent.
 Queries that do not trigger retrieval continue through the standard agent flow
 and can still use general conversation and tool calling.
 
+#### Retrieval Quality Evaluation
+
+The semantic retrieval integration suite includes a fixed evaluation baseline
+for relevant, paraphrased, and irrelevant queries.
+
+Relevant queries must achieve 100% Recall@3 by returning the expected evidence
+within the top three results. Irrelevant queries must achieve a 100% rejection
+rate after minimum similarity filtering.
+
+This quality gate detects regressions when changing the embedding model,
+similarity threshold, chunking strategy, or retrieval implementation.
+
 ## Tech Stack
 
 | Category | Technology |
@@ -1162,6 +1174,7 @@ tool-enabled AI agent applications.
 - [x] Minimum similarity threshold
 - [x] Grounded fallback for empty retrieval results
 - [x] Recursive boundary-aware text chunking
+- [x] Retrieval quality evaluation with Recall@3 and irrelevant rejection rate
 
 ### Future Development
 

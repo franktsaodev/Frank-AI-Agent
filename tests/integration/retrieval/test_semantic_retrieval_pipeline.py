@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from app.retrieval.embeddings.sentence_transformer_embedding_provider import (
@@ -14,10 +12,13 @@ from app.retrieval.splitters.recursive_text_splitter import (
 from app.retrieval.vector_stores.in_memory_vector_store import InMemoryVectorStore
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def semantic_retriever(
-    tmp_path: Path,
+    tmp_path_factory: pytest.TempPathFactory,
 ) -> VectorStoreRetriever:
+    tmp_path = tmp_path_factory.mktemp(
+        "semantic_retrieval",
+    )
     knowledge_file = tmp_path / "knowledge.txt"
 
     knowledge_file.write_text(
@@ -94,3 +95,75 @@ def test_should_filter_irrelevant_results_below_min_score(
     )
 
     assert results == []
+
+
+def test_should_meet_retrieval_quality_baseline(
+    semantic_retriever: VectorStoreRetriever,
+) -> None:
+    relevant_cases = [
+        (
+            "How do sessions expire?",
+            "sliding expiration",
+        ),
+        (
+            "How is the application deployed?",
+            "Docker",
+        ),
+        (
+            "What kinds of memory does the agent support?",
+            "conversation memory",
+        ),
+        (
+            "How does the system remove inactive conversations?",
+            "Expired sessions are removed",
+        ),
+        (
+            "How does the agent remember user information?",
+            "structured fact memory",
+        ),
+    ]
+
+    irrelevant_queries = [
+        "What is the weather in Hanoi today?",
+        "Which stock should I buy?",
+        "How do I cook pasta?",
+    ]
+
+    missed_relevant_queries: list[str] = []
+
+    for query, expected_content in relevant_cases:
+        results = semantic_retriever.retrieve(
+            query,
+            limit=3,
+        )
+
+        if not any(expected_content in result.document.content for result in results):
+            missed_relevant_queries.append(query)
+
+    false_positive_queries: list[str] = []
+
+    for query in irrelevant_queries:
+        results = semantic_retriever.retrieve(
+            query,
+            limit=3,
+        )
+
+        if results:
+            false_positive_queries.append(query)
+
+    recall_at_3 = (len(relevant_cases) - len(missed_relevant_queries)) / len(
+        relevant_cases
+    )
+
+    irrelevant_rejection_rate = (
+        len(irrelevant_queries) - len(false_positive_queries)
+    ) / len(irrelevant_queries)
+
+    assert recall_at_3 == 1.0, (
+        f"Recall@3 dropped below baseline; missed_queries={missed_relevant_queries}"
+    )
+
+    assert irrelevant_rejection_rate == 1.0, (
+        "Irrelevant rejection rate dropped below baseline; "
+        f"false_positive_queries={false_positive_queries}"
+    )

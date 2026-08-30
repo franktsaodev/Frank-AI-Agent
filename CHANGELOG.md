@@ -16,6 +16,7 @@ Semantic Versioning.
 - Added configurable minimum cosine similarity filtering for retrieval results.
 - Added recursive boundary-aware text splitting with paragraph, newline, word, and character fallbacks.
 - Added a deterministic grounded fallback when triggered retrieval returns no usable context.
+- Added a semantic retrieval quality baseline covering Recall@3 and irrelevant-query rejection.
 
 ### Changed
 
