@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
 
-    image: frank-ai-agent:1.1.0
+    image: frank-ai-agent:1.2.0
     container_name: frank-ai-agent
 
     ports:
@@ -14,7 +14,7 @@ services:
       - .env
 
     environment:
-      APP_VERSION: "1.1.0"
+      APP_VERSION: "1.2.0"
 
     volumes:
       - huggingface-cache:/home/app/.cache/huggingface

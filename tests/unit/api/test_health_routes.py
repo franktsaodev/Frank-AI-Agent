@@ -20,7 +20,7 @@ def test_health_should_return_ok() -> None:
     assert response.json() == {
         "status": "ok",
         "service": "Frank AI Agent",
-        "version": "1.1.0",
+        "version": "1.2.0",
     }
 
 

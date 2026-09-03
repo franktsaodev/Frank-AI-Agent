@@ -23,7 +23,7 @@ def test_openapi_should_describe_application() -> None:
     schema = response.json()
 
     assert schema["info"]["title"] == ("Frank AI Agent API")
-    assert schema["info"]["version"] == "1.1.0"
+    assert schema["info"]["version"] == "1.2.0"
 
 
 def test_openapi_should_include_health_and_session_routes() -> None:
@@ -67,7 +67,7 @@ def test_health_should_return_ok() -> None:
     assert response.json() == {
         "status": "ok",
         "service": "Frank AI Agent",
-        "version": "1.1.0",
+        "version": "1.2.0",
     }
 
 
