@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { FormEvent, KeyboardEvent } from 'react'
 
-import { createSession, getHealth } from './api/client'
+import {
+  ApiError,
+  createSession,
+  getHealth,
+  sendChatMessage,
+} from './api/client'
 import type {
   CreateSessionResponse,
   HealthResponse,
@@ -23,10 +29,17 @@ const capabilities = [
 ] as const
 
 type ConnectionState = 'checking' | 'online' | 'offline'
+type ChatMessageRole = 'user' | 'assistant'
 
 interface InitializationResult {
   health: HealthResponse
   session: CreateSessionResponse
+}
+
+interface ChatMessage {
+  id: number
+  role: ChatMessageRole
+  content: string
 }
 
 let initializationPromise: Promise<InitializationResult> | null = null
@@ -57,6 +70,13 @@ function App() {
     useState<ConnectionState>('checking')
   const [health, setHealth] = useState<HealthResponse | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState('')
+  const [isSending, setIsSending] = useState(false)
+  const [chatError, setChatError] = useState<string | null>(null)
+
+  const nextMessageId = useRef(0)
+  const messagesEndRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     let active = true
@@ -82,6 +102,85 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: 'smooth',
+    })
+  }, [messages, isSending])
+
+  function createChatMessage(
+    role: ChatMessageRole,
+    content: string,
+  ): ChatMessage {
+    nextMessageId.current += 1
+
+    return {
+      id: nextMessageId.current,
+      role,
+      content,
+    }
+  }
+
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ): Promise<void> {
+    event.preventDefault()
+
+    const message = input.trim()
+
+    if (
+      !message ||
+      sessionId === null ||
+      isSending
+    ) {
+      return
+    }
+
+    setMessages((currentMessages) => [
+      ...currentMessages,
+      createChatMessage('user', message),
+    ])
+    setInput('')
+    setChatError(null)
+    setIsSending(true)
+
+    try {
+      const response = await sendChatMessage(
+        sessionId,
+        message,
+      )
+
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        createChatMessage(
+          'assistant',
+          response.response,
+        ),
+      ])
+    } catch (error: unknown) {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : 'Unable to reach the agent. Please try again.'
+
+      setChatError(message)
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  function handleComposerKeyDown(
+    event: KeyboardEvent<HTMLTextAreaElement>,
+  ): void {
+    if (
+      event.key === 'Enter' &&
+      !event.shiftKey
+    ) {
+      event.preventDefault()
+      event.currentTarget.form?.requestSubmit()
+    }
+  }
+
   const connectionTitle = {
     checking: 'Initializing agent',
     online: 'Agent ready',
@@ -94,6 +193,11 @@ function App() {
       : connectionState === 'offline'
         ? 'Start the FastAPI service'
         : 'Creating an isolated session'
+
+  const canSend =
+    sessionId !== null &&
+    input.trim().length > 0 &&
+    !isSending
 
   return (
     <div className="app-shell">
@@ -144,61 +248,148 @@ function App() {
         <header className="workspace-header">
           <div>
             <p className="workspace-eyebrow">Agent Playground</p>
-            <h2>New conversation</h2>
+            <h2 id="conversation-heading">New conversation</h2>
           </div>
 
           <span className="version-badge">
-            {health === null ? 'v1.3 in progress' : `API ${health.version}`}
+            {health === null
+              ? 'v1.3 in progress'
+              : `API ${health.version}`}
           </span>
         </header>
 
-        <section className="conversation" aria-labelledby="welcome-heading">
-          <div className="welcome">
-            <div className="welcome-icon" aria-hidden="true">
-              ✦
+        <section
+          className={
+            messages.length === 0
+              ? 'conversation'
+              : 'conversation conversation-active'
+          }
+          aria-labelledby="conversation-heading"
+        >
+          {messages.length === 0 ? (
+            <div className="welcome">
+              <div className="welcome-icon" aria-hidden="true">
+                ✦
+              </div>
+
+              <p className="welcome-eyebrow">Frank AI Agent</p>
+              <h2>What can I help you explore?</h2>
+
+              <p className="welcome-description">
+                Chat with a modular AI agent featuring retrieval, memory,
+                tool calling, and trusted source attribution.
+              </p>
+
+              <div className="capability-grid">
+                {capabilities.map((capability) => (
+                  <article
+                    className="capability-card"
+                    key={capability.title}
+                  >
+                    <h3>{capability.title}</h3>
+                    <p>{capability.description}</p>
+                  </article>
+                ))}
+              </div>
             </div>
+          ) : (
+            <div
+              className="chat-thread"
+              role="log"
+              aria-live="polite"
+              aria-busy={isSending}
+            >
+              {messages.map((message) => (
+                <article
+                  className={`message-row message-row-${message.role}`}
+                  key={message.id}
+                >
+                  <div className="message-avatar" aria-hidden="true">
+                    {message.role === 'user' ? 'You' : 'F'}
+                  </div>
 
-            <p className="welcome-eyebrow">Frank AI Agent</p>
-            <h2 id="welcome-heading">What can I help you explore?</h2>
+                  <div className="message-body">
+                    <p className="message-author">
+                      {message.role === 'user'
+                        ? 'You'
+                        : 'Frank AI Agent'}
+                    </p>
 
-            <p className="welcome-description">
-              Chat with a modular AI agent featuring retrieval, memory,
-              tool calling, and trusted source attribution.
-            </p>
-
-            <div className="capability-grid">
-              {capabilities.map((capability) => (
-                <article className="capability-card" key={capability.title}>
-                  <h3>{capability.title}</h3>
-                  <p>{capability.description}</p>
+                    <div className="message-content">
+                      {message.content}
+                    </div>
+                  </div>
                 </article>
               ))}
+
+              {isSending && (
+                <article className="message-row message-row-assistant">
+                  <div className="message-avatar" aria-hidden="true">
+                    F
+                  </div>
+
+                  <div className="message-body">
+                    <p className="message-author">
+                      Frank AI Agent
+                    </p>
+
+                    <div
+                      className="message-content typing-indicator"
+                      aria-label="Agent is thinking"
+                    >
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </div>
+                </article>
+              )}
+
+              <div ref={messagesEndRef} />
             </div>
-          </div>
+          )}
         </section>
 
         <footer className="composer">
-          <div className="composer-control">
+          <form
+            className="composer-control"
+            onSubmit={handleSubmit}
+          >
             <textarea
               aria-label="Chat message"
-              disabled
+              value={input}
+              onChange={(event) => {
+                setInput(event.target.value)
+              }}
+              onKeyDown={handleComposerKeyDown}
+              disabled={
+                sessionId === null ||
+                connectionState !== 'online' ||
+                isSending
+              }
+              maxLength={10_000}
               placeholder={
                 sessionId === null
                   ? 'Waiting for an agent session…'
-                  : 'Session ready — chat integration comes next…'
+                  : 'Message Frank AI Agent…'
               }
               rows={1}
             />
 
-            <button type="button" disabled>
-              Send
+            <button
+              type="submit"
+              disabled={!canSend}
+            >
+              {isSending ? 'Thinking…' : 'Send'}
             </button>
-          </div>
+          </form>
 
-          <p>
-            {sessionId === null
-              ? 'Connecting to the Frank AI Agent API'
-              : 'Session initialized · Chat endpoint integration comes next'}
+          <p
+            className={chatError === null ? undefined : 'composer-error'}
+            role={chatError === null ? undefined : 'alert'}
+          >
+            {chatError ??
+              'Press Enter to send · Shift+Enter for a new line'}
           </p>
         </footer>
       </main>

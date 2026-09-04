@@ -12,3 +12,11 @@ export interface ErrorResponse {
     error: string
     message: string
 }
+
+export interface ChatRequest {
+    message: string
+}
+
+export interface ChatResponse {
+    response: string
+}

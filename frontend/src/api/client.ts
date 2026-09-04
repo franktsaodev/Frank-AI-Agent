@@ -1,4 +1,6 @@
 import type {
+    ChatRequest,
+    ChatResponse,
     CreateSessionResponse,
     ErrorResponse,
     HealthResponse,
@@ -76,6 +78,29 @@ export function createSession(
             headers: {
                 Accept: 'application/json',
             },
+            signal,
+        },
+    )
+}
+
+export function sendChatMessage(
+    sessionId: string,
+    message: string,
+    signal?: AbortSignal,
+): Promise<ChatResponse> {
+    const requestBody: ChatRequest = {
+        message,
+    }
+
+    return request<ChatResponse>(
+        `/api/v1/sessions/${encodeURIComponent(sessionId)}/chat`,
+        {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
             signal,
         },
     )

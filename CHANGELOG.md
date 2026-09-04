@@ -10,6 +10,7 @@ Semantic Versioning.
 ### Added
 
 - Added configurable CORS support for browser-based frontend clients.
+- Added a React frontend with API health checks, isolated session initialization, and an interactive chat interface.
 
 ## [1.2.0] - 2026-09-03
 
