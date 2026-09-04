@@ -9,6 +9,14 @@ React and TypeScript frontend for the Frank AI Agent interactive demo.
 
 ## Development
 
+Create the local frontend environment file:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Install dependencies and start the development server:
+
 ```powershell
 npm install
 npm run dev

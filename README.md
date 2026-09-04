@@ -730,6 +730,18 @@ logs readable.
 | `APP_SERVICE_NAME` | `Frank AI Agent` | Service name exposed by runtime information and health checks |
 | `APP_VERSION` | `1.2.0` | Application version exposed by the running service |
 
+### CORS
+
+| Variable | Default | Description |
+|---|---|---|
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated browser origins allowed to access the API |
+
+Multiple frontend origins can be configured by separating them with commas:
+
+```env
+CORS_ALLOWED_ORIGINS=http://localhost:5173,https://agent.example.com
+```
+
 ### Session
 
 | Variable | Default | Description |

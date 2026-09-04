@@ -109,3 +109,53 @@ def test_create_app_should_use_injected_lifespan() -> None:
         "started": True,
         "stopped": True,
     }
+
+
+def test_cors_should_allow_configured_origin(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173",
+    )
+
+    app = create_app(
+        lifespan=empty_lifespan,
+    )
+
+    with TestClient(app) as client:
+        response = client.options(
+            "/api/v1/sessions",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "Content-Type",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == ("http://localhost:5173")
+
+
+def test_cors_should_not_allow_unconfigured_origin(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173",
+    )
+
+    app = create_app(
+        lifespan=empty_lifespan,
+    )
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/health",
+            headers={
+                "Origin": "https://untrusted.example.com",
+            },
+        )
+
+    assert response.status_code == 200
+    assert "access-control-allow-origin" not in response.headers

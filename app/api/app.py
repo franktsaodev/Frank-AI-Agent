@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.application_lifespan import (
     application_lifespan,
@@ -12,6 +13,7 @@ from app.api.runtime_provider import get_runtime_info
 from app.api.v1.session_routes import (
     router as session_router,
 )
+from app.config_loaders.cors_config_loader import CorsConfigLoader
 from app.config_loaders.environment_reader import EnvironmentReader
 from app.config_loaders.logging_config_loader import LoggingConfigLoader
 from app.core.logging_config import configure_logging
@@ -31,6 +33,10 @@ def create_app(
         config=logging_config,
     )
 
+    cors_config = CorsConfigLoader(
+        environment_reader=environment_reader,
+    ).load()
+
     runtime = get_runtime_info()
 
     actual_lifespan = lifespan if lifespan is not None else application_lifespan
@@ -47,6 +53,20 @@ def create_app(
         redoc_url="/redoc",
         openapi_url="/openapi.json",
         lifespan=actual_lifespan,
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(cors_config.allowed_origins),
+        allow_credentials=False,
+        allow_methods=[
+            "GET",
+            "POST",
+            "DELETE",
+        ],
+        allow_headers=[
+            "Content-Type",
+        ],
     )
 
     register_exception_handlers(
