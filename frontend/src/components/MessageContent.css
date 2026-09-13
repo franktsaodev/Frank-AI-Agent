@@ -1,0 +1,29 @@
+.citation-badge {
+    margin: 2px 3px;
+    padding: 4px 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid rgb(66 192 139 / 30%);
+    border-radius: 999px;
+    color: #8ee3bd;
+    background: rgb(66 192 139 / 10%);
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    vertical-align: baseline;
+}
+
+.citation-badge-icon {
+    width: 14px;
+    height: 14px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 50%;
+    color: #0f121a;
+    background: #62d4a3;
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 800;
+}

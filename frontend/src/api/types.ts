@@ -8,6 +8,10 @@ export interface CreateSessionResponse {
     session_id: string
 }
 
+export interface DeleteSessionResponse {
+    deleted: boolean
+}
+
 export interface ErrorResponse {
     error: string
     message: string

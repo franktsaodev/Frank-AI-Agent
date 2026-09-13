@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FormEvent, KeyboardEvent } from 'react'
+import type {
+  KeyboardEvent,
+  SubmitEvent,
+} from 'react'
 
 import {
   ApiError,
   createSession,
+  deleteSession,
   getHealth,
   sendChatMessage,
 } from './api/client'
@@ -11,6 +15,8 @@ import type {
   CreateSessionResponse,
   HealthResponse,
 } from './api/types'
+import { MessageContent } from './components/MessageContent'
+
 import './App.css'
 
 const capabilities = [
@@ -73,6 +79,7 @@ function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
 
   const nextMessageId = useRef(0)
@@ -121,8 +128,43 @@ function App() {
     }
   }
 
+  async function handleNewConversation(): Promise<void> {
+    if (
+      sessionId === null ||
+      isSending ||
+      isCreatingSession
+    ) {
+      return
+    }
+
+    const previousSessionId = sessionId
+
+    setIsCreatingSession(true)
+    setChatError(null)
+
+    try {
+      const newSession = await createSession()
+
+      setSessionId(newSession.session_id)
+      setMessages([])
+      setInput('')
+      nextMessageId.current = 0
+
+      void deleteSession(previousSessionId).catch(() => undefined)
+    } catch (error: unknown) {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : 'Unable to create a new session. Please try again.'
+
+      setChatError(message)
+    } finally {
+      setIsCreatingSession(false)
+    }
+  }
+
   async function handleSubmit(
-    event: FormEvent<HTMLFormElement>,
+    event: SubmitEvent<HTMLFormElement>,
   ): Promise<void> {
     event.preventDefault()
 
@@ -158,12 +200,12 @@ function App() {
         ),
       ])
     } catch (error: unknown) {
-      const message =
+      const errorMessage =
         error instanceof ApiError
           ? error.message
           : 'Unable to reach the agent. Please try again.'
 
-      setChatError(message)
+      setChatError(errorMessage)
     } finally {
       setIsSending(false)
     }
@@ -197,7 +239,8 @@ function App() {
   const canSend =
     sessionId !== null &&
     input.trim().length > 0 &&
-    !isSending
+    !isSending &&
+    !isCreatingSession
 
   return (
     <div className="app-shell">
@@ -216,12 +259,24 @@ function App() {
         <div className="sidebar-section">
           <p className="sidebar-label">Workspace</p>
 
-          <div className="navigation-item navigation-item-active">
+          <button
+            type="button"
+            className="navigation-item navigation-item-active"
+            onClick={handleNewConversation}
+            disabled={
+              sessionId === null ||
+              isSending ||
+              isCreatingSession
+            }
+          >
             <span className="navigation-icon" aria-hidden="true">
               ◇
             </span>
-            New conversation
-          </div>
+
+            {isCreatingSession
+              ? 'Creating conversation…'
+              : 'New conversation'}
+          </button>
 
           {sessionId !== null && (
             <div className="session-card">
@@ -316,7 +371,7 @@ function App() {
                     </p>
 
                     <div className="message-content">
-                      {message.content}
+                      <MessageContent content={message.content} />
                     </div>
                   </div>
                 </article>
@@ -365,7 +420,8 @@ function App() {
               disabled={
                 sessionId === null ||
                 connectionState !== 'online' ||
-                isSending
+                isSending ||
+                isCreatingSession
               }
               maxLength={10_000}
               placeholder={

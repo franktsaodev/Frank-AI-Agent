@@ -2,6 +2,7 @@ import type {
     ChatRequest,
     ChatResponse,
     CreateSessionResponse,
+    DeleteSessionResponse,
     ErrorResponse,
     HealthResponse,
 } from './types'
@@ -75,6 +76,22 @@ export function createSession(
         '/api/v1/sessions',
         {
             method: 'POST',
+            headers: {
+                Accept: 'application/json',
+            },
+            signal,
+        },
+    )
+}
+
+export function deleteSession(
+    sessionId: string,
+    signal?: AbortSignal,
+): Promise<DeleteSessionResponse> {
+    return request<DeleteSessionResponse>(
+        `/api/v1/sessions/${encodeURIComponent(sessionId)}`,
+        {
+            method: 'DELETE',
             headers: {
                 Accept: 'application/json',
             },

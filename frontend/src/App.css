@@ -69,10 +69,26 @@
   font-size: 14px;
 }
 
-.navigation-item-active {
-  color: var(--heading);
-  background: var(--surface-raised);
-  box-shadow: inset 0 0 0 1px var(--border);
+button.navigation-item {
+  width: 100%;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.navigation-item:not(:disabled):hover {
+  border-color: var(--border-strong);
+  background: #202637;
+}
+
+button.navigation-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+button.navigation-item:not(:disabled):hover {
+  background: #202637;
 }
 
 .navigation-icon {
@@ -463,15 +479,15 @@
   }
 
   .sidebar-section {
+    margin: 0 0 0 auto;
+  }
+
+  .sidebar-label,
+  .session-card {
     display: none;
   }
 
   .sidebar-footer {
-    margin: 0 0 0 auto;
-    padding: 9px 11px;
-  }
-
-  .sidebar-footer div span {
     display: none;
   }
 
