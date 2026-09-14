@@ -147,6 +147,29 @@ button.navigation-item:not(:disabled):hover {
   font-size: 12px;
 }
 
+.retry-connection-button {
+  margin-top: 10px;
+  padding: 7px 10px;
+  border: 1px solid rgb(239 107 115 / 35%);
+  border-radius: 8px;
+  color: #ffadb2;
+  background: rgb(239 107 115 / 10%);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.retry-connection-button:hover {
+  border-color: rgb(239 107 115 / 60%);
+  background: rgb(239 107 115 / 16%);
+}
+
+.retry-connection-button:focus-visible {
+  outline: 2px solid #ef6b73;
+  outline-offset: 2px;
+}
+
 .status-dot {
   width: 8px;
   height: 8px;
@@ -489,6 +512,11 @@ button.navigation-item:not(:disabled):hover {
 
   .sidebar-footer {
     display: none;
+  }
+
+  .sidebar-footer-offline {
+    width: 100%;
+    display: flex;
   }
 
   .workspace {

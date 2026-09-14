@@ -55,6 +55,32 @@ interface ChatMessage {
   content: string
 }
 
+function createRestoredMessages(
+  history: HistoryMessageResponse[],
+): ChatMessage[] {
+  const restoredMessages: ChatMessage[] = []
+
+  for (const historyMessage of history) {
+    if (
+      (
+        historyMessage.role !== 'user' &&
+        historyMessage.role !== 'assistant'
+      ) ||
+      historyMessage.content === null
+    ) {
+      continue
+    }
+
+    restoredMessages.push({
+      id: restoredMessages.length + 1,
+      role: historyMessage.role,
+      content: historyMessage.content,
+    })
+  }
+
+  return restoredMessages
+}
+
 let initializationPromise: Promise<InitializationResult> | null = null
 
 function initializeApplication(): Promise<InitializationResult> {
@@ -129,25 +155,9 @@ function App() {
           return
         }
 
-        const restoredMessages: ChatMessage[] = []
-
-        for (const historyMessage of result.history) {
-          if (
-            (
-              historyMessage.role !== 'user' &&
-              historyMessage.role !== 'assistant'
-            ) ||
-            historyMessage.content === null
-          ) {
-            continue
-          }
-
-          restoredMessages.push({
-            id: restoredMessages.length + 1,
-            role: historyMessage.role,
-            content: historyMessage.content,
-          })
-        }
+        const restoredMessages = createRestoredMessages(
+          result.history,
+        )
 
         nextMessageId.current = restoredMessages.length
 
@@ -183,6 +193,35 @@ function App() {
       id: nextMessageId.current,
       role,
       content,
+    }
+  }
+
+  async function handleRetryConnection(): Promise<void> {
+    if (connectionState === 'checking') {
+      return
+    }
+
+    setConnectionState('checking')
+    setChatError(null)
+
+    try {
+      initializationPromise = null
+
+      const result = await initializeApplication()
+      const restoredMessages = createRestoredMessages(
+        result.history,
+      )
+
+      nextMessageId.current = restoredMessages.length
+
+      setHealth(result.health)
+      setSessionId(result.sessionId)
+      setMessages(restoredMessages)
+      setConnectionState('online')
+    } catch {
+      setHealth(null)
+      setSessionId(null)
+      setConnectionState('offline')
     }
   }
 
@@ -345,7 +384,10 @@ function App() {
           )}
         </div>
 
-        <div className="sidebar-footer" aria-live="polite">
+        <div
+          className={`sidebar-footer sidebar-footer-${connectionState}`}
+          aria-live="polite"
+        >
           <span
             className={`status-dot status-dot-${connectionState}`}
             aria-hidden="true"
@@ -354,6 +396,18 @@ function App() {
           <div>
             <strong>{connectionTitle}</strong>
             <span>{connectionDescription}</span>
+
+            {connectionState === 'offline' && (
+              <button
+                type="button"
+                className="retry-connection-button"
+                onClick={() => {
+                  void handleRetryConnection()
+                }}
+              >
+                Retry connection
+              </button>
+            )}
           </div>
         </div>
       </aside>
