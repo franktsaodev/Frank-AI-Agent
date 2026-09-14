@@ -14,6 +14,7 @@ Semantic Versioning.
 - Added frontend session replacement controls and highlighted verified citation badges.
 - Added browser session restoration with conversation history synchronization and automatic recovery from expired sessions.
 - Added manual API reconnection with responsive retry controls and session recovery.
+- Added frontend unit testing with Vitest, jsdom, and React Testing Library.
 
 ## [1.2.0] - 2026-09-03
 

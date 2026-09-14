@@ -1,0 +1,181 @@
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+
+import {
+    ApiError,
+    createSession,
+    deleteSession,
+    getHealth,
+    getSessionHistory,
+    sendChatMessage,
+} from './client'
+
+const fetchMock = vi.fn<typeof fetch>()
+
+function createJsonResponse(
+    payload: unknown,
+    status = 200,
+): Response {
+    return new Response(
+        JSON.stringify(payload),
+        {
+            status,
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        },
+    )
+}
+
+describe('API client', () => {
+    beforeEach(() => {
+        fetchMock.mockReset()
+        vi.stubGlobal('fetch', fetchMock)
+    })
+
+    afterEach(() => {
+        vi.unstubAllGlobals()
+    })
+
+    it('should retrieve API health information', async () => {
+        fetchMock.mockResolvedValue(
+            createJsonResponse({
+                status: 'ok',
+                service: 'Frank AI Agent',
+                version: '1.2.0',
+            }),
+        )
+
+        const result = await getHealth()
+
+        expect(result).toEqual({
+            status: 'ok',
+            service: 'Frank AI Agent',
+            version: '1.2.0',
+        })
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            'http://localhost:8000/health',
+            expect.objectContaining({
+                headers: {
+                    Accept: 'application/json',
+                },
+            }),
+        )
+    })
+
+    it('should create a session using POST', async () => {
+        fetchMock.mockResolvedValue(
+            createJsonResponse({
+                session_id: 'session-123',
+            }, 201),
+        )
+
+        const result = await createSession()
+
+        expect(result.session_id).toBe('session-123')
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            'http://localhost:8000/api/v1/sessions',
+            expect.objectContaining({
+                method: 'POST',
+            }),
+        )
+    })
+
+    it('should encode the session ID when retrieving history', async () => {
+        fetchMock.mockResolvedValue(
+            createJsonResponse({
+                session_id: 'session/id',
+                messages: [],
+            }),
+        )
+
+        await getSessionHistory('session/id')
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            'http://localhost:8000/api/v1/sessions/session%2Fid/history',
+            expect.any(Object),
+        )
+    })
+
+    it('should send a chat message as JSON', async () => {
+        fetchMock.mockResolvedValue(
+            createJsonResponse({
+                response: 'Hello from the agent.',
+            }),
+        )
+
+        const result = await sendChatMessage(
+            'session-123',
+            'Hello',
+        )
+
+        expect(result.response).toBe('Hello from the agent.')
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            'http://localhost:8000/api/v1/sessions/session-123/chat',
+            expect.objectContaining({
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: 'Hello',
+                }),
+            }),
+        )
+    })
+
+    it('should delete a session using DELETE', async () => {
+        fetchMock.mockResolvedValue(
+            createJsonResponse({
+                deleted: true,
+            }),
+        )
+
+        const result = await deleteSession('session-123')
+
+        expect(result.deleted).toBe(true)
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            'http://localhost:8000/api/v1/sessions/session-123',
+            expect.objectContaining({
+                method: 'DELETE',
+            }),
+        )
+    })
+
+    it('should throw ApiError using the API error message', async () => {
+        fetchMock.mockResolvedValue(
+            createJsonResponse(
+                {
+                    error: 'session_not_found',
+                    message: 'Session was not found.',
+                },
+                404,
+            ),
+        )
+
+        try {
+            await getSessionHistory('missing-session')
+            throw new Error('Expected getSessionHistory to reject')
+        } catch (error: unknown) {
+            expect(error).toBeInstanceOf(ApiError)
+            expect(error).toEqual(
+                expect.objectContaining({
+                    name: 'ApiError',
+                    status: 404,
+                    message: 'Session was not found.',
+                }),
+            )
+        }
+    })
+})
