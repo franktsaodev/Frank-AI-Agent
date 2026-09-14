@@ -9,13 +9,19 @@ import {
   createSession,
   deleteSession,
   getHealth,
+  getSessionHistory,
   sendChatMessage,
 } from './api/client'
 import type {
-  CreateSessionResponse,
   HealthResponse,
+  HistoryMessageResponse,
 } from './api/types'
 import { MessageContent } from './components/MessageContent'
+import {
+  clearStoredSessionId,
+  getStoredSessionId,
+  storeSessionId,
+} from './storage/activeSessionStorage'
 
 import './App.css'
 
@@ -39,7 +45,8 @@ type ChatMessageRole = 'user' | 'assistant'
 
 interface InitializationResult {
   health: HealthResponse
-  session: CreateSessionResponse
+  sessionId: string
+  history: HistoryMessageResponse[]
 }
 
 interface ChatMessage {
@@ -54,11 +61,39 @@ function initializeApplication(): Promise<InitializationResult> {
   if (initializationPromise === null) {
     initializationPromise = getHealth()
       .then(async (health) => {
+        const storedSessionId = getStoredSessionId()
+
+        if (storedSessionId !== null) {
+          try {
+            const sessionHistory = await getSessionHistory(
+              storedSessionId,
+            )
+
+            return {
+              health,
+              sessionId: sessionHistory.session_id,
+              history: sessionHistory.messages,
+            }
+          } catch (error: unknown) {
+            if (
+              !(error instanceof ApiError) ||
+              error.status !== 404
+            ) {
+              throw error
+            }
+
+            clearStoredSessionId()
+          }
+        }
+
         const session = await createSession()
+
+        storeSessionId(session.session_id)
 
         return {
           health,
-          session,
+          sessionId: session.session_id,
+          history: [],
         }
       })
       .catch((error: unknown) => {
@@ -94,8 +129,31 @@ function App() {
           return
         }
 
+        const restoredMessages: ChatMessage[] = []
+
+        for (const historyMessage of result.history) {
+          if (
+            (
+              historyMessage.role !== 'user' &&
+              historyMessage.role !== 'assistant'
+            ) ||
+            historyMessage.content === null
+          ) {
+            continue
+          }
+
+          restoredMessages.push({
+            id: restoredMessages.length + 1,
+            role: historyMessage.role,
+            content: historyMessage.content,
+          })
+        }
+
+        nextMessageId.current = restoredMessages.length
+
         setHealth(result.health)
-        setSessionId(result.session.session_id)
+        setSessionId(result.sessionId)
+        setMessages(restoredMessages)
         setConnectionState('online')
       })
       .catch(() => {
@@ -145,6 +203,7 @@ function App() {
     try {
       const newSession = await createSession()
 
+      storeSessionId(newSession.session_id)
       setSessionId(newSession.session_id)
       setMessages([])
       setInput('')

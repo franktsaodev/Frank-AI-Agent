@@ -12,6 +12,16 @@ export interface DeleteSessionResponse {
     deleted: boolean
 }
 
+export interface HistoryMessageResponse {
+    role: string
+    content: string | null
+}
+
+export interface SessionHistoryResponse {
+    session_id: string
+    messages: HistoryMessageResponse[]
+}
+
 export interface ErrorResponse {
     error: string
     message: string

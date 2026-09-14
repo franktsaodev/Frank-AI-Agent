@@ -12,6 +12,7 @@ Semantic Versioning.
 - Added configurable CORS support for browser-based frontend clients.
 - Added a React frontend with API health checks, isolated session initialization, and an interactive chat interface.
 - Added frontend session replacement controls and highlighted verified citation badges.
+- Added browser session restoration with conversation history synchronization and automatic recovery from expired sessions.
 
 ## [1.2.0] - 2026-09-03
 

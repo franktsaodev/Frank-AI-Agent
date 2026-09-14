@@ -5,6 +5,7 @@ import type {
     DeleteSessionResponse,
     ErrorResponse,
     HealthResponse,
+    SessionHistoryResponse,
 } from './types'
 
 const DEFAULT_API_BASE_URL = 'http://localhost:8000'
@@ -92,6 +93,21 @@ export function deleteSession(
         `/api/v1/sessions/${encodeURIComponent(sessionId)}`,
         {
             method: 'DELETE',
+            headers: {
+                Accept: 'application/json',
+            },
+            signal,
+        },
+    )
+}
+
+export function getSessionHistory(
+    sessionId: string,
+    signal?: AbortSignal,
+): Promise<SessionHistoryResponse> {
+    return request<SessionHistoryResponse>(
+        `/api/v1/sessions/${encodeURIComponent(sessionId)}/history`,
+        {
             headers: {
                 Accept: 'application/json',
             },
