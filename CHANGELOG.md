@@ -16,6 +16,10 @@ Semantic Versioning.
 - Added manual API reconnection with responsive retry controls and session recovery.
 - Added frontend unit testing with Vitest, jsdom, and React Testing Library.
 
+### Changed
+
+- Refactored frontend application initialization into a testable session workflow with request deduplication and retry reset support.
+
 ## [1.2.0] - 2026-09-03
 
 ### Added

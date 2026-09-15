@@ -8,8 +8,6 @@ import {
   ApiError,
   createSession,
   deleteSession,
-  getHealth,
-  getSessionHistory,
   sendChatMessage,
 } from './api/client'
 import type {
@@ -18,8 +16,10 @@ import type {
 } from './api/types'
 import { MessageContent } from './components/MessageContent'
 import {
-  clearStoredSessionId,
-  getStoredSessionId,
+  initializeApplication,
+  resetApplicationInitialization,
+} from './session/applicationInitializer'
+import {
   storeSessionId,
 } from './storage/activeSessionStorage'
 
@@ -42,12 +42,6 @@ const capabilities = [
 
 type ConnectionState = 'checking' | 'online' | 'offline'
 type ChatMessageRole = 'user' | 'assistant'
-
-interface InitializationResult {
-  health: HealthResponse
-  sessionId: string
-  history: HistoryMessageResponse[]
-}
 
 interface ChatMessage {
   id: number
@@ -79,57 +73,6 @@ function createRestoredMessages(
   }
 
   return restoredMessages
-}
-
-let initializationPromise: Promise<InitializationResult> | null = null
-
-function initializeApplication(): Promise<InitializationResult> {
-  if (initializationPromise === null) {
-    initializationPromise = getHealth()
-      .then(async (health) => {
-        const storedSessionId = getStoredSessionId()
-
-        if (storedSessionId !== null) {
-          try {
-            const sessionHistory = await getSessionHistory(
-              storedSessionId,
-            )
-
-            return {
-              health,
-              sessionId: sessionHistory.session_id,
-              history: sessionHistory.messages,
-            }
-          } catch (error: unknown) {
-            if (
-              !(error instanceof ApiError) ||
-              error.status !== 404
-            ) {
-              throw error
-            }
-
-            clearStoredSessionId()
-          }
-        }
-
-        const session = await createSession()
-
-        storeSessionId(session.session_id)
-
-        return {
-          health,
-          sessionId: session.session_id,
-          history: [],
-        }
-      })
-      .catch((error: unknown) => {
-        initializationPromise = null
-
-        throw error
-      })
-  }
-
-  return initializationPromise
 }
 
 function App() {
@@ -205,7 +148,7 @@ function App() {
     setChatError(null)
 
     try {
-      initializationPromise = null
+      resetApplicationInitialization()
 
       const result = await initializeApplication()
       const restoredMessages = createRestoredMessages(
