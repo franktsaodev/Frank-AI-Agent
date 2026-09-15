@@ -15,6 +15,7 @@ Semantic Versioning.
 - Added browser session restoration with conversation history synchronization and automatic recovery from expired sessions.
 - Added manual API reconnection with responsive retry controls and session recovery.
 - Added frontend unit testing with Vitest, jsdom, and React Testing Library.
+- Added App-level frontend integration tests for initialization, reconnection, chat messaging, session replacement, and error handling.
 
 ### Changed
 
