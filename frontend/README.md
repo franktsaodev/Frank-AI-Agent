@@ -47,7 +47,39 @@ npm run lint
 npm run build
 ```
 
-## Backend
+## API configuration
 
-The frontend will communicate with the Frank AI Agent FastAPI service running at
-http://localhost:8000.
+For local Vite development, the frontend communicates directly with the
+FastAPI service using the URL configured in `.env`:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+An empty `VITE_API_BASE_URL` enables same-origin API requests. This mode is
+used by the production Docker image, where Nginx proxies `/api` and `/health`
+requests to the FastAPI container.
+
+## Docker
+
+From the project root, build and start the frontend and API services:
+
+```powershell
+docker compose up --build -d
+```
+
+Check both container health states:
+
+```powershell
+docker compose ps
+```
+
+The containerized frontend is available at:
+
+```text
+http://localhost:5173
+```
+
+The frontend image uses a multi-stage build. Node.js builds the React
+application, and the generated static assets are copied into a lightweight
+Nginx image.

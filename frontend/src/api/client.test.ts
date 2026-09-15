@@ -41,6 +41,7 @@ describe('API client', () => {
 
     afterEach(() => {
         vi.unstubAllGlobals()
+        vi.unstubAllEnvs()
     })
 
     it('should retrieve API health information', async () => {
@@ -177,5 +178,36 @@ describe('API client', () => {
                 }),
             )
         }
+    })
+
+    it('should use same-origin paths when the API base URL is empty', async () => {
+        vi.stubEnv(
+            'VITE_API_BASE_URL',
+            '',
+        )
+        vi.resetModules()
+
+        const {
+            getHealth: getSameOriginHealth,
+        } = await import('./client')
+
+        fetchMock.mockResolvedValue(
+            createJsonResponse({
+                status: 'ok',
+                service: 'Frank AI Agent',
+                version: '1.2.0',
+            }),
+        )
+
+        await getSameOriginHealth()
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/health',
+            expect.objectContaining({
+                headers: {
+                    Accept: 'application/json',
+                },
+            }),
+        )
     })
 })

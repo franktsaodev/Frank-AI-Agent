@@ -16,6 +16,7 @@ Semantic Versioning.
 - Added manual API reconnection with responsive retry controls and session recovery.
 - Added frontend unit testing with Vitest, jsdom, and React Testing Library.
 - Added App-level frontend integration tests for initialization, reconnection, chat messaging, session replacement, and error handling.
+- Added a multi-stage React frontend image with Nginx static hosting, same-origin API proxying, and Docker Compose health checks.
 
 ### Changed
 

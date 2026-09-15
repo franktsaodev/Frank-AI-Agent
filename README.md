@@ -503,14 +503,16 @@ similarity threshold, chunking strategy, or retrieval implementation.
 
 | Category | Technology |
 |---|---|
-| Language | Python 3.13 |
+| Languages | Python 3.13, TypeScript |
 | API Framework | FastAPI |
+| Frontend | React, Vite |
 | LLM Provider | Groq API |
 | Data Validation | Pydantic |
-| HTTP Client | HTTPX |
-| Testing | Pytest |
-| Linting & Formatting | Ruff |
-| Static Type Checking | Pyright |
+| HTTP Clients | HTTPX, Fetch API |
+| Testing | Pytest, Vitest, jsdom, React Testing Library |
+| Linting & Formatting | Ruff, ESLint |
+| Static Type Checking | Pyright, TypeScript |
+| Web Server | Nginx |
 | Containerization | Docker & Docker Compose |
 | Embeddings | Sentence Transformers |
 | Vector Search | In-Memory Cosine Similarity |
@@ -537,6 +539,11 @@ Frank-AI-Agent/
 │   ├── session/            # Session lifecycle management
 │   ├── tools/              # Tool registry, execution, and plugins
 │   └── tracing/            # Structured tracing and exporters
+│
+├── frontend/
+│   ├── src/                # React UI, API client, session, and storage modules
+│   ├── Dockerfile          # Multi-stage frontend container build
+│   └── nginx.conf          # Static hosting and FastAPI reverse proxy
 │
 ├── knowledge/              # Local retrieval knowledge sources
 ├── assets/
@@ -912,8 +919,9 @@ agent and associated memory state.
 
 ## Docker
 
-Frank AI Agent can be built and run as a container using Docker or
-Docker Compose.
+Frank AI Agent can be built and run as a full-stack containerized application
+using Docker Compose. The deployment includes the FastAPI backend and a
+production React frontend served by Nginx.
 
 ### Docker Compose
 
@@ -925,15 +933,20 @@ docker compose up --build
 
 Docker Compose will:
 
-- Build the application image
-- Load runtime configuration from `.env`
+- Build the FastAPI application image
+- Build the React frontend using a multi-stage Node.js image
+- Serve the generated frontend assets through Nginx
+- Load backend runtime configuration from `.env`
+- Expose the frontend on port `5173`
 - Expose the API on port `8000`
-- Run the container health check
-- Restart the service automatically unless it is explicitly stopped
+- Proxy frontend `/api` and `/health` requests to FastAPI
+- Run health checks for both services
+- Restart the services automatically unless they are explicitly stopped
 
 Once the container is running:
 
 ```text
+Frontend:   http://localhost:5173
 API:        http://localhost:8000
 Swagger UI: http://localhost:8000/docs
 Health:     http://localhost:8000/health
@@ -954,7 +967,7 @@ docker compose ps
 View logs:
 
 ```bash
-docker compose logs -f api
+docker compose logs -f api frontend
 ```
 
 Stop the service:
@@ -999,14 +1012,16 @@ docker run --rm \
 
 ### Container Health Check
 
-The Docker Compose configuration periodically checks:
+The Docker Compose configuration periodically checks both services:
 
 ```text
-GET /health
+API:      http://127.0.0.1:8000/health
+Frontend: http://127.0.0.1/health
 ```
 
-A healthy container indicates that the FastAPI application is running and
-responding on port `8000`.
+The API health check verifies that FastAPI is responding on port 8000.
+The frontend health check sends a request through Nginx to the proxied FastAPI
+health endpoint, verifying both the web server and backend connection.
 
 The container health check uses an extended startup grace period so that the
 initial embedding-model download does not immediately mark the service as
