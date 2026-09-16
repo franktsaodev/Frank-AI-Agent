@@ -525,6 +525,10 @@ infrastructure, configuration, and API concerns remain separated.
 
 ```text
 Frank-AI-Agent/
+├── .github/
+│   └── workflows/
+│       └── ci.yml          # Backend, frontend, and container CI
+│
 ├── app/
 │   ├── agent/              # Agent orchestration and execution
 │   ├── api/                # FastAPI application and REST routes
@@ -1106,6 +1110,26 @@ Integration tests verify behavior across component boundaries, including
 session isolation, independent agent memory, semantic retrieval pipelines,
 and conditional retrieval routing.
 
+### Frontend Testing
+
+Install the frontend dependencies:
+
+```bash
+npm --prefix frontend ci
+```
+
+Run the frontend tests, linting, and production build:
+
+```bash
+npm --prefix frontend run test
+npm --prefix frontend run lint
+npm --prefix frontend run build
+```
+
+Frontend tests use Vitest, jsdom, and React Testing Library to cover the API
+client, browser session storage, citation rendering, initialization recovery,
+chat interactions, and session replacement.
+
 ### Linting
 
 Run Ruff to check the codebase:
@@ -1151,10 +1175,29 @@ pytest
 ruff check .
 ruff format --check .
 pyright
+npm --prefix frontend run test
+npm --prefix frontend run lint
+npm --prefix frontend run build
+docker compose config --quiet
 ```
 
-This validation workflow helps catch behavioral regressions, style issues,
-formatting differences, and type errors before changes are committed.
+This validation workflow checks backend and frontend behavior, style,
+formatting, static types, production builds, and Docker Compose configuration
+before changes are committed.
+
+### Continuous Integration
+
+GitHub Actions automatically runs continuous integration for pushes to
+`master`, pull requests targeting `master`, and manual workflow dispatches.
+
+The workflow runs three jobs:
+
+- Backend tests, Ruff linting and formatting checks, and Pyright
+- Frontend tests, ESLint, and the Vite production build
+- Docker Compose validation and backend/frontend container builds
+
+The container job runs only after both application quality jobs pass. The
+workflow uses `.env.example` and does not require production API secrets.
 
 ## Roadmap
 
@@ -1212,7 +1255,8 @@ tool-enabled AI agent applications.
 - [ ] Multi-agent orchestration
 - [ ] Additional LLM providers
 - [ ] Metrics and monitoring
-- [ ] CI/CD with GitHub Actions
+- [x] Continuous integration with GitHub Actions
+- [ ] Automated release and deployment workflows
 
 ## License
 

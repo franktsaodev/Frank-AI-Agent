@@ -17,6 +17,7 @@ Semantic Versioning.
 - Added frontend unit testing with Vitest, jsdom, and React Testing Library.
 - Added App-level frontend integration tests for initialization, reconnection, chat messaging, session replacement, and error handling.
 - Added a multi-stage React frontend image with Nginx static hosting, same-origin API proxying, and Docker Compose health checks.
+- Added GitHub Actions continuous integration for backend quality, frontend quality, and container build validation.
 
 ### Changed
 
