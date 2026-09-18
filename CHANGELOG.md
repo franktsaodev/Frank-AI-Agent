@@ -7,6 +7,8 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-18
+
 ### Added
 
 - Added configurable CORS support for browser-based frontend clients.

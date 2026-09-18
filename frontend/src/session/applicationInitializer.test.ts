@@ -50,7 +50,7 @@ const clearStoredSessionIdMock = vi.mocked(clearStoredSessionId)
 const healthResponse = {
     status: 'ok' as const,
     service: 'Frank AI Agent',
-    version: '1.2.0',
+    version: '1.3.0',
 }
 
 describe('application initializer', () => {

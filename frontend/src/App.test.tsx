@@ -60,7 +60,7 @@ const storeSessionIdMock = vi.mocked(storeSessionId)
 const healthResponse = {
     status: 'ok' as const,
     service: 'Frank AI Agent',
-    version: '1.2.0',
+    version: '1.3.0',
 }
 
 function createPendingPromise<T>(): Promise<T> {

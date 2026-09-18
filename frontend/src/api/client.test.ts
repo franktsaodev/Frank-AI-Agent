@@ -49,7 +49,7 @@ describe('API client', () => {
             createJsonResponse({
                 status: 'ok',
                 service: 'Frank AI Agent',
-                version: '1.2.0',
+                version: '1.3.0',
             }),
         )
 
@@ -58,7 +58,7 @@ describe('API client', () => {
         expect(result).toEqual({
             status: 'ok',
             service: 'Frank AI Agent',
-            version: '1.2.0',
+            version: '1.3.0',
         })
 
         expect(fetchMock).toHaveBeenCalledWith(
@@ -195,7 +195,7 @@ describe('API client', () => {
             createJsonResponse({
                 status: 'ok',
                 service: 'Frank AI Agent',
-                version: '1.2.0',
+                version: '1.3.0',
             }),
         )
 

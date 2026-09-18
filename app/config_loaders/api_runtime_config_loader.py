@@ -27,6 +27,6 @@ class ApiRuntimeConfigLoader:
             ),
             version=self._environment_reader.get_str(
                 name="APP_VERSION",
-                default="1.2.0",
+                default="1.3.0",
             ),
         )
