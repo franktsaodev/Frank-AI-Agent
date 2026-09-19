@@ -1,6 +1,10 @@
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 
 from app.agent.agent_run_context import AgentRunContext
+from app.models.agent_stream_event import (
+    AgentStreamCompleted,
+    AgentStreamEvent,
+)
 from app.models.client_response import ClientResponse
 from app.models.message import Message
 
@@ -27,3 +31,15 @@ class FakeAgentRunner:
         )
 
         return self._response
+
+    def stream(
+        self,
+        messages: Sequence[Message],
+        context: AgentRunContext | None = None,
+    ) -> Iterator[AgentStreamEvent]:
+        yield AgentStreamCompleted(
+            response=self.run(
+                messages=messages,
+                context=context,
+            )
+        )

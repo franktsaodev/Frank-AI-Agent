@@ -1,5 +1,5 @@
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 
 from app.agent.agent_run_context import AgentRunContext
 from app.clients.base_client import BaseClient
@@ -8,7 +8,16 @@ from app.config_models.agent_config import AgentConfig
 from app.exceptions.max_iterations_exceeded_error import (
     MaxIterationsExceededError,
 )
+from app.models.agent_stream_event import (
+    AgentContentDelta,
+    AgentStreamCompleted,
+    AgentStreamEvent,
+)
 from app.models.client_response import ClientResponse
+from app.models.client_stream_event import (
+    ClientContentDelta,
+    ClientStreamCompleted,
+)
 from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.tools.tool_call import ToolCall
@@ -126,6 +135,123 @@ class AgentRunner:
             raise
 
         raise AssertionError("AgentRunner reached an unreachable state.")
+
+    def stream(
+        self,
+        messages: Sequence[Message],
+        context: AgentRunContext | None = None,
+    ) -> Iterator[AgentStreamEvent]:
+        actual_context = context if context is not None else AgentRunContext()
+
+        agent_context = self._create_trace_context()
+        start_time = self._clock.now()
+        current_messages = list(messages)
+
+        self._tracer.trace(
+            TraceEvent(
+                trace_id=agent_context.trace_id,
+                span_id=agent_context.span_id,
+                parent_span_id=agent_context.parent_span_id,
+                event_type=TraceEventType.AGENT_STARTED,
+                metadata={
+                    "message_count": len(current_messages),
+                    "max_iterations": self._config.max_iterations,
+                },
+            )
+        )
+
+        try:
+            for iteration in range(self._config.max_iterations):
+                buffered_content: list[str] = []
+                response: ClientResponse | None = None
+
+                for event in self._client.stream_chat(
+                    messages=current_messages,
+                    trace_context=agent_context,
+                ):
+                    if isinstance(event, ClientContentDelta):
+                        buffered_content.append(event.content)
+                    elif isinstance(event, ClientStreamCompleted):
+                        if response is not None:
+                            raise RuntimeError(
+                                "Client stream returned more than one completion event."
+                            )
+
+                        response = event.response
+
+                if response is None:
+                    raise RuntimeError(
+                        "Client stream ended without a completion event."
+                    )
+
+                if not response.has_tool_calls:
+                    for content in buffered_content:
+                        yield AgentContentDelta(
+                            content=content,
+                        )
+
+                    duration_ms = (self._clock.now() - start_time) * 1000
+
+                    self._tracer.trace(
+                        TraceEvent(
+                            trace_id=agent_context.trace_id,
+                            span_id=agent_context.span_id,
+                            parent_span_id=agent_context.parent_span_id,
+                            event_type=TraceEventType.AGENT_FINISHED,
+                            metadata={
+                                "iterations": iteration + 1,
+                                "final_message_count": len(current_messages),
+                                "duration_ms": duration_ms,
+                            },
+                        )
+                    )
+
+                    yield AgentStreamCompleted(
+                        response=response,
+                    )
+                    return
+
+                is_last_iteration = iteration == self._config.max_iterations - 1
+
+                if is_last_iteration:
+                    raise MaxIterationsExceededError(
+                        max_iterations=self._config.max_iterations,
+                    )
+
+                current_messages.append(
+                    self._create_assistant_tool_call_message(
+                        response,
+                    )
+                )
+
+                current_messages.extend(
+                    self._execute_tool_calls(
+                        tool_calls=response.tool_calls,
+                        trace_context=agent_context,
+                        metadata=actual_context.metadata,
+                    )
+                )
+
+        except Exception as error:
+            duration_ms = (self._clock.now() - start_time) * 1000
+
+            self._tracer.trace(
+                TraceEvent(
+                    trace_id=agent_context.trace_id,
+                    span_id=agent_context.span_id,
+                    parent_span_id=agent_context.parent_span_id,
+                    event_type=TraceEventType.AGENT_FAILED,
+                    metadata={
+                        "error_type": type(error).__name__,
+                        "error_message": str(error),
+                        "duration_ms": duration_ms,
+                    },
+                )
+            )
+
+            raise
+
+        raise AssertionError("AgentRunner stream reached an unreachable state.")
 
     def _create_assistant_tool_call_message(
         self,

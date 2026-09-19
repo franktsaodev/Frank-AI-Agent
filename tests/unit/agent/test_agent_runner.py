@@ -13,7 +13,15 @@ from app.config_models.agent_config import AgentConfig
 from app.exceptions.max_iterations_exceeded_error import (
     MaxIterationsExceededError,
 )
+from app.models.agent_stream_event import (
+    AgentContentDelta,
+    AgentStreamCompleted,
+)
 from app.models.client_response import ClientResponse
+from app.models.client_stream_event import (
+    ClientContentDelta,
+    ClientStreamCompleted,
+)
 from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.tools.tool_call import ToolCall
@@ -25,6 +33,7 @@ from app.tracing.base_tracer import BaseTracer
 from app.tracing.trace_event_type import TraceEventType
 from tests.fakes.fake_client import FakeClient
 from tests.fakes.fake_clock import FakeClock
+from tests.fakes.fake_streaming_client import FakeStreamingClient
 from tests.fakes.fake_tool_executor import FakeToolExecutor
 
 
@@ -1021,3 +1030,432 @@ def test_run_should_pass_context_metadata_to_tool_executor(
     assert tool_executor.received_metadata == [
         context.metadata,
     ]
+
+
+def test_stream_yields_content_and_completed_response(
+    create_agent_runner: AgentRunnerFactory,
+) -> None:
+    response = ClientResponse(
+        content="Hello!",
+    )
+
+    client = FakeStreamingClient(
+        event_batches=[
+            [
+                ClientContentDelta(
+                    content="Hello",
+                ),
+                ClientContentDelta(
+                    content="!",
+                ),
+                ClientStreamCompleted(
+                    response=response,
+                ),
+            ],
+        ],
+    )
+
+    tool_executor = FakeToolExecutor()
+
+    agent_runner = create_agent_runner(
+        client=client,
+        tool_executor=tool_executor,
+    )
+
+    messages = [
+        Message(
+            role=MessageRole.USER,
+            content="Hello",
+        ),
+    ]
+
+    events = list(
+        agent_runner.stream(messages),
+    )
+
+    assert events == [
+        AgentContentDelta(
+            content="Hello",
+        ),
+        AgentContentDelta(
+            content="!",
+        ),
+        AgentStreamCompleted(
+            response=response,
+        ),
+    ]
+
+    assert client.call_count == 1
+    assert client.received_message_batches == [
+        messages,
+    ]
+    assert tool_executor.received_tool_calls == []
+
+
+def test_stream_hides_tool_round_content_and_yields_final_response(
+    create_agent_runner: AgentRunnerFactory,
+) -> None:
+    tool_call = ToolCall(
+        call_id="call_123",
+        name="calculator",
+        arguments={
+            "expression": "1 + 2",
+        },
+    )
+
+    tool_response = ClientResponse(
+        content="I will calculate that.",
+        tool_calls=(tool_call,),
+    )
+
+    final_response = ClientResponse(
+        content="The answer is 3.",
+    )
+
+    client = FakeStreamingClient(
+        event_batches=[
+            [
+                ClientContentDelta(
+                    content="I will ",
+                ),
+                ClientContentDelta(
+                    content="calculate that.",
+                ),
+                ClientStreamCompleted(
+                    response=tool_response,
+                ),
+            ],
+            [
+                ClientContentDelta(
+                    content="The answer ",
+                ),
+                ClientContentDelta(
+                    content="is 3.",
+                ),
+                ClientStreamCompleted(
+                    response=final_response,
+                ),
+            ],
+        ],
+    )
+
+    tool_executor = FakeToolExecutor(
+        result=3,
+    )
+
+    agent_runner = create_agent_runner(
+        client=client,
+        tool_executor=tool_executor,
+    )
+
+    user_message = Message(
+        role=MessageRole.USER,
+        content="What is 1 + 2?",
+    )
+
+    events = list(
+        agent_runner.stream(
+            [user_message],
+        )
+    )
+
+    assert events == [
+        AgentContentDelta(
+            content="The answer ",
+        ),
+        AgentContentDelta(
+            content="is 3.",
+        ),
+        AgentStreamCompleted(
+            response=final_response,
+        ),
+    ]
+
+    assert client.call_count == 2
+    assert tool_executor.received_tool_calls == [
+        tool_call,
+    ]
+
+    assert client.received_message_batches[1] == [
+        user_message,
+        Message(
+            role=MessageRole.ASSISTANT,
+            content="I will calculate that.",
+            tool_calls=(tool_call,),
+        ),
+        Message(
+            role=MessageRole.TOOL,
+            content="3",
+            tool_call_id="call_123",
+        ),
+    ]
+
+
+def test_stream_should_trace_agent_lifecycle(
+    create_agent_runner: AgentRunnerFactory,
+) -> None:
+    response = ClientResponse(
+        content="完成",
+    )
+
+    client = FakeStreamingClient(
+        event_batches=[
+            [
+                ClientContentDelta(
+                    content="完成",
+                ),
+                ClientStreamCompleted(
+                    response=response,
+                ),
+            ],
+        ],
+    )
+
+    tracer = MagicMock(
+        spec=BaseTracer,
+    )
+
+    agent_runner = create_agent_runner(
+        client=client,
+        tool_executor=FakeToolExecutor(),
+        tracer=tracer,
+    )
+
+    list(
+        agent_runner.stream(
+            [
+                Message(
+                    role=MessageRole.USER,
+                    content="你好",
+                ),
+            ]
+        )
+    )
+
+    events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert [event.event_type for event in events] == [
+        TraceEventType.AGENT_STARTED,
+        TraceEventType.AGENT_FINISHED,
+    ]
+
+    assert events[0].metadata["message_count"] == 1
+    assert events[0].metadata["max_iterations"] == 10
+
+    assert events[1].metadata["iterations"] == 1
+    assert events[1].metadata["final_message_count"] == 1
+    assert events[1].metadata["duration_ms"] == 1000.0
+
+    assert len(client.received_trace_contexts) == 1
+    assert client.received_trace_contexts[0].trace_id == events[0].trace_id
+
+
+def test_stream_should_fail_when_completion_event_is_missing(
+    create_agent_runner: AgentRunnerFactory,
+) -> None:
+    client = FakeStreamingClient(
+        event_batches=[
+            [
+                ClientContentDelta(
+                    content="Incomplete",
+                ),
+            ],
+        ],
+    )
+
+    tracer = MagicMock(
+        spec=BaseTracer,
+    )
+
+    agent_runner = create_agent_runner(
+        client=client,
+        tool_executor=FakeToolExecutor(),
+        tracer=tracer,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Client stream ended without a completion event",
+    ):
+        list(
+            agent_runner.stream(
+                [
+                    Message(
+                        role=MessageRole.USER,
+                        content="Hello",
+                    ),
+                ]
+            )
+        )
+
+    events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert [event.event_type for event in events] == [
+        TraceEventType.AGENT_STARTED,
+        TraceEventType.AGENT_FAILED,
+    ]
+
+    assert events[1].metadata["error_type"] == "RuntimeError"
+    assert events[1].metadata["error_message"] == (
+        "Client stream ended without a completion event."
+    )
+    assert events[1].metadata["duration_ms"] == 1000.0
+
+
+def test_stream_raises_when_max_iterations_is_exceeded(
+    create_agent_runner: AgentRunnerFactory,
+) -> None:
+    tool_call = ToolCall(
+        call_id="call_123",
+        name="calculator",
+        arguments={
+            "expression": "1 + 2",
+        },
+    )
+
+    tool_response = ClientResponse(
+        tool_calls=(tool_call,),
+    )
+
+    client = FakeStreamingClient(
+        event_batches=[
+            [
+                ClientStreamCompleted(
+                    response=tool_response,
+                ),
+            ],
+            [
+                ClientStreamCompleted(
+                    response=tool_response,
+                ),
+            ],
+        ],
+    )
+
+    tool_executor = FakeToolExecutor(
+        result=3,
+    )
+
+    tracer = MagicMock(
+        spec=BaseTracer,
+    )
+
+    agent_runner = create_agent_runner(
+        client=client,
+        tool_executor=tool_executor,
+        tracer=tracer,
+        max_iterations=2,
+    )
+
+    with pytest.raises(
+        MaxIterationsExceededError,
+        match="maximum number of iterations: 2",
+    ):
+        list(
+            agent_runner.stream(
+                [
+                    Message(
+                        role=MessageRole.USER,
+                        content="Keep calculating.",
+                    ),
+                ]
+            )
+        )
+
+    assert client.call_count == 2
+
+    assert tool_executor.received_tool_calls == [
+        tool_call,
+    ]
+
+    events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert [event.event_type for event in events] == [
+        TraceEventType.AGENT_STARTED,
+        TraceEventType.AGENT_FAILED,
+    ]
+
+    assert events[1].metadata["error_type"] == "MaxIterationsExceededError"
+
+
+def test_stream_passes_context_metadata_to_tool_executor(
+    create_agent_runner: AgentRunnerFactory,
+) -> None:
+    tool_call = ToolCall(
+        call_id="call_123",
+        name="calculator",
+        arguments={
+            "expression": "1 + 2",
+        },
+    )
+
+    final_response = ClientResponse(
+        content="3",
+    )
+
+    client = FakeStreamingClient(
+        event_batches=[
+            [
+                ClientStreamCompleted(
+                    response=ClientResponse(
+                        tool_calls=(tool_call,),
+                    ),
+                ),
+            ],
+            [
+                ClientContentDelta(
+                    content="3",
+                ),
+                ClientStreamCompleted(
+                    response=final_response,
+                ),
+            ],
+        ],
+    )
+
+    tool_executor = FakeToolExecutor(
+        result=3,
+    )
+
+    agent_runner = create_agent_runner(
+        client=client,
+        tool_executor=tool_executor,
+    )
+
+    context = AgentRunContext(
+        metadata={
+            "request_id": "request-123",
+            "user_id": "frank",
+        },
+    )
+
+    events = list(
+        agent_runner.stream(
+            messages=[
+                Message(
+                    role=MessageRole.USER,
+                    content="Calculate 1 + 2",
+                ),
+            ],
+            context=context,
+        )
+    )
+
+    assert events == [
+        AgentContentDelta(
+            content="3",
+        ),
+        AgentStreamCompleted(
+            response=final_response,
+        ),
+    ]
+
+    assert tool_executor.received_metadata == [
+        context.metadata,
+    ]
+
+    assert len(tool_executor.received_trace_contexts) == 1
+    assert (
+        tool_executor.received_trace_contexts[0].trace_id
+        == client.received_trace_contexts[0].trace_id
+    )
