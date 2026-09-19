@@ -1,8 +1,8 @@
 import json
 import logging
 import time
-from collections.abc import Sequence
-from typing import Any
+from collections.abc import Iterable, Iterator, Sequence
+from typing import Any, cast
 
 from groq import (
     APIConnectionError,
@@ -24,6 +24,11 @@ from app.exceptions.client_exceptions import (
     ClientTimeoutError,
 )
 from app.models.client_response import ClientResponse
+from app.models.client_stream_event import (
+    ClientContentDelta,
+    ClientStreamCompleted,
+    ClientStreamEvent,
+)
 from app.models.message import Message
 from app.tools.tool_call import ToolCall
 from app.tools.tool_provider import ToolProvider
@@ -120,6 +125,274 @@ class GroqClient(BaseClient):
         )
 
         return client_response
+
+    def stream_chat(
+        self,
+        messages: Sequence[Message],
+        trace_context: TraceContext,
+    ) -> Iterator[ClientStreamEvent]:
+        formatted_messages = self._format_messages(messages)
+
+        llm_context = trace_context.create_child()
+        start_time = self._clock.now()
+
+        self._tracer.trace(
+            TraceEvent(
+                trace_id=llm_context.trace_id,
+                span_id=llm_context.span_id,
+                parent_span_id=llm_context.parent_span_id,
+                event_type=TraceEventType.LLM_STARTED,
+                metadata={
+                    "model": self._groq_config.model,
+                    "message_count": len(messages),
+                },
+            )
+        )
+
+        try:
+            stream, attempt = self._create_stream_with_retry(
+                formatted_messages,
+            )
+
+            content_parts: list[str] = []
+            tool_call_parts: dict[int, dict[str, str]] = {}
+
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+
+                choice = chunk.choices[0]
+
+                self._accumulate_stream_tool_calls(
+                    tool_call_parts,
+                    choice.delta.tool_calls,
+                )
+
+                content_delta = choice.delta.content
+
+                if content_delta is None or content_delta == "":
+                    continue
+
+                content_parts.append(content_delta)
+
+                yield ClientContentDelta(
+                    content=content_delta,
+                )
+
+            raw_content = "".join(content_parts)
+            sanitized_content = self._sanitize_response(
+                raw_content,
+            )
+            content = sanitized_content or None
+
+            tool_calls = self._build_stream_tool_calls(
+                tool_call_parts,
+            )
+
+            if not tool_calls and not self._is_valid_response(content):
+                raise ClientInvalidResponseError(
+                    "Groq returned invalid streamed content."
+                )
+
+            client_response = ClientResponse(
+                content=content,
+                tool_calls=tool_calls,
+            )
+        except Exception as error:
+            mapped_error = self._map_stream_error(error)
+
+            duration_ms = (self._clock.now() - start_time) * 1000
+
+            self._tracer.trace(
+                TraceEvent(
+                    trace_id=llm_context.trace_id,
+                    span_id=llm_context.span_id,
+                    parent_span_id=llm_context.parent_span_id,
+                    event_type=TraceEventType.LLM_FAILED,
+                    metadata={
+                        "model": self._groq_config.model,
+                        "error_type": type(mapped_error).__name__,
+                        "error_message": str(mapped_error),
+                        "duration_ms": duration_ms,
+                    },
+                )
+            )
+
+            if mapped_error is error:
+                raise
+
+            raise mapped_error from error
+
+        duration_ms = (self._clock.now() - start_time) * 1000
+
+        self._tracer.trace(
+            TraceEvent(
+                trace_id=llm_context.trace_id,
+                span_id=llm_context.span_id,
+                parent_span_id=llm_context.parent_span_id,
+                event_type=TraceEventType.LLM_FINISHED,
+                metadata={
+                    "model": self._groq_config.model,
+                    "attempt": attempt,
+                    "has_tool_calls": client_response.has_tool_calls,
+                    "tool_call_count": len(
+                        client_response.tool_calls,
+                    ),
+                    "duration_ms": duration_ms,
+                },
+            )
+        )
+
+        yield ClientStreamCompleted(
+            response=client_response,
+        )
+
+    def _accumulate_stream_tool_calls(
+        self,
+        tool_call_parts: dict[int, dict[str, str]],
+        raw_tool_calls: Any,
+    ) -> None:
+        if not raw_tool_calls:
+            return
+
+        for raw_tool_call in raw_tool_calls:
+            parts = tool_call_parts.setdefault(
+                raw_tool_call.index,
+                {
+                    "call_id": "",
+                    "name": "",
+                    "arguments": "",
+                },
+            )
+
+            if raw_tool_call.id is not None:
+                parts["call_id"] += raw_tool_call.id
+
+            if raw_tool_call.function is None:
+                continue
+
+            if raw_tool_call.function.name is not None:
+                parts["name"] += raw_tool_call.function.name
+
+            if raw_tool_call.function.arguments is not None:
+                parts["arguments"] += raw_tool_call.function.arguments
+
+    def _build_stream_tool_calls(
+        self,
+        tool_call_parts: dict[int, dict[str, str]],
+    ) -> tuple[ToolCall, ...]:
+        return tuple(
+            ToolCall(
+                call_id=parts["call_id"],
+                name=parts["name"],
+                arguments=json.loads(
+                    parts["arguments"] or "{}",
+                ),
+            )
+            for _, parts in sorted(
+                tool_call_parts.items(),
+            )
+        )
+
+    def _map_stream_error(
+        self,
+        error: Exception,
+    ) -> Exception:
+        if isinstance(error, AuthenticationError):
+            return ClientAuthenticationError("AI client authentication failed")
+
+        if isinstance(error, RateLimitError):
+            return ClientRateLimitError("AI service rate limit exceeded")
+
+        if isinstance(error, APITimeoutError):
+            return ClientTimeoutError("AI client request timed out")
+
+        if isinstance(error, APIConnectionError):
+            return ClientConnectionError("Failed to connect to AI service")
+
+        return error
+
+    def _create_stream_with_retry(
+        self,
+        formatted_messages: list[dict[str, object]],
+    ) -> tuple[Iterable[Any], int]:
+        max_attempts = self._retry_config.max_attempts
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                logger.debug(
+                    "Starting Groq stream attempt=%d/%d",
+                    attempt,
+                    max_attempts,
+                )
+
+                tool_schemas = self._tool_provider.get_tool_schemas()
+
+                request_kwargs: dict[str, Any] = {
+                    "messages": formatted_messages,
+                    "model": self._groq_config.model,
+                    "temperature": self._groq_config.temperature,
+                    "max_completion_tokens": (self._groq_config.max_completion_tokens),
+                    "stream": True,
+                }
+
+                if tool_schemas:
+                    request_kwargs["tools"] = tool_schemas
+
+                stream = cast(
+                    Iterable[Any],
+                    self._client.chat.completions.create(
+                        **request_kwargs,
+                    ),
+                )
+
+                logger.info(
+                    "Groq stream started on attempt %d/%d",
+                    attempt,
+                    max_attempts,
+                )
+
+                return stream, attempt
+
+            except AuthenticationError as error:
+                logger.exception("Groq authentication failed")
+
+                raise ClientAuthenticationError(
+                    "AI client authentication failed"
+                ) from error
+
+            except RateLimitError as error:
+                self._handle_retryable_error(
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    error=error,
+                    error_name="rate limit",
+                    final_exception=ClientRateLimitError(
+                        "AI service rate limit exceeded"
+                    ),
+                )
+
+            except APITimeoutError as error:
+                self._handle_retryable_error(
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    error=error,
+                    error_name="request timeout",
+                    final_exception=ClientTimeoutError("AI client request timed out"),
+                )
+
+            except APIConnectionError as error:
+                self._handle_retryable_error(
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    error=error,
+                    error_name="connection",
+                    final_exception=ClientConnectionError(
+                        "Failed to connect to AI service"
+                    ),
+                )
+
+        raise RuntimeError("Groq stream retry loop ended unexpectedly.")
 
     def _chat_with_retry(
         self,

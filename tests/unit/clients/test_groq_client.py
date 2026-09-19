@@ -1,11 +1,12 @@
 import json
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from unittest.mock import MagicMock, call, patch
 
 import httpx
 import pytest
 from groq import (
     APIConnectionError,
+    APITimeoutError,
     AuthenticationError,
     RateLimitError,
 )
@@ -18,8 +19,13 @@ from app.exceptions.client_exceptions import (
     ClientAuthenticationError,
     ClientConnectionError,
     ClientRateLimitError,
+    ClientTimeoutError,
 )
 from app.models.client_response import ClientResponse
+from app.models.client_stream_event import (
+    ClientContentDelta,
+    ClientStreamCompleted,
+)
 from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.tools.calculator_tool import CalculatorTool
@@ -99,6 +105,48 @@ def create_tool_call_response(
     return response
 
 
+def create_stream_chunk(
+    content: str | None,
+    *,
+    finish_reason: str | None = None,
+) -> MagicMock:
+    chunk = MagicMock()
+
+    chunk.choices[0].delta.content = content
+    chunk.choices[0].delta.tool_calls = None
+    chunk.choices[0].finish_reason = finish_reason
+
+    return chunk
+
+
+def create_stream_tool_call_chunk(
+    *,
+    index: int,
+    call_id: str | None = None,
+    name: str | None = None,
+    arguments: str | None = None,
+) -> MagicMock:
+    chunk = create_stream_chunk(
+        None,
+    )
+    raw_tool_call = MagicMock()
+
+    raw_tool_call.index = index
+    raw_tool_call.id = call_id
+
+    if name is None and arguments is None:
+        raw_tool_call.function = None
+    else:
+        raw_tool_call.function.name = name
+        raw_tool_call.function.arguments = arguments
+
+    chunk.choices[0].delta.tool_calls = [
+        raw_tool_call,
+    ]
+
+    return chunk
+
+
 @pytest.fixture
 def groq_client(
     tracer: MagicMock,
@@ -115,6 +163,547 @@ def messages() -> list[Message]:
             role=MessageRole.USER,
             content="Hello",
         )
+    ]
+
+
+def test_stream_chat_yields_text_deltas_and_completed_response(
+    groq_client: GroqClient,
+    messages: Sequence[Message],
+    trace_context: TraceContext,
+) -> None:
+    stream = iter(
+        [
+            create_stream_chunk("你"),
+            create_stream_chunk("好"),
+            create_stream_chunk(
+                None,
+                finish_reason="stop",
+            ),
+        ]
+    )
+
+    mock_create = MagicMock(
+        return_value=stream,
+    )
+
+    groq_client._client.chat.completions.create = mock_create
+
+    events = list(
+        groq_client.stream_chat(
+            messages=messages,
+            trace_context=trace_context,
+        )
+    )
+
+    assert events == [
+        ClientContentDelta(
+            content="你",
+        ),
+        ClientContentDelta(
+            content="好",
+        ),
+        ClientStreamCompleted(
+            response=ClientResponse(
+                content="你好",
+            )
+        ),
+    ]
+
+    request_kwargs = mock_create.call_args.kwargs
+
+    assert request_kwargs["stream"] is True
+    assert request_kwargs["model"] == "test-model"
+
+
+@patch("app.tracing.trace_context.uuid.uuid4")
+def test_stream_chat_should_trace_llm_lifecycle(
+    mock_uuid4: MagicMock,
+    groq_client: GroqClient,
+    tracer: MagicMock,
+    messages: Sequence[Message],
+    trace_context: TraceContext,
+) -> None:
+    mock_uuid4.return_value.hex = "llm-span-id"
+
+    stream = iter(
+        [
+            create_stream_chunk("你"),
+            create_stream_chunk("好"),
+            create_stream_chunk(
+                None,
+                finish_reason="stop",
+            ),
+        ]
+    )
+
+    groq_client._client.chat.completions.create = MagicMock(
+        return_value=stream,
+    )
+
+    list(
+        groq_client.stream_chat(
+            messages=messages,
+            trace_context=trace_context,
+        )
+    )
+
+    events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert [event.event_type for event in events] == [
+        TraceEventType.LLM_STARTED,
+        TraceEventType.LLM_FINISHED,
+    ]
+
+    assert events[0].metadata == {
+        "model": "test-model",
+        "message_count": 1,
+    }
+
+    assert events[1].metadata == {
+        "model": "test-model",
+        "attempt": 1,
+        "has_tool_calls": False,
+        "tool_call_count": 0,
+        "duration_ms": 1000.0,
+    }
+
+    assert {event.trace_id for event in events} == {
+        "test-trace-id",
+    }
+    assert {event.span_id for event in events} == {
+        "llm-span-id",
+    }
+    assert {event.parent_span_id for event in events} == {
+        "agent-span-id",
+    }
+
+
+@patch("app.tracing.trace_context.uuid.uuid4")
+def test_stream_chat_should_trace_and_map_authentication_error(
+    mock_uuid4: MagicMock,
+    groq_client: GroqClient,
+    tracer: MagicMock,
+    messages: Sequence[Message],
+    trace_context: TraceContext,
+) -> None:
+    mock_uuid4.return_value.hex = "llm-span-id"
+
+    request = httpx.Request(
+        method="POST",
+        url="https://api.groq.com/openai/v1/chat/completions",
+    )
+
+    response = httpx.Response(
+        status_code=401,
+        request=request,
+    )
+
+    authentication_error = AuthenticationError(
+        "Invalid API Key",
+        response=response,
+        body={
+            "error": {
+                "message": "Invalid API Key",
+            }
+        },
+    )
+
+    mock_create = MagicMock(
+        side_effect=authentication_error,
+    )
+
+    groq_client._client.chat.completions.create = mock_create
+
+    with pytest.raises(
+        ClientAuthenticationError,
+        match="AI client authentication failed",
+    ):
+        list(
+            groq_client.stream_chat(
+                messages=messages,
+                trace_context=trace_context,
+            )
+        )
+
+    assert mock_create.call_count == 1
+
+    events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert [event.event_type for event in events] == [
+        TraceEventType.LLM_STARTED,
+        TraceEventType.LLM_FAILED,
+    ]
+
+    assert events[1].metadata["error_type"] == ("ClientAuthenticationError")
+    assert events[1].metadata["error_message"] == ("AI client authentication failed")
+    assert events[1].metadata["duration_ms"] == 1000.0
+
+
+@patch("app.tracing.trace_context.uuid.uuid4")
+@patch("app.clients.groq_client.time.sleep")
+def test_stream_chat_retries_connection_error_then_succeeds(
+    mock_sleep: MagicMock,
+    mock_uuid4: MagicMock,
+    groq_client: GroqClient,
+    tracer: MagicMock,
+    messages: Sequence[Message],
+    trace_context: TraceContext,
+) -> None:
+    mock_uuid4.return_value.hex = "llm-span-id"
+
+    request = httpx.Request(
+        method="POST",
+        url="https://api.groq.com/openai/v1/chat/completions",
+    )
+
+    connection_error = APIConnectionError(
+        request=request,
+    )
+
+    stream = iter(
+        [
+            create_stream_chunk("你"),
+            create_stream_chunk("好"),
+            create_stream_chunk(
+                None,
+                finish_reason="stop",
+            ),
+        ]
+    )
+
+    mock_create = MagicMock(
+        side_effect=[
+            connection_error,
+            connection_error,
+            stream,
+        ]
+    )
+
+    groq_client._client.chat.completions.create = mock_create
+
+    events = list(
+        groq_client.stream_chat(
+            messages=messages,
+            trace_context=trace_context,
+        )
+    )
+
+    assert events == [
+        ClientContentDelta(
+            content="你",
+        ),
+        ClientContentDelta(
+            content="好",
+        ),
+        ClientStreamCompleted(
+            response=ClientResponse(
+                content="你好",
+            )
+        ),
+    ]
+
+    assert mock_create.call_count == 3
+    assert mock_sleep.call_args_list == [
+        call(1.0),
+        call(2.0),
+    ]
+
+    trace_events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert [event.event_type for event in trace_events] == [
+        TraceEventType.LLM_STARTED,
+        TraceEventType.LLM_FINISHED,
+    ]
+
+    assert trace_events[1].metadata["attempt"] == 3
+    assert TraceEventType.LLM_FAILED not in [event.event_type for event in trace_events]
+
+
+@patch("app.tracing.trace_context.uuid.uuid4")
+@patch("app.clients.groq_client.time.sleep")
+def test_stream_chat_should_not_retry_after_content_is_emitted(
+    mock_sleep: MagicMock,
+    mock_uuid4: MagicMock,
+    groq_client: GroqClient,
+    tracer: MagicMock,
+    messages: Sequence[Message],
+    trace_context: TraceContext,
+) -> None:
+    mock_uuid4.return_value.hex = "llm-span-id"
+
+    request = httpx.Request(
+        method="POST",
+        url="https://api.groq.com/openai/v1/chat/completions",
+    )
+
+    connection_error = APIConnectionError(
+        request=request,
+    )
+
+    def failing_stream() -> Iterator[MagicMock]:
+        yield create_stream_chunk("你")
+        raise connection_error
+
+    mock_create = MagicMock(
+        return_value=failing_stream(),
+    )
+
+    groq_client._client.chat.completions.create = mock_create
+
+    stream_events = groq_client.stream_chat(
+        messages=messages,
+        trace_context=trace_context,
+    )
+
+    assert next(stream_events) == ClientContentDelta(
+        content="你",
+    )
+
+    with pytest.raises(
+        ClientConnectionError,
+        match="Failed to connect to AI service",
+    ):
+        next(stream_events)
+
+    assert mock_create.call_count == 1
+    assert mock_sleep.call_count == 0
+
+    trace_events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert [event.event_type for event in trace_events] == [
+        TraceEventType.LLM_STARTED,
+        TraceEventType.LLM_FAILED,
+    ]
+
+    assert trace_events[1].metadata["error_type"] == ("ClientConnectionError")
+    assert trace_events[1].metadata["error_message"] == (
+        "Failed to connect to AI service"
+    )
+
+
+def test_stream_chat_accumulates_tool_call_deltas(
+    groq_client: GroqClient,
+    messages: Sequence[Message],
+    trace_context: TraceContext,
+) -> None:
+    stream = iter(
+        [
+            create_stream_tool_call_chunk(
+                index=0,
+                call_id="call_123",
+                name="calculator",
+                arguments='{"expression":"',
+            ),
+            create_stream_tool_call_chunk(
+                index=0,
+                arguments='1 + 2"}',
+            ),
+            create_stream_chunk(
+                None,
+                finish_reason="tool_calls",
+            ),
+        ]
+    )
+
+    mock_create = MagicMock(
+        return_value=stream,
+    )
+
+    groq_client._client.chat.completions.create = mock_create
+
+    events = list(
+        groq_client.stream_chat(
+            messages=messages,
+            trace_context=trace_context,
+        )
+    )
+
+    assert events == [
+        ClientStreamCompleted(
+            response=ClientResponse(
+                content=None,
+                tool_calls=(
+                    ToolCall(
+                        call_id="call_123",
+                        name="calculator",
+                        arguments={
+                            "expression": "1 + 2",
+                        },
+                    ),
+                ),
+            )
+        )
+    ]
+
+
+def test_stream_chat_accumulates_multiple_tool_calls_by_index(
+    groq_client: GroqClient,
+    tracer: MagicMock,
+    messages: Sequence[Message],
+    trace_context: TraceContext,
+) -> None:
+    stream = iter(
+        [
+            create_stream_tool_call_chunk(
+                index=1,
+                call_id="call_456",
+            ),
+            create_stream_tool_call_chunk(
+                index=0,
+                call_id="call_123",
+                name="calculator",
+                arguments='{"expression":"',
+            ),
+            create_stream_tool_call_chunk(
+                index=1,
+                name="weather",
+                arguments='{"city":"',
+            ),
+            create_stream_tool_call_chunk(
+                index=0,
+                arguments='2 + 3"}',
+            ),
+            create_stream_tool_call_chunk(
+                index=1,
+                arguments='Taipei"}',
+            ),
+            create_stream_chunk(
+                None,
+                finish_reason="tool_calls",
+            ),
+        ]
+    )
+
+    groq_client._client.chat.completions.create = MagicMock(
+        return_value=stream,
+    )
+
+    events = list(
+        groq_client.stream_chat(
+            messages=messages,
+            trace_context=trace_context,
+        )
+    )
+
+    assert events == [
+        ClientStreamCompleted(
+            response=ClientResponse(
+                content=None,
+                tool_calls=(
+                    ToolCall(
+                        call_id="call_123",
+                        name="calculator",
+                        arguments={
+                            "expression": "2 + 3",
+                        },
+                    ),
+                    ToolCall(
+                        call_id="call_456",
+                        name="weather",
+                        arguments={
+                            "city": "Taipei",
+                        },
+                    ),
+                ),
+            )
+        )
+    ]
+
+    trace_events = [trace_call.args[0] for trace_call in tracer.trace.call_args_list]
+
+    assert trace_events[-1].event_type == (TraceEventType.LLM_FINISHED)
+    assert trace_events[-1].metadata["has_tool_calls"] is True
+    assert trace_events[-1].metadata["tool_call_count"] == 2
+
+
+@patch("app.clients.groq_client.time.sleep")
+def test_stream_chat_raises_rate_limit_error_after_max_attempts(
+    mock_sleep: MagicMock,
+    groq_client: GroqClient,
+    messages: Sequence[Message],
+    trace_context: TraceContext,
+) -> None:
+    request = httpx.Request(
+        method="POST",
+        url="https://api.groq.com/openai/v1/chat/completions",
+    )
+
+    response = httpx.Response(
+        status_code=429,
+        request=request,
+    )
+
+    rate_limit_error = RateLimitError(
+        message="Rate limit exceeded",
+        response=response,
+        body=None,
+    )
+
+    mock_create = MagicMock(
+        side_effect=rate_limit_error,
+    )
+
+    groq_client._client.chat.completions.create = mock_create
+
+    with pytest.raises(
+        ClientRateLimitError,
+        match="AI service rate limit exceeded",
+    ):
+        list(
+            groq_client.stream_chat(
+                messages=messages,
+                trace_context=trace_context,
+            )
+        )
+
+    assert mock_create.call_count == 3
+    assert mock_sleep.call_args_list == [
+        call(1.0),
+        call(2.0),
+    ]
+
+
+@patch("app.clients.groq_client.time.sleep")
+def test_stream_chat_raises_timeout_error_after_max_attempts(
+    mock_sleep: MagicMock,
+    tracer: MagicMock,
+    messages: Sequence[Message],
+    trace_context: TraceContext,
+) -> None:
+    groq_client = create_groq_client(
+        tracer=tracer,
+        max_attempts=2,
+    )
+
+    request = httpx.Request(
+        method="POST",
+        url="https://api.groq.com/openai/v1/chat/completions",
+    )
+
+    timeout_error = APITimeoutError(
+        request=request,
+    )
+
+    mock_create = MagicMock(
+        side_effect=timeout_error,
+    )
+
+    groq_client._client.chat.completions.create = mock_create
+
+    with pytest.raises(
+        ClientTimeoutError,
+        match="AI client request timed out",
+    ):
+        list(
+            groq_client.stream_chat(
+                messages=messages,
+                trace_context=trace_context,
+            )
+        )
+
+    assert mock_create.call_count == 2
+    assert mock_sleep.call_args_list == [
+        call(1.0),
     ]
 
 
