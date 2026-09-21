@@ -4,7 +4,7 @@
   "tabWidth": 4,
   "trailingComma": "all",
   "printWidth": 80,
-  "endOfLine": "auto",
+  "endOfLine": "lf",
   "overrides": [
     {
       "files": ["*.json", "*.jsonc"],
