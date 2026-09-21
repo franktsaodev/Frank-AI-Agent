@@ -2,6 +2,7 @@ from typing import Protocol
 
 import pytest
 
+from app.agent.agent_runner_protocol import AgentRunnerProtocol
 from app.agent.chat_agent import ChatAgent
 from app.config_models.memory_config import MemoryConfig
 from app.config_models.memory_policy_config import (
@@ -11,6 +12,14 @@ from app.config_models.prompt_config import PromptConfig
 from app.extractors.regex_fact_extractor import RegexFactExtractor
 from app.memory.in_memory_fact_memory import InMemoryFactMemory
 from app.memory.sliding_window_memory import SlidingWindowMemory
+from app.models.agent_stream_event import (
+    AgentContentDelta,
+    AgentStreamCompleted,
+)
+from app.models.chat_stream_event import (
+    ChatContentDelta,
+    ChatStreamCompleted,
+)
 from app.models.client_response import ClientResponse
 from app.models.message import Message
 from app.models.message_role import MessageRole
@@ -30,13 +39,16 @@ from app.retrieval.vector_stores.search_result import SearchResult
 from tests.fakes.fake_agent_runner import FakeAgentRunner
 from tests.fakes.fake_prompt_composer import FakePromptComposer
 from tests.fakes.fake_retriever import FakeRetriever
+from tests.fakes.fake_streaming_agent_runner import (
+    FakeStreamingAgentRunner,
+)
 
 
 class ChatAgentFactory(Protocol):
     def __call__(
         self,
         *,
-        agent_runner: FakeAgentRunner | None = None,
+        agent_runner: AgentRunnerProtocol | None = None,
         memory: SlidingWindowMemory | None = None,
         prompt_composer: PromptComposerProtocol | None = None,
         citation_guard: CitationGuardProtocol | None = None,
@@ -49,7 +61,7 @@ class ChatAgentFactory(Protocol):
 def create_agent() -> ChatAgentFactory:
     def _create_agent(
         *,
-        agent_runner: FakeAgentRunner | None = None,
+        agent_runner: AgentRunnerProtocol | None = None,
         memory: SlidingWindowMemory | None = None,
         prompt_composer: PromptComposerProtocol | None = None,
         citation_guard: CitationGuardProtocol | None = None,
@@ -465,3 +477,370 @@ def test_chat_should_use_safe_response_for_unknown_citation_token(
 
     assert result == expected_response
     assert agent.get_history()[-1].content == expected_response
+
+
+def test_stream_chat_yields_final_response_and_updates_history(
+    create_agent: ChatAgentFactory,
+) -> None:
+    final_response = ClientResponse(
+        content="Hello Frank!",
+    )
+
+    agent_runner = FakeStreamingAgentRunner(
+        event_batches=[
+            [
+                AgentContentDelta(
+                    content="Hello ",
+                ),
+                AgentContentDelta(
+                    content="Frank!",
+                ),
+                AgentStreamCompleted(
+                    response=final_response,
+                ),
+            ],
+        ],
+    )
+
+    agent = create_agent(
+        agent_runner=agent_runner,
+    )
+
+    events = list(
+        agent.stream_chat(
+            "Hello",
+        )
+    )
+
+    assert events == [
+        ChatContentDelta(
+            content="Hello Frank!",
+        ),
+        ChatStreamCompleted(
+            response="Hello Frank!",
+        ),
+    ]
+
+    assert agent_runner.call_count == 1
+
+    assert agent.get_history() == (
+        Message(
+            role=MessageRole.USER,
+            content="Hello",
+        ),
+        Message(
+            role=MessageRole.ASSISTANT,
+            content="Hello Frank!",
+        ),
+    )
+
+
+def test_stream_chat_validates_citations_before_emitting_content(
+    create_agent: ChatAgentFactory,
+) -> None:
+    raw_response = "Sessions use sliding expiration. [source:1]"
+
+    agent_runner = FakeStreamingAgentRunner(
+        event_batches=[
+            [
+                AgentContentDelta(
+                    content=raw_response,
+                ),
+                AgentStreamCompleted(
+                    response=ClientResponse(
+                        content=raw_response,
+                    ),
+                ),
+            ],
+        ],
+    )
+
+    retriever = FakeRetriever(
+        results=[
+            SearchResult(
+                document=Document(
+                    content="Sessions use sliding expiration.",
+                    metadata={
+                        "source": "session.pdf",
+                        "page": 2,
+                    },
+                ),
+                score=0.9,
+            ),
+        ],
+    )
+
+    agent = create_agent(
+        agent_runner=agent_runner,
+        retriever=retriever,
+        retrieval_policy=AlwaysRetrievePolicy(),
+    )
+
+    events = list(
+        agent.stream_chat(
+            "How do sessions expire?",
+        )
+    )
+
+    verified_response = (
+        "Sessions use sliding expiration. [Source: session.pdf (page 2)]"
+    )
+
+    assert events == [
+        ChatContentDelta(
+            content=verified_response,
+        ),
+        ChatStreamCompleted(
+            response=verified_response,
+        ),
+    ]
+
+    assert agent.get_history()[-1] == Message(
+        role=MessageRole.ASSISTANT,
+        content=verified_response,
+    )
+
+
+def test_stream_chat_does_not_update_history_without_completion(
+    create_agent: ChatAgentFactory,
+) -> None:
+    agent_runner = FakeStreamingAgentRunner(
+        event_batches=[
+            [
+                AgentContentDelta(
+                    content="Incomplete response",
+                ),
+            ],
+        ],
+    )
+
+    agent = create_agent(
+        agent_runner=agent_runner,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Agent stream ended without a completion event",
+    ):
+        list(
+            agent.stream_chat(
+                "Hello",
+            )
+        )
+
+    assert agent.get_history() == ()
+
+
+def test_stream_chat_uses_safe_response_for_invalid_citation(
+    create_agent: ChatAgentFactory,
+) -> None:
+    raw_response = "Sessions use sliding expiration. [source:2]"
+
+    agent_runner = FakeStreamingAgentRunner(
+        event_batches=[
+            [
+                AgentContentDelta(
+                    content=raw_response,
+                ),
+                AgentStreamCompleted(
+                    response=ClientResponse(
+                        content=raw_response,
+                    ),
+                ),
+            ],
+        ],
+    )
+
+    retriever = FakeRetriever(
+        results=[
+            SearchResult(
+                document=Document(
+                    content="Sessions use sliding expiration.",
+                    metadata={
+                        "source": "session.pdf",
+                        "page": 2,
+                    },
+                ),
+                score=0.9,
+            ),
+        ],
+    )
+
+    agent = create_agent(
+        agent_runner=agent_runner,
+        retriever=retriever,
+        retrieval_policy=AlwaysRetrievePolicy(),
+    )
+
+    events = list(
+        agent.stream_chat(
+            "How do sessions expire?",
+        )
+    )
+
+    safe_response = (
+        "I could not provide a response because its citations could not be verified."
+    )
+
+    assert events == [
+        ChatContentDelta(
+            content=safe_response,
+        ),
+        ChatStreamCompleted(
+            response=safe_response,
+        ),
+    ]
+
+    assert agent.get_history()[-1] == Message(
+        role=MessageRole.ASSISTANT,
+        content=safe_response,
+    )
+
+
+def test_stream_chat_uses_grounded_fallback_without_calling_runner(
+    create_agent: ChatAgentFactory,
+) -> None:
+    agent_runner = FakeStreamingAgentRunner(
+        event_batches=[],
+    )
+
+    agent = create_agent(
+        agent_runner=agent_runner,
+        retriever=FakeRetriever(),
+        retrieval_policy=AlwaysRetrievePolicy(),
+    )
+
+    events = list(
+        agent.stream_chat(
+            "What is the session TTL?",
+        )
+    )
+
+    fallback_response = (
+        "I could not find enough information in the retrieved "
+        "knowledge to answer this question."
+    )
+
+    assert events == [
+        ChatContentDelta(
+            content=fallback_response,
+        ),
+        ChatStreamCompleted(
+            response=fallback_response,
+        ),
+    ]
+
+    assert agent_runner.call_count == 0
+
+    assert agent.get_history() == (
+        Message(
+            role=MessageRole.USER,
+            content="What is the session TTL?",
+        ),
+        Message(
+            role=MessageRole.ASSISTANT,
+            content=fallback_response,
+        ),
+    )
+
+
+def test_stream_chat_passes_metadata_to_agent_runner(
+    create_agent: ChatAgentFactory,
+) -> None:
+    agent_runner = FakeStreamingAgentRunner(
+        event_batches=[
+            [
+                AgentStreamCompleted(
+                    response=ClientResponse(
+                        content="Hello!",
+                    ),
+                ),
+            ],
+        ],
+    )
+
+    agent = create_agent(
+        agent_runner=agent_runner,
+    )
+
+    metadata = {
+        "request_id": "request-123",
+        "user_id": "frank",
+        "source": "stream-test",
+    }
+
+    list(
+        agent.stream_chat(
+            "Hello",
+            metadata=metadata,
+        )
+    )
+
+    assert len(agent_runner.received_contexts) == 1
+
+    context = agent_runner.received_contexts[0]
+
+    assert context is not None
+    assert context.metadata == metadata
+
+
+def test_stream_chat_rejects_blank_message(
+    create_agent: ChatAgentFactory,
+) -> None:
+    agent_runner = FakeStreamingAgentRunner(
+        event_batches=[],
+    )
+
+    agent = create_agent(
+        agent_runner=agent_runner,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="User message cannot be empty",
+    ):
+        list(
+            agent.stream_chat(
+                "   ",
+            )
+        )
+
+    assert agent_runner.call_count == 0
+    assert agent.get_history() == ()
+
+
+def test_stream_chat_rejects_multiple_completion_events(
+    create_agent: ChatAgentFactory,
+) -> None:
+    agent_runner = FakeStreamingAgentRunner(
+        event_batches=[
+            [
+                AgentStreamCompleted(
+                    response=ClientResponse(
+                        content="First response",
+                    ),
+                ),
+                AgentStreamCompleted(
+                    response=ClientResponse(
+                        content="Second response",
+                    ),
+                ),
+            ],
+        ],
+    )
+
+    agent = create_agent(
+        agent_runner=agent_runner,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Agent stream returned more than one completion event",
+    ):
+        list(
+            agent.stream_chat(
+                "Hello",
+            )
+        )
+
+    assert agent.get_history() == ()

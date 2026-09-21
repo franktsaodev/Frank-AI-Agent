@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 
 from app.agent.agent_run_context import AgentRunContext
 from app.agent.agent_runner_protocol import (
@@ -8,6 +8,12 @@ from app.agent.agent_runner_protocol import (
 from app.extractors.base_fact_extractor import BaseFactExtractor
 from app.memory.base_fact_memory import BaseFactMemory
 from app.memory.base_memory import BaseMemory
+from app.models.agent_stream_event import AgentStreamCompleted
+from app.models.chat_stream_event import (
+    ChatContentDelta,
+    ChatStreamCompleted,
+    ChatStreamEvent,
+)
 from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.policies.base_memory_policy import BaseMemoryPolicy
@@ -130,24 +136,113 @@ class ChatAgent:
         if response.content is None:
             raise ValueError("Client response does not contain text content.")
 
-        try:
-            guarded_response = self._citation_guard.apply(
-                response.content,
-                retrieved_contexts,
-            )
-        except InvalidCitationError as error:
-            logger.warning(
-                "Rejected response with invalid citation: %s",
-                error,
-            )
-            guarded_response = (
-                "I could not provide a response because its citations "
-                "could not be verified."
-            )
+        guarded_response = self._apply_citation_guard(
+            response_content=response.content,
+            retrieved_contexts=retrieved_contexts,
+        )
 
         return self._complete_turn(
             user_message=user_message,
             response_content=guarded_response,
+        )
+
+    def stream_chat(
+        self,
+        message: str,
+        *,
+        metadata: Mapping[str, JsonValue] | None = None,
+    ) -> Iterator[ChatStreamEvent]:
+        if not message.strip():
+            raise ValueError("User message cannot be empty")
+
+        logger.info(
+            "Processing streaming chat request with message_length=%d",
+            len(message),
+        )
+
+        user_message = Message(
+            role=MessageRole.USER,
+            content=message,
+        )
+
+        extracted_facts = self._fact_extractor.extract(message)
+
+        self._remember_extracted_facts(extracted_facts)
+
+        retrieval_attempted = self._retrieval_policy.should_retrieve(
+            message,
+        )
+
+        retrieved_contexts = (
+            self._retrieve_contexts(message) if retrieval_attempted else []
+        )
+
+        if retrieval_attempted and not retrieved_contexts:
+            logger.info("Using grounded fallback because retrieval returned no results")
+
+            completed_response = self._complete_turn(
+                user_message=user_message,
+                response_content=_GROUNDED_FALLBACK_RESPONSE,
+            )
+
+            yield ChatContentDelta(
+                content=completed_response,
+            )
+            yield ChatStreamCompleted(
+                response=completed_response,
+            )
+            return
+
+        history_messages = self._memory.get_messages()
+        known_facts = self._fact_memory.get_all()
+
+        composed_messages = self._prompt_composer.compose(
+            system_message=self.system_message,
+            history_messages=history_messages,
+            facts=known_facts,
+            user_message=user_message,
+            retrieved_contexts=retrieved_contexts,
+        )
+
+        run_context = AgentRunContext(
+            metadata=(metadata if metadata is not None else {}),
+        )
+
+        response = None
+
+        for event in self._agent_runner.stream(
+            messages=composed_messages,
+            context=run_context,
+        ):
+            if isinstance(event, AgentStreamCompleted):
+                if response is not None:
+                    raise RuntimeError(
+                        "Agent stream returned more than one completion event."
+                    )
+
+                response = event.response
+
+        if response is None:
+            raise RuntimeError("Agent stream ended without a completion event.")
+
+        if response.content is None:
+            raise ValueError("Client response does not contain text content.")
+
+        guarded_response = self._apply_citation_guard(
+            response_content=response.content,
+            retrieved_contexts=retrieved_contexts,
+        )
+
+        completed_response = self._complete_turn(
+            user_message=user_message,
+            response_content=guarded_response,
+        )
+
+        yield ChatContentDelta(
+            content=completed_response,
+        )
+        yield ChatStreamCompleted(
+            response=completed_response,
         )
 
     def remember_fact(
@@ -178,6 +273,28 @@ class ChatAgent:
         self,
     ) -> None:
         self._memory.clear()
+
+    def _apply_citation_guard(
+        self,
+        *,
+        response_content: str,
+        retrieved_contexts: list[RetrievedContext],
+    ) -> str:
+        try:
+            return self._citation_guard.apply(
+                response_content,
+                retrieved_contexts,
+            )
+        except InvalidCitationError as error:
+            logger.warning(
+                "Rejected response with invalid citation: %s",
+                error,
+            )
+
+            return (
+                "I could not provide a response because its citations "
+                "could not be verified."
+            )
 
     def _complete_turn(
         self,
