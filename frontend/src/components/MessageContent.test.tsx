@@ -1,20 +1,11 @@
-import {
-    render,
-    screen,
-} from '@testing-library/react'
-import {
-    describe,
-    expect,
-    it,
-} from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
 
 import { MessageContent } from './MessageContent'
 
 describe('MessageContent', () => {
     it('should render ordinary message content', () => {
-        render(
-            <MessageContent content="Hello from Frank AI Agent." />,
-        )
+        render(<MessageContent content="Hello from Frank AI Agent." />)
 
         expect(
             screen.getByText('Hello from Frank AI Agent.'),
@@ -40,9 +31,7 @@ describe('MessageContent', () => {
         )
 
         expect(citationBadge).toBeInTheDocument()
-        expect(citationBadge).toHaveTextContent(
-            'Source: knowledge/session.md',
-        )
+        expect(citationBadge).toHaveTextContent('Source: knowledge/session.md')
     })
 
     it('should render multiple citation badges', () => {
@@ -56,9 +45,7 @@ describe('MessageContent', () => {
             />,
         )
 
-        const citationBadges = screen.getAllByTitle(
-            'Verified retrieval source',
-        )
+        const citationBadges = screen.getAllByTitle('Verified retrieval source')
 
         expect(citationBadges).toHaveLength(2)
         expect(citationBadges[0]).toHaveTextContent(
@@ -70,11 +57,7 @@ describe('MessageContent', () => {
     })
 
     it('should leave malformed citations as ordinary text', () => {
-        render(
-            <MessageContent
-                content="Unverified result [source:1]"
-            />,
-        )
+        render(<MessageContent content="Unverified result [source:1]" />)
 
         expect(
             screen.getByText('Unverified result [source:1]'),

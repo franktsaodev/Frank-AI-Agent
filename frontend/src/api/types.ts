@@ -52,6 +52,4 @@ export interface ChatErrorEvent {
 }
 
 export type ChatStreamEvent =
-    | ChatContentDeltaEvent
-    | ChatCompletedEvent
-    | ChatErrorEvent
+    ChatContentDeltaEvent | ChatCompletedEvent | ChatErrorEvent

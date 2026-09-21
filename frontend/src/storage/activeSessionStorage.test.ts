@@ -1,10 +1,4 @@
-import {
-    beforeEach,
-    describe,
-    expect,
-    it,
-    vi,
-} from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
     clearStoredSessionId,
@@ -30,10 +24,7 @@ describe('activeSessionStorage', () => {
     })
 
     it('should return null when the stored session ID is blank', () => {
-        window.localStorage.setItem(
-            ACTIVE_SESSION_ID_KEY,
-            '   ',
-        )
+        window.localStorage.setItem(ACTIVE_SESSION_ID_KEY, '   ')
 
         expect(getStoredSessionId()).toBeNull()
     })
@@ -47,10 +38,7 @@ describe('activeSessionStorage', () => {
     })
 
     it('should tolerate unavailable browser storage', () => {
-        vi.spyOn(
-            Storage.prototype,
-            'getItem',
-        ).mockImplementation(() => {
+        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
             throw new DOMException('Storage unavailable')
         })
 

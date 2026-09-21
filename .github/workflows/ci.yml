@@ -89,6 +89,9 @@ jobs:
       - name: Run frontend lint
         run: npm run lint
 
+      - name: Check frontend formatting
+        run: npm run format:check
+
       - name: Build frontend
         run: npm run build
 

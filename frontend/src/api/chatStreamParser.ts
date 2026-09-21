@@ -1,14 +1,7 @@
-import type {
-    ChatStreamEvent,
-} from './types'
+import type { ChatStreamEvent } from './types'
 
-function isRecord(
-    value: unknown,
-): value is Record<string, unknown> {
-    return (
-        typeof value === 'object' &&
-        value !== null
-    )
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null
 }
 
 interface EventBoundary {
@@ -16,27 +9,17 @@ interface EventBoundary {
     length: number
 }
 
-function findEventBoundary(
-    buffer: string,
-): EventBoundary | null {
+function findEventBoundary(buffer: string): EventBoundary | null {
     const lineFeedIndex = buffer.indexOf('\n\n')
-    const carriageReturnIndex = buffer.indexOf(
-        '\r\n\r\n',
-    )
+    const carriageReturnIndex = buffer.indexOf('\r\n\r\n')
 
-    if (
-        lineFeedIndex === -1 &&
-        carriageReturnIndex === -1
-    ) {
+    if (lineFeedIndex === -1 && carriageReturnIndex === -1) {
         return null
     }
 
     if (
         carriageReturnIndex !== -1 &&
-        (
-            lineFeedIndex === -1 ||
-            carriageReturnIndex < lineFeedIndex
-        )
+        (lineFeedIndex === -1 || carriageReturnIndex < lineFeedIndex)
     ) {
         return {
             index: carriageReturnIndex,
@@ -55,25 +38,17 @@ function createChatStreamEvent(
     payload: unknown,
 ): ChatStreamEvent {
     if (!isRecord(payload)) {
-        throw new Error(
-            'Chat stream event payload must be an object.',
-        )
+        throw new Error('Chat stream event payload must be an object.')
     }
 
-    if (
-        eventName === 'content_delta' &&
-        typeof payload.content === 'string'
-    ) {
+    if (eventName === 'content_delta' && typeof payload.content === 'string') {
         return {
             type: 'content_delta',
             content: payload.content,
         }
     }
 
-    if (
-        eventName === 'completed' &&
-        typeof payload.response === 'string'
-    ) {
+    if (eventName === 'completed' && typeof payload.response === 'string') {
         return {
             type: 'completed',
             response: payload.response,
@@ -92,14 +67,10 @@ function createChatStreamEvent(
         }
     }
 
-    throw new Error(
-        `Invalid chat stream event: ${eventName}`,
-    )
+    throw new Error(`Invalid chat stream event: ${eventName}`)
 }
 
-function parseEventBlock(
-    block: string,
-): ChatStreamEvent | null {
+function parseEventBlock(block: string): ChatStreamEvent | null {
     let eventName: string | null = null
     const dataLines: string[] = []
 
@@ -107,27 +78,17 @@ function parseEventBlock(
         if (line.startsWith('event:')) {
             eventName = line.slice('event:'.length).trim()
         } else if (line.startsWith('data:')) {
-            dataLines.push(
-                line.slice('data:'.length).trimStart(),
-            )
+            dataLines.push(line.slice('data:'.length).trimStart())
         }
     }
 
-    if (
-        eventName === null ||
-        dataLines.length === 0
-    ) {
+    if (eventName === null || dataLines.length === 0) {
         return null
     }
 
-    const payload: unknown = JSON.parse(
-        dataLines.join('\n'),
-    )
+    const payload: unknown = JSON.parse(dataLines.join('\n'))
 
-    return createChatStreamEvent(
-        eventName,
-        payload,
-    )
+    return createChatStreamEvent(eventName, payload)
 }
 
 export async function* parseChatStream(
@@ -139,33 +100,22 @@ export async function* parseChatStream(
 
     try {
         while (true) {
-            const {
-                done,
-                value,
-            } = await reader.read()
+            const { done, value } = await reader.read()
 
             if (done) {
                 break
             }
 
-            buffer += decoder.decode(
-                value,
-                {
-                    stream: true,
-                },
-            )
+            buffer += decoder.decode(value, {
+                stream: true,
+            })
 
             let boundary = findEventBoundary(buffer)
 
             while (boundary !== null) {
-                const block = buffer.slice(
-                    0,
-                    boundary.index,
-                )
+                const block = buffer.slice(0, boundary.index)
 
-                buffer = buffer.slice(
-                    boundary.index + boundary.length,
-                )
+                buffer = buffer.slice(boundary.index + boundary.length)
 
                 const event = parseEventBlock(block)
 

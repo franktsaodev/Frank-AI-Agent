@@ -4,10 +4,7 @@ import {
     getHealth,
     getSessionHistory,
 } from '../api/client'
-import type {
-    HealthResponse,
-    HistoryMessageResponse,
-} from '../api/types'
+import type { HealthResponse, HistoryMessageResponse } from '../api/types'
 import {
     clearStoredSessionId,
     getStoredSessionId,
@@ -20,19 +17,16 @@ export interface ApplicationInitializationResult {
     history: HistoryMessageResponse[]
 }
 
-let initializationPromise:
-    Promise<ApplicationInitializationResult> | null = null
+let initializationPromise: Promise<ApplicationInitializationResult> | null =
+    null
 
-async function performInitialization():
-    Promise<ApplicationInitializationResult> {
+async function performInitialization(): Promise<ApplicationInitializationResult> {
     const health = await getHealth()
     const storedSessionId = getStoredSessionId()
 
     if (storedSessionId !== null) {
         try {
-            const sessionHistory = await getSessionHistory(
-                storedSessionId,
-            )
+            const sessionHistory = await getSessionHistory(storedSessionId)
 
             return {
                 health,
@@ -40,10 +34,7 @@ async function performInitialization():
                 history: sessionHistory.messages,
             }
         } catch (error: unknown) {
-            if (
-                !(error instanceof ApiError) ||
-                error.status !== 404
-            ) {
+            if (!(error instanceof ApiError) || error.status !== 404) {
                 throw error
             }
 
@@ -62,15 +53,15 @@ async function performInitialization():
     }
 }
 
-export function initializeApplication():
-    Promise<ApplicationInitializationResult> {
+export function initializeApplication(): Promise<ApplicationInitializationResult> {
     if (initializationPromise === null) {
-        initializationPromise = performInitialization()
-            .catch((error: unknown) => {
+        initializationPromise = performInitialization().catch(
+            (error: unknown) => {
                 initializationPromise = null
 
                 throw error
-            })
+            },
+        )
     }
 
     return initializationPromise

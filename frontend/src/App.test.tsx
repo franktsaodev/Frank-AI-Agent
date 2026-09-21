@@ -1,16 +1,6 @@
-import {
-    render,
-    screen,
-    waitFor,
-} from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import {
-    beforeEach,
-    describe,
-    expect,
-    it,
-    vi,
-} from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
     ApiError,
@@ -23,16 +13,11 @@ import {
     initializeApplication,
     resetApplicationInitialization,
 } from './session/applicationInitializer'
-import {
-    storeSessionId,
-} from './storage/activeSessionStorage'
-import type {
-    ChatStreamEvent,
-} from './api/types'
+import { storeSessionId } from './storage/activeSessionStorage'
+import type { ChatStreamEvent } from './api/types'
 
 vi.mock('./api/client', async (importOriginal) => {
-    const actual =
-        await importOriginal<typeof import('./api/client')>()
+    const actual = await importOriginal<typeof import('./api/client')>()
 
     return {
         ...actual,
@@ -51,10 +36,10 @@ vi.mock('./storage/activeSessionStorage', () => ({
     storeSessionId: vi.fn(),
 }))
 
-const initializeApplicationMock =
-    vi.mocked(initializeApplication)
-const resetApplicationInitializationMock =
-    vi.mocked(resetApplicationInitialization)
+const initializeApplicationMock = vi.mocked(initializeApplication)
+const resetApplicationInitializationMock = vi.mocked(
+    resetApplicationInitialization,
+)
 
 const createSessionMock = vi.mocked(createSession)
 const deleteSessionMock = vi.mocked(deleteSession)
@@ -98,32 +83,22 @@ describe('App', () => {
     })
 
     it('should show the initializing state while initialization is pending', () => {
-        initializeApplicationMock.mockReturnValue(
-            createPendingPromise(),
-        )
+        initializeApplicationMock.mockReturnValue(createPendingPromise())
 
         render(<App />)
 
-        expect(
-            screen.getByText('Initializing agent'),
-        ).toBeInTheDocument()
+        expect(screen.getByText('Initializing agent')).toBeInTheDocument()
 
         expect(
-            screen.getByRole(
-                'textbox',
-                {
-                    name: 'Chat message',
-                },
-            ),
+            screen.getByRole('textbox', {
+                name: 'Chat message',
+            }),
         ).toBeDisabled()
 
         expect(
-            screen.getByRole(
-                'button',
-                {
-                    name: 'New conversation',
-                },
-            ),
+            screen.getByRole('button', {
+                name: 'New conversation',
+            }),
         ).toBeDisabled()
     })
 
@@ -153,17 +128,13 @@ describe('App', () => {
 
         render(<App />)
 
-        expect(
-            await screen.findByText('Agent ready'),
-        ).toBeInTheDocument()
+        expect(await screen.findByText('Agent ready')).toBeInTheDocument()
 
-        expect(
-            screen.getByTitle('stored-session'),
-        ).toHaveTextContent('stored-session')
+        expect(screen.getByTitle('stored-session')).toHaveTextContent(
+            'stored-session',
+        )
 
-        expect(
-            screen.getByText('How do sessions expire?'),
-        ).toBeInTheDocument()
+        expect(screen.getByText('How do sessions expire?')).toBeInTheDocument()
 
         expect(
             screen.getByText('Sessions use sliding expiration.'),
@@ -174,12 +145,9 @@ describe('App', () => {
         ).not.toBeInTheDocument()
 
         expect(
-            screen.getByRole(
-                'textbox',
-                {
-                    name: 'Chat message',
-                },
-            ),
+            screen.getByRole('textbox', {
+                name: 'Chat message',
+            }),
         ).toBeEnabled()
     })
 
@@ -187,9 +155,7 @@ describe('App', () => {
         const user = userEvent.setup()
 
         initializeApplicationMock
-            .mockRejectedValueOnce(
-                new Error('API unavailable'),
-            )
+            .mockRejectedValueOnce(new Error('API unavailable'))
             .mockResolvedValueOnce({
                 health: healthResponse,
                 sessionId: 'recovered-session',
@@ -198,34 +164,23 @@ describe('App', () => {
 
         render(<App />)
 
-        expect(
-            await screen.findByText('API unavailable'),
-        ).toBeInTheDocument()
+        expect(await screen.findByText('API unavailable')).toBeInTheDocument()
 
         await user.click(
-            screen.getByRole(
-                'button',
-                {
-                    name: 'Retry connection',
-                },
-            ),
+            screen.getByRole('button', {
+                name: 'Retry connection',
+            }),
         )
 
-        expect(
-            await screen.findByText('Agent ready'),
-        ).toBeInTheDocument()
+        expect(await screen.findByText('Agent ready')).toBeInTheDocument()
 
-        expect(
-            screen.getByTitle('recovered-session'),
-        ).toHaveTextContent('recovered-session')
+        expect(screen.getByTitle('recovered-session')).toHaveTextContent(
+            'recovered-session',
+        )
 
-        expect(
-            resetApplicationInitializationMock,
-        ).toHaveBeenCalledOnce()
+        expect(resetApplicationInitializationMock).toHaveBeenCalledOnce()
 
-        expect(
-            initializeApplicationMock,
-        ).toHaveBeenCalledTimes(2)
+        expect(initializeApplicationMock).toHaveBeenCalledTimes(2)
     })
 
     it('should stream and display the agent response', async () => {
@@ -252,44 +207,29 @@ describe('App', () => {
 
         await screen.findByText('Agent ready')
 
-        const messageInput = screen.getByRole(
-            'textbox',
-            {
-                name: 'Chat message',
-            },
-        )
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
 
-        await user.type(
-            messageInput,
-            'How do sessions expire?',
-        )
+        await user.type(messageInput, 'How do sessions expire?')
 
         await user.click(
-            screen.getByRole(
-                'button',
-                {
-                    name: 'Send',
-                },
-            ),
+            screen.getByRole('button', {
+                name: 'Send',
+            }),
         )
 
         await waitFor(() => {
-            expect(
-                streamChatMessageMock,
-            ).toHaveBeenCalledWith(
+            expect(streamChatMessageMock).toHaveBeenCalledWith(
                 'session-123',
                 'How do sessions expire?',
             )
         })
 
-        expect(
-            screen.getByText('How do sessions expire?'),
-        ).toBeInTheDocument()
+        expect(screen.getByText('How do sessions expire?')).toBeInTheDocument()
 
         expect(
-            await screen.findByText(
-                'Sessions use sliding expiration.',
-            ),
+            await screen.findByText('Sessions use sliding expiration.'),
         ).toBeInTheDocument()
 
         expect(messageInput).toHaveValue('')
@@ -314,37 +254,26 @@ describe('App', () => {
 
         await screen.findByText('Agent ready')
 
-        const messageInput = screen.getByRole(
-            'textbox',
-            {
-                name: 'Chat message',
-            },
-        )
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
 
-        await user.type(
-            messageInput,
-            'Hello',
-        )
+        await user.type(messageInput, 'Hello')
 
         await user.click(
-            screen.getByRole(
-                'button',
-                {
-                    name: 'Send',
-                },
-            ),
+            screen.getByRole('button', {
+                name: 'Send',
+            }),
         )
 
         expect(
             await screen.findByText(
                 'The AI service is temporarily rate limited. ' +
-                'Please try again later.',
+                    'Please try again later.',
             ),
         ).toBeInTheDocument()
 
-        expect(
-            streamChatMessageMock,
-        ).toHaveBeenCalledWith(
+        expect(streamChatMessageMock).toHaveBeenCalledWith(
             'session-123',
             'Hello',
         )
@@ -367,29 +296,19 @@ describe('App', () => {
         await screen.findByText('Agent ready')
 
         await user.type(
-            screen.getByRole(
-                'textbox',
-                {
-                    name: 'Chat message',
-                },
-            ),
+            screen.getByRole('textbox', {
+                name: 'Chat message',
+            }),
             'Hello',
         )
 
         await user.click(
-            screen.getByRole(
-                'button',
-                {
-                    name: 'Send',
-                },
-            ),
+            screen.getByRole('button', {
+                name: 'Send',
+            }),
         )
 
-        expect(
-            await screen.findByText(
-                'Partial response',
-            ),
-        ).toBeInTheDocument()
+        expect(await screen.findByText('Partial response')).toBeInTheDocument()
 
         expect(
             await screen.findByText(
@@ -422,34 +341,23 @@ describe('App', () => {
 
         render(<App />)
 
-        expect(
-            await screen.findByText('Previous question'),
-        ).toBeInTheDocument()
+        expect(await screen.findByText('Previous question')).toBeInTheDocument()
 
         await user.click(
-            screen.getByRole(
-                'button',
-                {
-                    name: 'New conversation',
-                },
-            ),
+            screen.getByRole('button', {
+                name: 'New conversation',
+            }),
         )
 
-        expect(
-            await screen.findByTitle('new-session'),
-        ).toHaveTextContent('new-session')
-
-        expect(
-            screen.queryByText('Previous question'),
-        ).not.toBeInTheDocument()
-
-        expect(storeSessionIdMock).toHaveBeenCalledWith(
+        expect(await screen.findByTitle('new-session')).toHaveTextContent(
             'new-session',
         )
 
-        expect(deleteSessionMock).toHaveBeenCalledWith(
-            'old-session',
-        )
+        expect(screen.queryByText('Previous question')).not.toBeInTheDocument()
+
+        expect(storeSessionIdMock).toHaveBeenCalledWith('new-session')
+
+        expect(deleteSessionMock).toHaveBeenCalledWith('old-session')
     })
 
     it('should show an error when sending a message fails', async () => {
@@ -457,10 +365,7 @@ describe('App', () => {
 
         streamChatMessageMock.mockReturnValue(
             createFailingChatStream(
-                new ApiError(
-                    503,
-                    'Agent service is unavailable.',
-                ),
+                new ApiError(503, 'Agent service is unavailable.'),
             ),
         )
 
@@ -468,36 +373,23 @@ describe('App', () => {
 
         await screen.findByText('Agent ready')
 
-        const messageInput = screen.getByRole(
-            'textbox',
-            {
-                name: 'Chat message',
-            },
-        )
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
 
-        await user.type(
-            messageInput,
-            'Hello',
-        )
+        await user.type(messageInput, 'Hello')
 
         await user.click(
-            screen.getByRole(
-                'button',
-                {
-                    name: 'Send',
-                },
-            ),
+            screen.getByRole('button', {
+                name: 'Send',
+            }),
         )
 
         expect(
-            await screen.findByText(
-                'Agent service is unavailable.',
-            ),
+            await screen.findByText('Agent service is unavailable.'),
         ).toBeInTheDocument()
 
-        expect(
-            screen.getByText('Hello'),
-        ).toBeInTheDocument()
+        expect(screen.getByText('Hello')).toBeInTheDocument()
 
         expect(messageInput).toBeEnabled()
     })
@@ -506,36 +398,28 @@ describe('App', () => {
         const user = userEvent.setup()
 
         createSessionMock.mockRejectedValue(
-            new ApiError(
-                500,
-                'Unable to create the session.',
-            ),
+            new ApiError(500, 'Unable to create the session.'),
         )
 
         render(<App />)
 
-        expect(
-            await screen.findByTitle('session-123'),
-        ).toHaveTextContent('session-123')
+        expect(await screen.findByTitle('session-123')).toHaveTextContent(
+            'session-123',
+        )
 
         await user.click(
-            screen.getByRole(
-                'button',
-                {
-                    name: 'New conversation',
-                },
-            ),
+            screen.getByRole('button', {
+                name: 'New conversation',
+            }),
         )
 
         expect(
-            await screen.findByText(
-                'Unable to create the session.',
-            ),
+            await screen.findByText('Unable to create the session.'),
         ).toBeInTheDocument()
 
-        expect(
-            screen.getByTitle('session-123'),
-        ).toHaveTextContent('session-123')
+        expect(screen.getByTitle('session-123')).toHaveTextContent(
+            'session-123',
+        )
 
         expect(storeSessionIdMock).not.toHaveBeenCalled()
         expect(deleteSessionMock).not.toHaveBeenCalled()

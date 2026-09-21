@@ -6,22 +6,15 @@ interface MessageContentProps {
 
 const CITATION_PATTERN = /(\[Source: [^\]\r\n]+\])/g
 
-function getCitationLabel(
-    contentPart: string,
-): string | null {
-    if (
-        !contentPart.startsWith('[Source: ') ||
-        !contentPart.endsWith(']')
-    ) {
+function getCitationLabel(contentPart: string): string | null {
+    if (!contentPart.startsWith('[Source: ') || !contentPart.endsWith(']')) {
         return null
     }
 
     return contentPart.slice(1, -1)
 }
 
-export function MessageContent({
-    content,
-}: MessageContentProps) {
+export function MessageContent({ content }: MessageContentProps) {
     const contentParts = content.split(CITATION_PATTERN)
 
     return (
@@ -40,7 +33,10 @@ export function MessageContent({
                         title="Verified retrieval source"
                         key={`${citationLabel}-${index}`}
                     >
-                        <span className="citation-badge-icon" aria-hidden="true">
+                        <span
+                            className="citation-badge-icon"
+                            aria-hidden="true"
+                        >
                             ✓
                         </span>
 

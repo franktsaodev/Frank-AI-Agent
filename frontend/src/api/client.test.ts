@@ -1,11 +1,4 @@
-import {
-    afterEach,
-    beforeEach,
-    describe,
-    expect,
-    it,
-    vi,
-} from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
     ApiError,
@@ -17,40 +10,26 @@ import {
     streamChatMessage,
 } from './client'
 
-import type {
-    ChatStreamEvent,
-} from './types'
+import type { ChatStreamEvent } from './types'
 
 const fetchMock = vi.fn<typeof fetch>()
 
-function createJsonResponse(
-    payload: unknown,
-    status = 200,
-): Response {
-    return new Response(
-        JSON.stringify(payload),
-        {
-            status,
-            headers: {
-                'Content-Type': 'application/json',
-            },
+function createJsonResponse(payload: unknown, status = 200): Response {
+    return new Response(JSON.stringify(payload), {
+        status,
+        headers: {
+            'Content-Type': 'application/json',
         },
-    )
+    })
 }
 
-function createSseResponse(
-    body: string,
-    status = 200,
-): Response {
-    return new Response(
-        body,
-        {
-            status,
-            headers: {
-                'Content-Type': 'text/event-stream',
-            },
+function createSseResponse(body: string, status = 200): Response {
+    return new Response(body, {
+        status,
+        headers: {
+            'Content-Type': 'text/event-stream',
         },
-    )
+    })
 }
 
 async function collectChatEvents(
@@ -105,9 +84,12 @@ describe('API client', () => {
 
     it('should create a session using POST', async () => {
         fetchMock.mockResolvedValue(
-            createJsonResponse({
-                session_id: 'session-123',
-            }, 201),
+            createJsonResponse(
+                {
+                    session_id: 'session-123',
+                },
+                201,
+            ),
         )
 
         const result = await createSession()
@@ -145,10 +127,7 @@ describe('API client', () => {
             }),
         )
 
-        const result = await sendChatMessage(
-            'session-123',
-            'Hello',
-        )
+        const result = await sendChatMessage('session-123', 'Hello')
 
         expect(result.response).toBe('Hello from the agent.')
 
@@ -171,17 +150,14 @@ describe('API client', () => {
         fetchMock.mockResolvedValue(
             createSseResponse(
                 'event: content_delta\n' +
-                'data: {"content":"Hello"}\n\n' +
-                'event: completed\n' +
-                'data: {"response":"Hello"}\n\n',
+                    'data: {"content":"Hello"}\n\n' +
+                    'event: completed\n' +
+                    'data: {"response":"Hello"}\n\n',
             ),
         )
 
         const events = await collectChatEvents(
-            streamChatMessage(
-                'session/id',
-                'Hello',
-            ),
+            streamChatMessage('session/id', 'Hello'),
         )
 
         expect(events).toEqual([
@@ -210,7 +186,7 @@ describe('API client', () => {
         )
     })
 
-        it('should throw ApiError when starting the stream fails', async () => {
+    it('should throw ApiError when starting the stream fails', async () => {
         fetchMock.mockResolvedValue(
             createJsonResponse(
                 {
@@ -222,12 +198,7 @@ describe('API client', () => {
         )
 
         await expect(
-            collectChatEvents(
-                streamChatMessage(
-                    'missing-session',
-                    'Hello',
-                ),
-            ),
+            collectChatEvents(streamChatMessage('missing-session', 'Hello')),
         ).rejects.toEqual(
             expect.objectContaining({
                 name: 'ApiError',
@@ -245,40 +216,23 @@ describe('API client', () => {
         )
 
         await expect(
-            collectChatEvents(
-                streamChatMessage(
-                    'session-123',
-                    'Hello',
-                ),
-            ),
-        ).rejects.toThrow(
-            'API returned an invalid chat stream response.',
-        )
+            collectChatEvents(streamChatMessage('session-123', 'Hello')),
+        ).rejects.toThrow('API returned an invalid chat stream response.')
     })
 
     it('should reject an SSE response without a body', async () => {
         fetchMock.mockResolvedValue(
-            new Response(
-                null,
-                {
-                    status: 200,
-                    headers: {
-                        'Content-Type': 'text/event-stream',
-                    },
+            new Response(null, {
+                status: 200,
+                headers: {
+                    'Content-Type': 'text/event-stream',
                 },
-            ),
+            }),
         )
 
         await expect(
-            collectChatEvents(
-                streamChatMessage(
-                    'session-123',
-                    'Hello',
-                ),
-            ),
-        ).rejects.toThrow(
-            'API returned an empty chat stream response.',
-        )
+            collectChatEvents(streamChatMessage('session-123', 'Hello')),
+        ).rejects.toThrow('API returned an empty chat stream response.')
     })
 
     it('should delete a session using DELETE', async () => {
@@ -327,15 +281,10 @@ describe('API client', () => {
     })
 
     it('should use same-origin paths when the API base URL is empty', async () => {
-        vi.stubEnv(
-            'VITE_API_BASE_URL',
-            '',
-        )
+        vi.stubEnv('VITE_API_BASE_URL', '')
         vi.resetModules()
 
-        const {
-            getHealth: getSameOriginHealth,
-        } = await import('./client')
+        const { getHealth: getSameOriginHealth } = await import('./client')
 
         fetchMock.mockResolvedValue(
             createJsonResponse({

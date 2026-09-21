@@ -42,9 +42,18 @@ Frontend tests use Vitest, jsdom, and React Testing Library.
 
 ## Quality checks
 
+Check linting, formatting, and the production build:
+
 ```powershell
 npm run lint
+npm run format:check
 npm run build
+```
+
+Apply frontend formatting automatically:
+
+```powershell
+npm run format
 ```
 
 ## API configuration

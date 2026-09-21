@@ -9,9 +9,7 @@ import type {
     ChatStreamEvent,
 } from './types'
 
-import {
-    parseChatStream,
-} from './chatStreamParser'
+import { parseChatStream } from './chatStreamParser'
 
 const DEFAULT_API_BASE_URL = 'http://localhost:8000'
 
@@ -30,15 +28,11 @@ export class ApiError extends Error {
     }
 }
 
-async function createApiError(
-    response: Response,
-): Promise<ApiError> {
-    let message =
-        `API request failed with status ${response.status}`
+async function createApiError(response: Response): Promise<ApiError> {
+    let message = `API request failed with status ${response.status}`
 
     try {
-        const payload =
-            (await response.json()) as Partial<ErrorResponse>
+        const payload = (await response.json()) as Partial<ErrorResponse>
 
         if (typeof payload.message === 'string') {
             message = payload.message
@@ -47,20 +41,11 @@ async function createApiError(
         // Keep the status-based fallback when the response is not JSON.
     }
 
-    return new ApiError(
-        response.status,
-        message,
-    )
+    return new ApiError(response.status, message)
 }
 
-async function request<T>(
-    path: string,
-    options?: RequestInit,
-): Promise<T> {
-    const response = await fetch(
-        `${apiBaseUrl}${path}`,
-        options,
-    )
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+    const response = await fetch(`${apiBaseUrl}${path}`, options)
 
     if (!response.ok) {
         throw await createApiError(response)
@@ -69,33 +54,25 @@ async function request<T>(
     return (await response.json()) as T
 }
 
-export function getHealth(
-    signal?: AbortSignal,
-): Promise<HealthResponse> {
-    return request<HealthResponse>(
-        '/health',
-        {
-            headers: {
-                Accept: 'application/json',
-            },
-            signal,
+export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
+    return request<HealthResponse>('/health', {
+        headers: {
+            Accept: 'application/json',
         },
-    )
+        signal,
+    })
 }
 
 export function createSession(
     signal?: AbortSignal,
 ): Promise<CreateSessionResponse> {
-    return request<CreateSessionResponse>(
-        '/api/v1/sessions',
-        {
-            method: 'POST',
-            headers: {
-                Accept: 'application/json',
-            },
-            signal,
+    return request<CreateSessionResponse>('/api/v1/sessions', {
+        method: 'POST',
+        headers: {
+            Accept: 'application/json',
         },
-    )
+        signal,
+    })
 }
 
 export function deleteSession(
@@ -163,7 +140,7 @@ export async function* streamChatMessage(
 
     const response = await fetch(
         `${apiBaseUrl}/api/v1/sessions/` +
-        `${encodeURIComponent(sessionId)}/chat/stream`,
+            `${encodeURIComponent(sessionId)}/chat/stream`,
         {
             method: 'POST',
             headers: {
@@ -179,25 +156,17 @@ export async function* streamChatMessage(
         throw await createApiError(response)
     }
 
-    const contentType = response.headers.get(
-        'Content-Type',
-    )
+    const contentType = response.headers.get('Content-Type')
 
     if (
         contentType === null ||
-        !contentType.toLowerCase().startsWith(
-            'text/event-stream',
-        )
+        !contentType.toLowerCase().startsWith('text/event-stream')
     ) {
-        throw new Error(
-            'API returned an invalid chat stream response.',
-        )
+        throw new Error('API returned an invalid chat stream response.')
     }
 
     if (response.body === null) {
-        throw new Error(
-            'API returned an empty chat stream response.',
-        )
+        throw new Error('API returned an empty chat stream response.')
     }
 
     yield* parseChatStream(response.body)

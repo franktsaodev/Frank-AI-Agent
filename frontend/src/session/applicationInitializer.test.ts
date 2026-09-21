@@ -1,10 +1,4 @@
-import {
-    beforeEach,
-    describe,
-    expect,
-    it,
-    vi,
-} from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
     ApiError,
@@ -23,8 +17,7 @@ import {
 } from './applicationInitializer'
 
 vi.mock('../api/client', async (importOriginal) => {
-    const actual =
-        await importOriginal<typeof import('../api/client')>()
+    const actual = await importOriginal<typeof import('../api/client')>()
 
     return {
         ...actual,
@@ -75,16 +68,12 @@ describe('application initializer', () => {
         })
 
         expect(createSessionMock).toHaveBeenCalledOnce()
-        expect(storeSessionIdMock).toHaveBeenCalledWith(
-            'new-session',
-        )
+        expect(storeSessionIdMock).toHaveBeenCalledWith('new-session')
         expect(getSessionHistoryMock).not.toHaveBeenCalled()
     })
 
     it('should restore a stored session and its history', async () => {
-        getStoredSessionIdMock.mockReturnValue(
-            'stored-session',
-        )
+        getStoredSessionIdMock.mockReturnValue('stored-session')
         getSessionHistoryMock.mockResolvedValue({
             session_id: 'stored-session',
             messages: [
@@ -116,49 +105,33 @@ describe('application initializer', () => {
             ],
         })
 
-        expect(getSessionHistoryMock).toHaveBeenCalledWith(
-            'stored-session',
-        )
+        expect(getSessionHistoryMock).toHaveBeenCalledWith('stored-session')
         expect(createSessionMock).not.toHaveBeenCalled()
         expect(storeSessionIdMock).not.toHaveBeenCalled()
     })
 
     it('should replace an expired stored session', async () => {
-        getStoredSessionIdMock.mockReturnValue(
-            'expired-session',
-        )
+        getStoredSessionIdMock.mockReturnValue('expired-session')
         getSessionHistoryMock.mockRejectedValue(
-            new ApiError(
-                404,
-                'Session not found',
-            ),
+            new ApiError(404, 'Session not found'),
         )
 
         const result = await initializeApplication()
 
         expect(clearStoredSessionIdMock).toHaveBeenCalledOnce()
         expect(createSessionMock).toHaveBeenCalledOnce()
-        expect(storeSessionIdMock).toHaveBeenCalledWith(
-            'new-session',
-        )
+        expect(storeSessionIdMock).toHaveBeenCalledWith('new-session')
         expect(result.sessionId).toBe('new-session')
         expect(result.history).toEqual([])
     })
 
     it('should propagate non-404 history errors', async () => {
-        getStoredSessionIdMock.mockReturnValue(
-            'stored-session',
-        )
+        getStoredSessionIdMock.mockReturnValue('stored-session')
         getSessionHistoryMock.mockRejectedValue(
-            new ApiError(
-                500,
-                'Internal server error',
-            ),
+            new ApiError(500, 'Internal server error'),
         )
 
-        await expect(
-            initializeApplication(),
-        ).rejects.toMatchObject({
+        await expect(initializeApplication()).rejects.toMatchObject({
             status: 500,
             message: 'Internal server error',
         })
@@ -182,14 +155,10 @@ describe('application initializer', () => {
 
     it('should retry after initialization fails', async () => {
         getHealthMock
-            .mockRejectedValueOnce(
-                new Error('API unavailable'),
-            )
+            .mockRejectedValueOnce(new Error('API unavailable'))
             .mockResolvedValueOnce(healthResponse)
 
-        await expect(
-            initializeApplication(),
-        ).rejects.toThrow('API unavailable')
+        await expect(initializeApplication()).rejects.toThrow('API unavailable')
 
         const result = await initializeApplication()
 

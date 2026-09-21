@@ -1218,6 +1218,7 @@ ruff format --check .
 pyright
 npm --prefix frontend run test
 npm --prefix frontend run lint
+npm --prefix frontend run format:check
 npm --prefix frontend run build
 docker compose config --quiet
 ```
@@ -1234,7 +1235,7 @@ GitHub Actions automatically runs continuous integration for pushes to
 The workflow runs three jobs:
 
 - Backend tests, Ruff linting and formatting checks, and Pyright
-- Frontend tests, ESLint, and the Vite production build
+- Frontend tests, ESLint, Prettier formatting checks, and the Vite production build
 - Docker Compose validation and backend/frontend container builds
 
 The container job runs only after both application quality jobs pass. The
