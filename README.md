@@ -1242,8 +1242,8 @@ workflow uses `.env.example` and does not require production API secrets.
 
 ## Roadmap
 
-Frank AI Agent v1.0.0 establishes the core architecture for building stateful,
-tool-enabled AI agent applications.
+The roadmap tracks the major capabilities delivered in each release and the
+features planned for future development.
 
 ### v1.0 — Core Framework
 
@@ -1287,16 +1287,34 @@ tool-enabled AI agent applications.
 - [x] Recursive boundary-aware text chunking
 - [x] Retrieval quality evaluation with Recall@3 and irrelevant rejection rate
 
+### v1.3 — Frontend and Deployment
+
+- [x] React and TypeScript chat frontend
+- [x] Browser session restoration and history synchronization
+- [x] Session replacement and API reconnection controls
+- [x] Verified citation rendering
+- [x] Frontend unit and integration testing
+- [x] Nginx frontend container with same-origin API proxying
+- [x] Full-stack Docker Compose deployment
+- [x] Continuous integration with GitHub Actions
+
+### v1.4 — Streaming Responses
+
+- [x] Typed client streaming contracts
+- [x] Groq text and tool-call streaming
+- [x] Tool-aware agent streaming orchestration
+- [x] Guarded ChatAgent streaming with citation validation
+- [x] Server-Sent Events chat API with sanitized errors
+- [x] Frontend SSE parsing and incremental response rendering
+
 ### Future Development
 
-- [ ] Streaming responses
 - [ ] Persistent session storage
 - [ ] Redis-backed distributed sessions
 - [ ] Model Context Protocol (MCP) integration
 - [ ] Multi-agent orchestration
 - [ ] Additional LLM providers
 - [ ] Metrics and monitoring
-- [x] Continuous integration with GitHub Actions
 - [ ] Automated release and deployment workflows
 
 ## License

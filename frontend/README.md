@@ -60,6 +60,26 @@ An empty `VITE_API_BASE_URL` enables same-origin API requests. This mode is
 used by the production Docker image, where Nginx proxies `/api` and `/health`
 requests to the FastAPI container.
 
+## Streaming chat
+
+The chat interface sends messages using:
+
+```text
+POST /api/v1/sessions/{session_id}/chat/stream
+```
+
+The frontend consumes the Server-Sent Events response through the Fetch API
+and incrementally handles `content_delta`, `completed`, and `error` events.
+
+The stream parser supports events split across network chunks, UTF-8 characters
+split across byte boundaries, and both LF and CRLF line endings. HTTP failures,
+invalid stream responses, incomplete streams, and server-sent error events are
+shown to the user without exposing internal error details.
+
+The backend validates retrieved citations before emitting guarded assistant
+content, so streamed content has already passed the application's citation
+safety checks.
+
 ## Docker
 
 From the project root, build and start the frontend and API services:

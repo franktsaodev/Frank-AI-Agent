@@ -1,6 +1,7 @@
 import {
     render,
     screen,
+    waitFor,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
@@ -15,7 +16,7 @@ import {
     ApiError,
     createSession,
     deleteSession,
-    sendChatMessage,
+    streamChatMessage,
 } from './api/client'
 import App from './App'
 import {
@@ -25,6 +26,9 @@ import {
 import {
     storeSessionId,
 } from './storage/activeSessionStorage'
+import type {
+    ChatStreamEvent,
+} from './api/types'
 
 vi.mock('./api/client', async (importOriginal) => {
     const actual =
@@ -34,7 +38,7 @@ vi.mock('./api/client', async (importOriginal) => {
         ...actual,
         createSession: vi.fn(),
         deleteSession: vi.fn(),
-        sendChatMessage: vi.fn(),
+        streamChatMessage: vi.fn(),
     }
 })
 
@@ -54,7 +58,7 @@ const resetApplicationInitializationMock =
 
 const createSessionMock = vi.mocked(createSession)
 const deleteSessionMock = vi.mocked(deleteSession)
-const sendChatMessageMock = vi.mocked(sendChatMessage)
+const streamChatMessageMock = vi.mocked(streamChatMessage)
 const storeSessionIdMock = vi.mocked(storeSessionId)
 
 const healthResponse = {
@@ -65,6 +69,21 @@ const healthResponse = {
 
 function createPendingPromise<T>(): Promise<T> {
     return new Promise(() => undefined)
+}
+
+async function* createChatStream(
+    events: ChatStreamEvent[],
+): AsyncGenerator<ChatStreamEvent> {
+    for (const event of events) {
+        yield event
+    }
+}
+
+async function* createFailingChatStream(
+    error: Error,
+): AsyncGenerator<ChatStreamEvent> {
+    yield* []
+    throw error
 }
 
 describe('App', () => {
@@ -209,12 +228,25 @@ describe('App', () => {
         ).toHaveBeenCalledTimes(2)
     })
 
-    it('should send a message and display the agent response', async () => {
+    it('should stream and display the agent response', async () => {
         const user = userEvent.setup()
 
-        sendChatMessageMock.mockResolvedValue({
-            response: 'Sessions use sliding expiration.',
-        })
+        streamChatMessageMock.mockReturnValue(
+            createChatStream([
+                {
+                    type: 'content_delta',
+                    content: 'Sessions use ',
+                },
+                {
+                    type: 'content_delta',
+                    content: 'sliding expiration.',
+                },
+                {
+                    type: 'completed',
+                    response: 'Sessions use sliding expiration.',
+                },
+            ]),
+        )
 
         render(<App />)
 
@@ -241,10 +273,14 @@ describe('App', () => {
             ),
         )
 
-        expect(sendChatMessageMock).toHaveBeenCalledWith(
-            'session-123',
-            'How do sessions expire?',
-        )
+        await waitFor(() => {
+            expect(
+                streamChatMessageMock,
+            ).toHaveBeenCalledWith(
+                'session-123',
+                'How do sessions expire?',
+            )
+        })
 
         expect(
             screen.getByText('How do sessions expire?'),
@@ -257,6 +293,109 @@ describe('App', () => {
         ).toBeInTheDocument()
 
         expect(messageInput).toHaveValue('')
+    })
+
+    it('should show an error received from the chat stream', async () => {
+        const user = userEvent.setup()
+
+        streamChatMessageMock.mockReturnValue(
+            createChatStream([
+                {
+                    type: 'error',
+                    error: 'client_rate_limit',
+                    message:
+                        'The AI service is temporarily rate limited. ' +
+                        'Please try again later.',
+                },
+            ]),
+        )
+
+        render(<App />)
+
+        await screen.findByText('Agent ready')
+
+        const messageInput = screen.getByRole(
+            'textbox',
+            {
+                name: 'Chat message',
+            },
+        )
+
+        await user.type(
+            messageInput,
+            'Hello',
+        )
+
+        await user.click(
+            screen.getByRole(
+                'button',
+                {
+                    name: 'Send',
+                },
+            ),
+        )
+
+        expect(
+            await screen.findByText(
+                'The AI service is temporarily rate limited. ' +
+                'Please try again later.',
+            ),
+        ).toBeInTheDocument()
+
+        expect(
+            streamChatMessageMock,
+        ).toHaveBeenCalledWith(
+            'session-123',
+            'Hello',
+        )
+    })
+
+    it('should show an error when the stream ends before completion', async () => {
+        const user = userEvent.setup()
+
+        streamChatMessageMock.mockReturnValue(
+            createChatStream([
+                {
+                    type: 'content_delta',
+                    content: 'Partial response',
+                },
+            ]),
+        )
+
+        render(<App />)
+
+        await screen.findByText('Agent ready')
+
+        await user.type(
+            screen.getByRole(
+                'textbox',
+                {
+                    name: 'Chat message',
+                },
+            ),
+            'Hello',
+        )
+
+        await user.click(
+            screen.getByRole(
+                'button',
+                {
+                    name: 'Send',
+                },
+            ),
+        )
+
+        expect(
+            await screen.findByText(
+                'Partial response',
+            ),
+        ).toBeInTheDocument()
+
+        expect(
+            await screen.findByText(
+                'Unable to reach the agent. Please try again.',
+            ),
+        ).toBeInTheDocument()
     })
 
     it('should replace the active session for a new conversation', async () => {
@@ -316,10 +455,12 @@ describe('App', () => {
     it('should show an error when sending a message fails', async () => {
         const user = userEvent.setup()
 
-        sendChatMessageMock.mockRejectedValue(
-            new ApiError(
-                503,
-                'Agent service is unavailable.',
+        streamChatMessageMock.mockReturnValue(
+            createFailingChatStream(
+                new ApiError(
+                    503,
+                    'Agent service is unavailable.',
+                ),
             ),
         )
 

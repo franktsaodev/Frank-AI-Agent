@@ -34,3 +34,24 @@ export interface ChatRequest {
 export interface ChatResponse {
     response: string
 }
+
+export interface ChatContentDeltaEvent {
+    type: 'content_delta'
+    content: string
+}
+
+export interface ChatCompletedEvent {
+    type: 'completed'
+    response: string
+}
+
+export interface ChatErrorEvent {
+    type: 'error'
+    error: string
+    message: string
+}
+
+export type ChatStreamEvent =
+    | ChatContentDeltaEvent
+    | ChatCompletedEvent
+    | ChatErrorEvent

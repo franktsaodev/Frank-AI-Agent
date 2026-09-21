@@ -8,7 +8,7 @@ import {
   ApiError,
   createSession,
   deleteSession,
-  sendChatMessage,
+  streamChatMessage,
 } from './api/client'
 import type {
   HealthResponse,
@@ -227,19 +227,95 @@ function App() {
     setChatError(null)
     setIsSending(true)
 
-    try {
-      const response = await sendChatMessage(
-        sessionId,
-        message,
-      )
+    let assistantMessageId: number | null = null
+    let streamCompleted = false
+    let streamFailed = false
 
-      setMessages((currentMessages) => [
-        ...currentMessages,
-        createChatMessage(
-          'assistant',
-          response.response,
-        ),
-      ])
+    try {
+      for await (
+        const event of streamChatMessage(
+          sessionId,
+          message,
+        )
+      ) {
+        if (event.type === 'content_delta') {
+          if (assistantMessageId === null) {
+            const assistantMessage = createChatMessage(
+              'assistant',
+              event.content,
+            )
+
+            assistantMessageId = assistantMessage.id
+
+            setMessages((currentMessages) => [
+              ...currentMessages,
+              assistantMessage,
+            ])
+          } else {
+            const messageId = assistantMessageId
+
+            setMessages((currentMessages) =>
+              currentMessages.map(
+                (currentMessage) =>
+                  currentMessage.id === messageId
+                    ? {
+                      ...currentMessage,
+                      content:
+                        currentMessage.content +
+                        event.content,
+                    }
+                    : currentMessage,
+              ),
+            )
+          }
+
+          continue
+        }
+
+        if (event.type === 'completed') {
+          streamCompleted = true
+
+          if (assistantMessageId === null) {
+            const assistantMessage = createChatMessage(
+              'assistant',
+              event.response,
+            )
+
+            assistantMessageId = assistantMessage.id
+
+            setMessages((currentMessages) => [
+              ...currentMessages,
+              assistantMessage,
+            ])
+          } else {
+            const messageId = assistantMessageId
+
+            setMessages((currentMessages) =>
+              currentMessages.map(
+                (currentMessage) =>
+                  currentMessage.id === messageId
+                    ? {
+                      ...currentMessage,
+                      content: event.response,
+                    }
+                    : currentMessage,
+              ),
+            )
+          }
+
+          break
+        }
+
+        streamFailed = true
+        setChatError(event.message)
+        break
+      }
+
+      if (!streamCompleted && !streamFailed) {
+        throw new Error(
+          'Chat stream ended before completion.',
+        )
+      }
     } catch (error: unknown) {
       const errorMessage =
         error instanceof ApiError

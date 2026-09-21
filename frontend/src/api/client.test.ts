@@ -14,7 +14,12 @@ import {
     getHealth,
     getSessionHistory,
     sendChatMessage,
+    streamChatMessage,
 } from './client'
+
+import type {
+    ChatStreamEvent,
+} from './types'
 
 const fetchMock = vi.fn<typeof fetch>()
 
@@ -31,6 +36,33 @@ function createJsonResponse(
             },
         },
     )
+}
+
+function createSseResponse(
+    body: string,
+    status = 200,
+): Response {
+    return new Response(
+        body,
+        {
+            status,
+            headers: {
+                'Content-Type': 'text/event-stream',
+            },
+        },
+    )
+}
+
+async function collectChatEvents(
+    events: AsyncIterable<ChatStreamEvent>,
+): Promise<ChatStreamEvent[]> {
+    const collectedEvents: ChatStreamEvent[] = []
+
+    for await (const event of events) {
+        collectedEvents.push(event)
+    }
+
+    return collectedEvents
 }
 
 describe('API client', () => {
@@ -132,6 +164,120 @@ describe('API client', () => {
                     message: 'Hello',
                 }),
             }),
+        )
+    })
+
+    it('should stream chat events using POST', async () => {
+        fetchMock.mockResolvedValue(
+            createSseResponse(
+                'event: content_delta\n' +
+                'data: {"content":"Hello"}\n\n' +
+                'event: completed\n' +
+                'data: {"response":"Hello"}\n\n',
+            ),
+        )
+
+        const events = await collectChatEvents(
+            streamChatMessage(
+                'session/id',
+                'Hello',
+            ),
+        )
+
+        expect(events).toEqual([
+            {
+                type: 'content_delta',
+                content: 'Hello',
+            },
+            {
+                type: 'completed',
+                response: 'Hello',
+            },
+        ])
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            'http://localhost:8000/api/v1/sessions/session%2Fid/chat/stream',
+            expect.objectContaining({
+                method: 'POST',
+                headers: {
+                    Accept: 'text/event-stream',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: 'Hello',
+                }),
+            }),
+        )
+    })
+
+        it('should throw ApiError when starting the stream fails', async () => {
+        fetchMock.mockResolvedValue(
+            createJsonResponse(
+                {
+                    error: 'session_not_found',
+                    message: 'Session not found.',
+                },
+                404,
+            ),
+        )
+
+        await expect(
+            collectChatEvents(
+                streamChatMessage(
+                    'missing-session',
+                    'Hello',
+                ),
+            ),
+        ).rejects.toEqual(
+            expect.objectContaining({
+                name: 'ApiError',
+                status: 404,
+                message: 'Session not found.',
+            }),
+        )
+    })
+
+    it('should reject a response that is not an SSE stream', async () => {
+        fetchMock.mockResolvedValue(
+            createJsonResponse({
+                response: 'Unexpected JSON response',
+            }),
+        )
+
+        await expect(
+            collectChatEvents(
+                streamChatMessage(
+                    'session-123',
+                    'Hello',
+                ),
+            ),
+        ).rejects.toThrow(
+            'API returned an invalid chat stream response.',
+        )
+    })
+
+    it('should reject an SSE response without a body', async () => {
+        fetchMock.mockResolvedValue(
+            new Response(
+                null,
+                {
+                    status: 200,
+                    headers: {
+                        'Content-Type': 'text/event-stream',
+                    },
+                },
+            ),
+        )
+
+        await expect(
+            collectChatEvents(
+                streamChatMessage(
+                    'session-123',
+                    'Hello',
+                ),
+            ),
+        ).rejects.toThrow(
+            'API returned an empty chat stream response.',
         )
     })
 

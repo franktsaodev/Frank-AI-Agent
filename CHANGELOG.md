@@ -10,6 +10,7 @@ Semantic Versioning.
 ### Added
 
 - Added a guarded Server-Sent Events chat endpoint with content, completion, and sanitized error events.
+- Added frontend SSE parsing and incremental chat rendering with typed content, completion, and error events.
 
 ### Fixed
 

@@ -6,7 +6,12 @@ import type {
     ErrorResponse,
     HealthResponse,
     SessionHistoryResponse,
+    ChatStreamEvent,
 } from './types'
+
+import {
+    parseChatStream,
+} from './chatStreamParser'
 
 const DEFAULT_API_BASE_URL = 'http://localhost:8000'
 
@@ -25,6 +30,29 @@ export class ApiError extends Error {
     }
 }
 
+async function createApiError(
+    response: Response,
+): Promise<ApiError> {
+    let message =
+        `API request failed with status ${response.status}`
+
+    try {
+        const payload =
+            (await response.json()) as Partial<ErrorResponse>
+
+        if (typeof payload.message === 'string') {
+            message = payload.message
+        }
+    } catch {
+        // Keep the status-based fallback when the response is not JSON.
+    }
+
+    return new ApiError(
+        response.status,
+        message,
+    )
+}
+
 async function request<T>(
     path: string,
     options?: RequestInit,
@@ -35,22 +63,7 @@ async function request<T>(
     )
 
     if (!response.ok) {
-        let message = `API request failed with status ${response.status}`
-
-        try {
-            const payload = (await response.json()) as Partial<ErrorResponse>
-
-            if (typeof payload.message === 'string') {
-                message = payload.message
-            }
-        } catch {
-            // Keep the status-based fallback when the response is not JSON.
-        }
-
-        throw new ApiError(
-            response.status,
-            message,
-        )
+        throw await createApiError(response)
     }
 
     return (await response.json()) as T
@@ -137,4 +150,55 @@ export function sendChatMessage(
             signal,
         },
     )
+}
+
+export async function* streamChatMessage(
+    sessionId: string,
+    message: string,
+    signal?: AbortSignal,
+): AsyncGenerator<ChatStreamEvent> {
+    const requestBody: ChatRequest = {
+        message,
+    }
+
+    const response = await fetch(
+        `${apiBaseUrl}/api/v1/sessions/` +
+        `${encodeURIComponent(sessionId)}/chat/stream`,
+        {
+            method: 'POST',
+            headers: {
+                Accept: 'text/event-stream',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+            signal,
+        },
+    )
+
+    if (!response.ok) {
+        throw await createApiError(response)
+    }
+
+    const contentType = response.headers.get(
+        'Content-Type',
+    )
+
+    if (
+        contentType === null ||
+        !contentType.toLowerCase().startsWith(
+            'text/event-stream',
+        )
+    ) {
+        throw new Error(
+            'API returned an invalid chat stream response.',
+        )
+    }
+
+    if (response.body === null) {
+        throw new Error(
+            'API returned an empty chat stream response.',
+        )
+    }
+
+    yield* parseChatStream(response.body)
 }
