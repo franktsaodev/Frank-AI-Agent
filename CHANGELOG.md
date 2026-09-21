@@ -7,6 +7,14 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Added a guarded Server-Sent Events chat endpoint with content, completion, and sanitized error events.
+
+### Fixed
+
+- Fixed upstream AI rate-limit failures returning generic internal server errors from the chat API.
+
 ## [1.3.0] - 2026-09-18
 
 ### Added

@@ -10,6 +10,18 @@ from app.api.app import create_app
 from app.api.session_dependencies import (
     get_session_manager,
 )
+from app.exceptions.client_exceptions import (
+    AIClientError,
+    ClientAuthenticationError,
+    ClientConnectionError,
+    ClientRateLimitError,
+    ClientTimeoutError,
+)
+from app.models.chat_stream_event import (
+    ChatContentDelta,
+    ChatStreamCompleted,
+    ChatStreamEvent,
+)
 from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.session.agent_session import AgentSession
@@ -410,3 +422,203 @@ def test_get_session_detail_should_return_not_found_for_unknown_session(
         "error": "session_not_found",
         "message": "Session not found.",
     }
+
+
+def test_stream_chat_with_session_should_return_sse_events(
+    client: TestClient,
+    mock_agent: MagicMock,
+) -> None:
+    mock_agent.stream_chat.return_value = iter(
+        [
+            ChatContentDelta(
+                content="Hello Frank!",
+            ),
+            ChatStreamCompleted(
+                response="Hello Frank!",
+            ),
+        ]
+    )
+
+    response = client.post(
+        "/api/v1/sessions/session-123/chat/stream",
+        json={
+            "message": "Hello",
+            "metadata": {
+                "request_id": "request-123",
+                "source": "untrusted",
+                "session_id": "untrusted-session",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.headers["x-accel-buffering"] == "no"
+
+    assert response.text == (
+        "event: content_delta\n"
+        'data: {"content":"Hello Frank!"}\n\n'
+        "event: completed\n"
+        'data: {"response":"Hello Frank!"}\n\n'
+    )
+
+    mock_agent.stream_chat.assert_called_once_with(
+        "Hello",
+        metadata={
+            "request_id": "request-123",
+            "source": "api",
+            "session_id": "session-123",
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "",
+        "   ",
+    ],
+)
+def test_stream_chat_with_session_should_reject_blank_message(
+    client: TestClient,
+    mock_agent: MagicMock,
+    message: str,
+) -> None:
+    response = client.post(
+        "/api/v1/sessions/session-123/chat/stream",
+        json={
+            "message": message,
+        },
+    )
+
+    assert response.status_code == 422
+    mock_agent.stream_chat.assert_not_called()
+
+
+def test_stream_chat_with_session_should_return_not_found_for_unknown_session(
+    client: TestClient,
+    mock_agent: MagicMock,
+) -> None:
+    response = client.post(
+        "/api/v1/sessions/unknown-session/chat/stream",
+        json={
+            "message": "Hello",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": "session_not_found",
+        "message": "Session not found.",
+    }
+
+    mock_agent.stream_chat.assert_not_called()
+
+
+def test_stream_chat_with_session_should_hide_unexpected_error(
+    client: TestClient,
+    mock_agent: MagicMock,
+) -> None:
+    def failing_stream() -> Iterator[ChatStreamEvent]:
+        yield from ()
+
+        raise RuntimeError(
+            "Sensitive internal implementation detail",
+        )
+
+    mock_agent.stream_chat.return_value = failing_stream()
+
+    response = client.post(
+        "/api/v1/sessions/session-123/chat/stream",
+        json={
+            "message": "Hello",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+
+    assert response.text == (
+        "event: error\n"
+        'data: {"error":"stream_error",'
+        '"message":"The chat stream failed unexpectedly."}\n\n'
+    )
+
+    assert "Sensitive internal implementation detail" not in response.text
+
+
+@pytest.mark.parametrize(
+    (
+        "error",
+        "expected_error",
+        "expected_message",
+    ),
+    [
+        (
+            ClientAuthenticationError(
+                "invalid credentials",
+            ),
+            "client_authentication_error",
+            "The AI service authentication failed.",
+        ),
+        (
+            ClientTimeoutError(
+                "request timed out",
+            ),
+            "client_timeout",
+            "The AI service took too long to respond.",
+        ),
+        (
+            ClientConnectionError(
+                "connection failed",
+            ),
+            "client_connection_error",
+            "Unable to connect to the AI service.",
+        ),
+        (
+            ClientRateLimitError(
+                "AI service rate limit exceeded",
+            ),
+            "client_rate_limit",
+            ("The AI service is temporarily rate limited. Please try again later."),
+        ),
+        (
+            AIClientError(
+                "upstream failure",
+            ),
+            "ai_client_error",
+            "The AI service returned an error.",
+        ),
+    ],
+)
+def test_stream_chat_with_session_should_emit_client_error_event(
+    client: TestClient,
+    mock_agent: MagicMock,
+    error: Exception,
+    expected_error: str,
+    expected_message: str,
+) -> None:
+    def failing_stream() -> Iterator[ChatStreamEvent]:
+        yield from ()
+
+        raise error
+
+    mock_agent.stream_chat.return_value = failing_stream()
+
+    response = client.post(
+        "/api/v1/sessions/session-123/chat/stream",
+        json={
+            "message": "Hello",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+
+    assert response.text == (
+        "event: error\n"
+        f'data: {{"error":"{expected_error}",'
+        f'"message":"{expected_message}"}}\n\n'
+    )

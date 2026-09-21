@@ -12,6 +12,7 @@ from app.exceptions.client_exceptions import (
     AIClientError,
     ClientAuthenticationError,
     ClientConnectionError,
+    ClientRateLimitError,
     ClientTimeoutError,
 )
 from app.session.agent_session import AgentSession
@@ -164,4 +165,28 @@ def test_session_route_should_return_not_found_for_unknown_session(
     assert response.json() == {
         "error": "session_not_found",
         "message": "Session not found.",
+    }
+
+
+def test_chat_should_return_service_unavailable_when_client_is_rate_limited(
+    client: TestClient,
+    mock_agent: MagicMock,
+) -> None:
+    mock_agent.chat.side_effect = ClientRateLimitError(
+        "AI service rate limit exceeded",
+    )
+
+    response = client.post(
+        "/api/v1/sessions/session-123/chat",
+        json={
+            "message": "Hello",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "error": "client_rate_limit",
+        "message": (
+            "The AI service is temporarily rate limited. Please try again later."
+        ),
     }

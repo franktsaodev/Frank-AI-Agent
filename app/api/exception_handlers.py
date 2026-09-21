@@ -7,6 +7,7 @@ from app.exceptions.client_exceptions import (
     AIClientError,
     ClientAuthenticationError,
     ClientConnectionError,
+    ClientRateLimitError,
     ClientTimeoutError,
 )
 from app.session.session_expired_error import (
@@ -82,6 +83,29 @@ def register_exception_handlers(
             },
         )
 
+    @app.exception_handler(ClientRateLimitError)
+    async def handle_client_rate_limit_error(
+        request: Request,
+        error: ClientRateLimitError,
+    ) -> JSONResponse:
+        del request
+
+        logger.warning(
+            "AI client rate limit exceeded: %s",
+            error,
+        )
+
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "client_rate_limit",
+                "message": (
+                    "The AI service is temporarily rate limited. "
+                    "Please try again later."
+                ),
+            },
+        )
+
     @app.exception_handler(AIClientError)
     async def handle_ai_client_error(
         request: Request,
@@ -89,7 +113,7 @@ def register_exception_handlers(
     ) -> JSONResponse:
         del request
 
-        logger.exception(
+        logger.error(
             "Unexpected AI client error: %s",
             error,
         )

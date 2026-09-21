@@ -779,6 +779,7 @@ Interactive documentation is available through Swagger UI at `/docs`.
 | `GET` | `/api/v1/sessions/{session_id}` | Get session information |
 | `DELETE` | `/api/v1/sessions/{session_id}` | Delete a session |
 | `POST` | `/api/v1/sessions/{session_id}/chat` | Send a message to the session agent |
+| `POST` | `/api/v1/sessions/{session_id}/chat/stream` | Stream chat events using Server-Sent Events |
 | `GET` | `/api/v1/sessions/{session_id}/history` | Get conversation history |
 | `DELETE` | `/api/v1/sessions/{session_id}/history` | Clear conversation history |
 
@@ -836,7 +837,47 @@ Optional request metadata can also be supplied:
 The API automatically adds protected runtime metadata such as the request
 source and session ID before passing the request to the agent.
 
-### 3. Continue the Conversation
+### 3. Stream a Chat Response
+
+```http
+POST /api/v1/sessions/{session_id}/chat/stream
+Content-Type: application/json
+Accept: text/event-stream
+```
+
+The streaming endpoint accepts the same request body and protected metadata
+rules as the standard chat endpoint.
+
+Successful responses use Server-Sent Events with three event types:
+
+| Event | Payload | Description |
+|---|---|---|
+| `content_delta` | `{"content":"..."}` | Contains guarded assistant content |
+| `completed` | `{"response":"..."}` | Marks successful completion with the final response |
+| `error` | `{"error":"...","message":"..."}` | Reports a sanitized error after streaming has started |
+
+Example response:
+
+```text
+event: content_delta
+data: {"content":"Nice to meet you, Frank."}
+
+event: completed
+data: {"response":"Nice to meet you, Frank."}
+
+```
+
+Session lookup and request validation errors that occur before streaming begins
+use the standard JSON error response and HTTP status code. Errors that occur
+after the stream begins are returned as sanitized `error` events because the
+HTTP response headers have already been sent.
+
+The response disables HTTP caching and Nginx proxy buffering. The current
+`ChatAgent` validates citations before emitting guarded assistant content, so
+this endpoint prioritizes response safety over unvalidated token-by-token
+delivery.
+
+### 4. Continue the Conversation
 
 Use the same `session_id` for subsequent requests:
 
@@ -849,7 +890,7 @@ Use the same `session_id` for subsequent requests:
 Because the session retains its own conversation and fact memory, the agent
 can use information remembered during previous interactions.
 
-### 4. Get Conversation History
+### 5. Get Conversation History
 
 ```http
 GET /api/v1/sessions/{session_id}/history
@@ -873,7 +914,7 @@ Example response:
 }
 ```
 
-### 5. Get Session Information
+### 6. Get Session Information
 
 ```http
 GET /api/v1/sessions/{session_id}
@@ -890,7 +931,7 @@ The response includes:
 }
 ```
 
-### 6. Clear Conversation History
+### 7. Clear Conversation History
 
 ```http
 DELETE /api/v1/sessions/{session_id}/history
@@ -904,7 +945,7 @@ Response:
 }
 ```
 
-### 7. Delete a Session
+### 8. Delete a Session
 
 ```http
 DELETE /api/v1/sessions/{session_id}

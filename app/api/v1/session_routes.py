@@ -1,7 +1,14 @@
+import logging
+from collections.abc import Iterable, Iterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import StreamingResponse
 
+from app.api.chat_stream_serializer import (
+    serialize_chat_stream_error,
+    serialize_chat_stream_event,
+)
 from app.api.models import (
     ChatRequest,
     ChatResponse,
@@ -15,10 +22,20 @@ from app.api.models import (
 from app.api.session_dependencies import (
     get_session_manager,
 )
+from app.exceptions.client_exceptions import (
+    AIClientError,
+    ClientAuthenticationError,
+    ClientConnectionError,
+    ClientRateLimitError,
+    ClientTimeoutError,
+)
+from app.models.chat_stream_event import ChatStreamEvent
 from app.session.session_id import SessionId
 from app.session.session_manager_protocol import (
     SessionManagerProtocol,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/sessions",
@@ -74,6 +91,43 @@ def chat_with_session(
 
     return ChatResponse(
         response=response,
+    )
+
+
+@router.post(
+    "/{session_id}/chat/stream",
+)
+def stream_chat_with_session(
+    session_id: str,
+    request: ChatRequest,
+    manager: SessionManagerDependency,
+) -> StreamingResponse:
+    session = manager.get(
+        SessionId(
+            value=session_id,
+        )
+    )
+
+    events = session.agent.stream_chat(
+        request.message,
+        metadata={
+            **request.metadata,
+            "source": "api",
+            "session_id": session_id,
+        },
+    )
+
+    serialized_events = _serialize_chat_stream(
+        events,
+    )
+
+    return StreamingResponse(
+        content=serialized_events,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
@@ -165,3 +219,70 @@ def get_session_detail(
         last_activity_at=session.last_activity_at,
         message_count=len(session.agent.get_history()),
     )
+
+
+def _serialize_chat_stream(
+    events: Iterable[ChatStreamEvent],
+) -> Iterator[str]:
+    try:
+        for event in events:
+            yield serialize_chat_stream_event(event)
+
+    except ClientAuthenticationError as error:
+        logger.warning(
+            "Streaming AI client authentication failed: %s",
+            error,
+        )
+
+        yield serialize_chat_stream_error(
+            error="client_authentication_error",
+            message="The AI service authentication failed.",
+        )
+
+    except ClientTimeoutError as error:
+        logger.warning(
+            "Streaming AI client request timed out: %s",
+            error,
+        )
+
+        yield serialize_chat_stream_error(
+            error="client_timeout",
+            message="The AI service took too long to respond.",
+        )
+
+    except ClientConnectionError as error:
+        logger.warning(
+            "Streaming AI client connection failed: %s",
+            error,
+        )
+
+        yield serialize_chat_stream_error(
+            error="client_connection_error",
+            message="Unable to connect to the AI service.",
+        )
+
+    except ClientRateLimitError as error:
+        logger.warning(
+            "Streaming AI client rate limit exceeded: %s",
+            error,
+        )
+
+        yield serialize_chat_stream_error(
+            error="client_rate_limit",
+            message=(
+                "The AI service is temporarily rate limited. Please try again later."
+            ),
+        )
+
+    except AIClientError:
+        logger.exception("Unexpected streaming AI client error")
+        yield serialize_chat_stream_error(
+            error="ai_client_error",
+            message="The AI service returned an error.",
+        )
+    except Exception:
+        logger.exception("Unexpected chat stream error")
+        yield serialize_chat_stream_error(
+            error="stream_error",
+            message="The chat stream failed unexpectedly.",
+        )
