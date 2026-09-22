@@ -739,7 +739,7 @@ logs readable.
 | Variable | Default | Description |
 |---|---|---|
 | `APP_SERVICE_NAME` | `Frank AI Agent` | Service name exposed by runtime information and health checks |
-| `APP_VERSION` | `1.3.0` | Application version exposed by the running service |
+| `APP_VERSION` | `1.4.0` | Application version exposed by the running service |
 
 ### CORS
 
@@ -1024,7 +1024,7 @@ docker compose down
 ### Build the Docker Image Manually
 
 ```bash
-docker build -t frank-ai-agent:1.3.0 .
+docker build -t frank-ai-agent:1.4.0 .
 ```
 
 ### Run the Image Manually
@@ -1036,8 +1036,8 @@ docker run --rm `
   --name frank-ai-agent `
   -p 8000:8000 `
   --env-file .env `
-  -e APP_VERSION=1.3.0 `
-  frank-ai-agent:1.3.0
+  -e APP_VERSION=1.4.0 `
+  frank-ai-agent:1.4.0
 ```
 
 **macOS / Linux**
@@ -1047,8 +1047,8 @@ docker run --rm \
   --name frank-ai-agent \
   -p 8000:8000 \
   --env-file .env \
-  -e APP_VERSION=1.3.0 \
-  frank-ai-agent:1.3.0
+  -e APP_VERSION=1.4.0 \
+  frank-ai-agent:1.4.0
 ```
 
 > [!NOTE]

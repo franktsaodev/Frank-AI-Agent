@@ -7,8 +7,12 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-22
+
 ### Added
 
+- Added typed client streaming contracts and Groq streaming with text and tool-call event handling.
+- Added tool-aware agent streaming orchestration with guarded citation validation.
 - Added a guarded Server-Sent Events chat endpoint with content, completion, and sanitized error events.
 - Added frontend SSE parsing and incremental chat rendering with typed content, completion, and error events.
 - Added Prettier configuration, formatting scripts, and continuous integration format checks for the frontend.
