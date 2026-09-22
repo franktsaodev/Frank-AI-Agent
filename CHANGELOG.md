@@ -16,6 +16,7 @@ Semantic Versioning.
 ### Fixed
 
 - Fixed upstream AI rate-limit failures returning generic internal server errors from the chat API.
+- Fixed valid numeric-only and non-Chinese AI responses being rejected by Groq response validation.
 
 ## [1.3.0] - 2026-09-18
 

@@ -215,6 +215,71 @@ def test_stream_chat_yields_text_deltas_and_completed_response(
     assert request_kwargs["model"] == "test-model"
 
 
+def test_chat_accepts_numeric_only_response(
+    groq_client: GroqClient,
+    messages: Sequence[Message],
+    trace_context: TraceContext,
+) -> None:
+    mock_create = MagicMock(
+        return_value=create_success_response(
+            "56088",
+        ),
+    )
+
+    groq_client._client.chat.completions.create = mock_create
+
+    result = groq_client.chat(
+        messages=messages,
+        trace_context=trace_context,
+    )
+
+    assert result == ClientResponse(
+        content="56088",
+    )
+    assert mock_create.call_count == 1
+
+
+def test_stream_chat_accepts_numeric_only_response(
+    groq_client: GroqClient,
+    messages: Sequence[Message],
+    trace_context: TraceContext,
+) -> None:
+    stream = iter(
+        [
+            create_stream_chunk("56088"),
+            create_stream_chunk(
+                None,
+                finish_reason="stop",
+            ),
+        ]
+    )
+
+    mock_create = MagicMock(
+        return_value=stream,
+    )
+
+    groq_client._client.chat.completions.create = mock_create
+
+    events = list(
+        groq_client.stream_chat(
+            messages=messages,
+            trace_context=trace_context,
+        )
+    )
+
+    assert events == [
+        ClientContentDelta(
+            content="56088",
+        ),
+        ClientStreamCompleted(
+            response=ClientResponse(
+                content="56088",
+            )
+        ),
+    ]
+    assert mock_create.call_count == 1
+
+
 @patch("app.tracing.trace_context.uuid.uuid4")
 def test_stream_chat_should_trace_llm_lifecycle(
     mock_uuid4: MagicMock,

@@ -641,10 +641,7 @@ class GroqClient(BaseClient):
         if not cleaned_content:
             return False
 
-        if not any(character.isalnum() for character in cleaned_content):
-            return False
-
-        return self._contains_chinese(cleaned_content)
+        return any(character.isalnum() for character in cleaned_content)
 
     def _calculate_delay(self, attempt: int) -> float:
         return (
@@ -668,7 +665,3 @@ class GroqClient(BaseClient):
                 break
 
         return cleaned_content
-
-    def _contains_chinese(self, content: str) -> bool:
-        """Check whether the response contains Chinese characters."""
-        return any("\u4e00" <= character <= "\u9fff" for character in content)
