@@ -1,9 +1,14 @@
+from collections.abc import Mapping
+
 from app.memory.base_fact_memory import BaseFactMemory
 
 
 class InMemoryFactMemory(BaseFactMemory):
-    def __init__(self) -> None:
-        self._facts: dict[str, str] = {}
+    def __init__(
+        self,
+        initial_facts: Mapping[str, str] | None = None,
+    ) -> None:
+        self._facts = dict(initial_facts) if initial_facts is not None else {}
 
     def set(self, key: str, value: str) -> None:
         self._facts[key] = value

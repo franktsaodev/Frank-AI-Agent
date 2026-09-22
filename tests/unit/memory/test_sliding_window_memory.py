@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from app.config_models.memory_config import MemoryConfig
 from app.memory.sliding_window_memory import SlidingWindowMemory
 from app.models.message import Message
@@ -7,11 +9,13 @@ from app.models.message_role import MessageRole
 def create_memory(
     *,
     max_history_rounds: int = 2,
+    initial_messages: Sequence[Message] = (),
 ) -> SlidingWindowMemory:
     return SlidingWindowMemory(
         config=MemoryConfig(
             max_history_rounds=max_history_rounds,
         ),
+        initial_messages=initial_messages,
     )
 
 
@@ -47,6 +51,48 @@ def test_add_turn_should_store_user_and_assistant_messages() -> None:
     assert memory.get_messages() == (
         user_message,
         assistant_message,
+    )
+
+
+def test_create_should_restore_initial_messages() -> None:
+    initial_turn = create_turn(
+        "Previous question",
+        "Previous answer",
+    )
+
+    memory = create_memory(
+        initial_messages=initial_turn,
+    )
+
+    assert memory.get_messages() == initial_turn
+
+
+def test_create_should_trim_initial_messages_to_latest_rounds() -> None:
+    first_turn = create_turn(
+        "Question 1",
+        "Answer 1",
+    )
+    second_turn = create_turn(
+        "Question 2",
+        "Answer 2",
+    )
+    third_turn = create_turn(
+        "Question 3",
+        "Answer 3",
+    )
+
+    memory = create_memory(
+        max_history_rounds=2,
+        initial_messages=(
+            *first_turn,
+            *second_turn,
+            *third_turn,
+        ),
+    )
+
+    assert memory.get_messages() == (
+        *second_turn,
+        *third_turn,
     )
 
 

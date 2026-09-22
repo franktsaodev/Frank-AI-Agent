@@ -5,6 +5,7 @@ from app.agent.agent_run_context import AgentRunContext
 from app.agent.agent_runner_protocol import (
     AgentRunnerProtocol,
 )
+from app.agent.chat_agent_state import ChatAgentState
 from app.extractors.base_fact_extractor import BaseFactExtractor
 from app.memory.base_fact_memory import BaseFactMemory
 from app.memory.base_memory import BaseMemory
@@ -268,6 +269,14 @@ class ChatAgent:
         self,
     ) -> tuple[Message, ...]:
         return tuple(self._memory.get_messages())
+
+    def export_state(
+        self,
+    ) -> ChatAgentState:
+        return ChatAgentState(
+            messages=self.get_history(),
+            facts=self._fact_memory.get_all(),
+        )
 
     def clear_history(
         self,

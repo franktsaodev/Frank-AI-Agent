@@ -2,6 +2,7 @@ from app.agent.chat_agent import ChatAgent
 from app.agent.chat_agent_dependencies import (
     ChatAgentDependencies,
 )
+from app.agent.chat_agent_state import ChatAgentState
 from app.memory.in_memory_fact_memory import (
     InMemoryFactMemory,
 )
@@ -19,14 +20,22 @@ class ChatAgentFactory:
 
     def create(
         self,
+        *,
+        state: ChatAgentState | None = None,
     ) -> ChatAgent:
+        initial_messages = state.messages if state is not None else ()
+        initial_facts = state.facts if state is not None else {}
+
         return ChatAgent(
             prompt_template=self._dependencies.prompt_template,
             agent_runner=self._dependencies.agent_runner,
             memory=SlidingWindowMemory(
                 config=self._dependencies.memory_config,
+                initial_messages=initial_messages,
             ),
-            fact_memory=InMemoryFactMemory(),
+            fact_memory=InMemoryFactMemory(
+                initial_facts=initial_facts,
+            ),
             fact_extractor=self._dependencies.fact_extractor,
             memory_policy=self._dependencies.memory_policy,
             prompt_composer=self._dependencies.prompt_composer,

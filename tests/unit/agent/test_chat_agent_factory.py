@@ -2,11 +2,14 @@ from app.agent.chat_agent_dependencies import (
     ChatAgentDependencies,
 )
 from app.agent.chat_agent_factory import ChatAgentFactory
+from app.agent.chat_agent_state import ChatAgentState
 from app.config_models.memory_config import MemoryConfig
 from app.config_models.memory_policy_config import MemoryPolicyConfig
 from app.config_models.prompt_config import PromptConfig
 from app.extractors.regex_fact_extractor import RegexFactExtractor
 from app.models.client_response import ClientResponse
+from app.models.message import Message
+from app.models.message_role import MessageRole
 from app.policies.simple_memory_policy import SimpleMemoryPolicy
 from app.prompts.prompt_composer import PromptComposer
 from app.prompts.prompt_template import PromptTemplate
@@ -84,3 +87,32 @@ def test_create_should_return_agents_with_independent_fact_memory() -> None:
 
     assert first_agent.get_fact("user_name") == "Frank"
     assert second_agent.get_fact("user_name") is None
+
+
+def test_create_should_restore_agent_state() -> None:
+    factory = ChatAgentFactory(
+        dependencies=create_dependencies(),
+    )
+
+    state = ChatAgentState(
+        messages=(
+            Message(
+                role=MessageRole.USER,
+                content="My name is Frank.",
+            ),
+            Message(
+                role=MessageRole.ASSISTANT,
+                content="Nice to meet you, Frank.",
+            ),
+        ),
+        facts={
+            "user_name": "Frank",
+        },
+    )
+
+    agent = factory.create(
+        state=state,
+    )
+
+    assert agent.get_history() == state.messages
+    assert agent.get_fact("user_name") == "Frank"

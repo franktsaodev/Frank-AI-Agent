@@ -196,6 +196,34 @@ def test_get_history_should_return_conversation_messages(
     )
 
 
+def test_export_state_should_return_history_and_facts(
+    create_agent: ChatAgentFactory,
+) -> None:
+    agent = create_agent()
+
+    agent.remember_fact(
+        key="user_name",
+        value="Frank",
+    )
+    agent.chat("Hello")
+
+    state = agent.export_state()
+
+    assert state.messages == (
+        Message(
+            role=MessageRole.USER,
+            content="Hello",
+        ),
+        Message(
+            role=MessageRole.ASSISTANT,
+            content="測試回覆",
+        ),
+    )
+    assert state.facts == {
+        "user_name": "Frank",
+    }
+
+
 def test_clear_history_should_remove_conversation_messages(
     create_agent: ChatAgentFactory,
 ) -> None:

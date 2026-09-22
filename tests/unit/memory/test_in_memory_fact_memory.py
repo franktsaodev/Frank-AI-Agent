@@ -1,6 +1,34 @@
 from app.memory.in_memory_fact_memory import InMemoryFactMemory
 
 
+def test_create_should_restore_initial_facts() -> None:
+    memory = InMemoryFactMemory(
+        initial_facts={
+            "user_name": "Frank",
+            "location": "Hai Phong",
+        },
+    )
+
+    assert memory.get_all() == {
+        "user_name": "Frank",
+        "location": "Hai Phong",
+    }
+
+
+def test_create_should_copy_initial_facts() -> None:
+    initial_facts = {
+        "user_name": "Frank",
+    }
+
+    memory = InMemoryFactMemory(
+        initial_facts=initial_facts,
+    )
+
+    initial_facts["user_name"] = "John"
+
+    assert memory.get("user_name") == "Frank"
+
+
 def test_set_and_get_fact() -> None:
     memory = InMemoryFactMemory()
 
