@@ -1,5 +1,6 @@
 from app.api.lifespan import create_lifespan
 from app.api.lifespan_types import Lifespan
+from app.api.redis_dependencies import get_redis_client
 from app.api.session_dependencies import (
     get_session_manager,
 )
@@ -16,4 +17,5 @@ def get_session_config() -> SessionConfig:
 application_lifespan: Lifespan = create_lifespan(
     get_session_manager=get_session_manager,
     get_session_config=get_session_config,
+    get_redis_client=get_redis_client,
 )

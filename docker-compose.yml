@@ -1,4 +1,32 @@
 services:
+  redis:
+    image: redis:8.8.3-alpine
+    container_name: frank-ai-agent-redis
+
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+
+    ports:
+      - "127.0.0.1:6379:6379"
+
+    volumes:
+      - redis-data:/data
+
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+    restart: unless-stopped
   api:
     build:
       context: .
@@ -15,6 +43,11 @@ services:
 
     environment:
       APP_VERSION: "1.4.0"
+      REDIS_URL: "redis://redis:6379/0"
+
+    depends_on:
+      redis:
+        condition: service_healthy
 
     volumes:
       - huggingface-cache:/home/app/.cache/huggingface
@@ -64,3 +97,4 @@ services:
 
 volumes:
   huggingface-cache:
+  redis-data:
