@@ -17,6 +17,7 @@ class FakeSessionManager:
         self._sessions_to_create = list(sessions)
 
         self.created_sessions: list[AgentSession] = []
+        self.saved_sessions: list[AgentSession] = []
         self.deleted_session_ids: list[SessionId] = []
 
     def create(
@@ -41,6 +42,16 @@ class FakeSessionManager:
             raise SessionNotFoundError(
                 session_id=session_id,
             ) from error
+
+    def save(
+        self,
+        session: AgentSession,
+    ) -> None:
+        self._sessions[session.session_id] = session
+
+        self.saved_sessions.append(
+            session,
+        )
 
     def contains(
         self,

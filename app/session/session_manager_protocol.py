@@ -14,6 +14,11 @@ class SessionManagerProtocol(Protocol):
         session_id: SessionId,
     ) -> AgentSession: ...
 
+    def save(
+        self,
+        session: AgentSession,
+    ) -> None: ...
+
     def contains(
         self,
         session_id: SessionId,

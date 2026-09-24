@@ -599,3 +599,52 @@ def test_purge_expired_should_keep_recently_active_session(
     assert manager.contains(
         session.session_id,
     )
+
+
+def test_save_should_extend_session_lifetime(
+    session_timestamp: datetime,
+) -> None:
+    agent = MagicMock(
+        spec=ChatAgent,
+    )
+
+    clock = FakeSessionClock(
+        current_time=session_timestamp,
+    )
+
+    manager = create_manager(
+        agents=[
+            agent,
+        ],
+        clock=clock,
+        config=SessionConfig(
+            ttl_seconds=3600,
+            cleanup_interval_seconds=300,
+        ),
+    )
+
+    session = manager.create()
+
+    clock.set(
+        session_timestamp
+        + timedelta(
+            seconds=3599,
+        )
+    )
+
+    manager.save(
+        session,
+    )
+
+    clock.set(
+        session_timestamp
+        + timedelta(
+            seconds=7198,
+        )
+    )
+
+    result = manager.get(
+        session.session_id,
+    )
+
+    assert result.agent is agent

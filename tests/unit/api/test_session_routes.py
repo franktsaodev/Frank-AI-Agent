@@ -102,6 +102,8 @@ def test_create_session_should_return_session_id(
 def test_chat_with_session_should_use_session_agent(
     client: TestClient,
     mock_agent: MagicMock,
+    fake_session_manager: FakeSessionManager,
+    session: AgentSession,
 ) -> None:
     response = client.post(
         "/api/v1/sessions/session-123/chat",
@@ -126,6 +128,10 @@ def test_chat_with_session_should_use_session_agent(
             "session_id": "session-123",
         },
     )
+
+    assert fake_session_manager.saved_sessions == [
+        session,
+    ]
 
 
 def test_chat_with_session_should_return_not_found_for_unknown_session(
@@ -319,6 +325,8 @@ def test_get_session_history_should_return_empty_messages(
 def test_clear_session_history_should_clear_agent_history(
     client: TestClient,
     mock_agent: MagicMock,
+    fake_session_manager: FakeSessionManager,
+    session: AgentSession,
 ) -> None:
     response = client.delete(
         "/api/v1/sessions/session-123/history",
@@ -330,6 +338,10 @@ def test_clear_session_history_should_clear_agent_history(
     }
 
     mock_agent.clear_history.assert_called_once_with()
+
+    assert fake_session_manager.saved_sessions == [
+        session,
+    ]
 
 
 def test_get_session_history_should_return_not_found_for_unknown_session(
@@ -427,6 +439,8 @@ def test_get_session_detail_should_return_not_found_for_unknown_session(
 def test_stream_chat_with_session_should_return_sse_events(
     client: TestClient,
     mock_agent: MagicMock,
+    fake_session_manager: FakeSessionManager,
+    session: AgentSession,
 ) -> None:
     mock_agent.stream_chat.return_value = iter(
         [
@@ -471,6 +485,62 @@ def test_stream_chat_with_session_should_return_sse_events(
             "source": "api",
             "session_id": "session-123",
         },
+    )
+
+    assert fake_session_manager.saved_sessions == [
+        session,
+    ]
+
+
+def test_stream_chat_should_emit_error_when_session_save_fails(
+    client: TestClient,
+    mock_agent: MagicMock,
+    fake_session_manager: FakeSessionManager,
+    session: AgentSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_agent.stream_chat.return_value = iter(
+        [
+            ChatContentDelta(
+                content="Hello Frank!",
+            ),
+            ChatStreamCompleted(
+                response="Hello Frank!",
+            ),
+        ]
+    )
+
+    save = MagicMock(
+        side_effect=RuntimeError(
+            "Redis unavailable",
+        ),
+    )
+    monkeypatch.setattr(
+        fake_session_manager,
+        "save",
+        save,
+    )
+
+    response = client.post(
+        "/api/v1/sessions/session-123/chat/stream",
+        json={
+            "message": "Hello",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.text == (
+        "event: content_delta\n"
+        'data: {"content":"Hello Frank!"}\n\n'
+        "event: error\n"
+        'data: {"error":"stream_error",'
+        '"message":"The chat stream failed unexpectedly."}\n\n'
+    )
+
+    assert "event: completed\n" not in response.text
+
+    save.assert_called_once_with(
+        session,
     )
 
 
@@ -520,6 +590,7 @@ def test_stream_chat_with_session_should_return_not_found_for_unknown_session(
 def test_stream_chat_with_session_should_hide_unexpected_error(
     client: TestClient,
     mock_agent: MagicMock,
+    fake_session_manager: FakeSessionManager,
 ) -> None:
     def failing_stream() -> Iterator[ChatStreamEvent]:
         yield from ()
@@ -547,6 +618,8 @@ def test_stream_chat_with_session_should_hide_unexpected_error(
     )
 
     assert "Sensitive internal implementation detail" not in response.text
+
+    assert fake_session_manager.saved_sessions == []
 
 
 @pytest.mark.parametrize(
@@ -596,6 +669,7 @@ def test_stream_chat_with_session_should_hide_unexpected_error(
 def test_stream_chat_with_session_should_emit_client_error_event(
     client: TestClient,
     mock_agent: MagicMock,
+    fake_session_manager: FakeSessionManager,
     error: Exception,
     expected_error: str,
     expected_message: str,
@@ -622,3 +696,5 @@ def test_stream_chat_with_session_should_emit_client_error_event(
         f'data: {{"error":"{expected_error}",'
         f'"message":"{expected_message}"}}\n\n'
     )
+
+    assert fake_session_manager.saved_sessions == []

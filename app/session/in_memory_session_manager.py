@@ -82,6 +82,17 @@ class InMemorySessionManager:
 
         return active_session
 
+    def save(
+        self,
+        session: AgentSession,
+    ) -> None:
+        active_session = replace(
+            session,
+            last_activity_at=self._clock.now(),
+        )
+
+        self._sessions[session.session_id] = active_session
+
     def contains(
         self,
         session_id: SessionId,

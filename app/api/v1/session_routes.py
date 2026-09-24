@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
@@ -29,7 +29,10 @@ from app.exceptions.client_exceptions import (
     ClientRateLimitError,
     ClientTimeoutError,
 )
-from app.models.chat_stream_event import ChatStreamEvent
+from app.models.chat_stream_event import (
+    ChatStreamCompleted,
+    ChatStreamEvent,
+)
 from app.session.session_id import SessionId
 from app.session.session_manager_protocol import (
     SessionManagerProtocol,
@@ -89,6 +92,10 @@ def chat_with_session(
         },
     )
 
+    manager.save(
+        session,
+    )
+
     return ChatResponse(
         response=response,
     )
@@ -119,6 +126,9 @@ def stream_chat_with_session(
 
     serialized_events = _serialize_chat_stream(
         events,
+        on_completed=lambda: manager.save(
+            session,
+        ),
     )
 
     return StreamingResponse(
@@ -194,6 +204,10 @@ def clear_session_history(
 
     session.agent.clear_history()
 
+    manager.save(
+        session,
+    )
+
     return ClearSessionHistoryResponse(
         cleared=True,
     )
@@ -223,10 +237,22 @@ def get_session_detail(
 
 def _serialize_chat_stream(
     events: Iterable[ChatStreamEvent],
+    *,
+    on_completed: Callable[[], None],
 ) -> Iterator[str]:
     try:
         for event in events:
-            yield serialize_chat_stream_event(event)
+            serialized_event = serialize_chat_stream_event(
+                event,
+            )
+
+            if isinstance(
+                event,
+                ChatStreamCompleted,
+            ):
+                on_completed()
+
+            yield serialized_event
 
     except ClientAuthenticationError as error:
         logger.warning(
