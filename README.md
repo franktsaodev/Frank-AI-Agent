@@ -256,58 +256,84 @@ model before producing the final response.
 
 ## Session Lifecycle
 
-![Session Lifecycle](assets/images/session-lifecycle.png)
+```mermaid
+flowchart TD
+    A["Session API Request"] --> B["PersistentSessionManager"]
+    B --> C["ChatAgent State Snapshot"]
+    C --> D["RedisSessionRepository"]
+    D --> E["Redis Key with TTL and AOF"]
+    E -->|Restore| B
+```
 
 Each session owns an independent `ChatAgent`, keeping conversation history and
-fact memory isolated from other sessions.
+fact memory isolated from other sessions. Session snapshots are persisted in
+Redis so they can be restored after API process or container restarts.
 
 ### Session Creation
 
 When a new session is requested:
 
-1. The `SessionManager` generates a unique session ID.
+1. The `PersistentSessionManager` generates a unique session ID.
 2. The `ChatAgentFactory` creates a new agent instance.
 3. Independent conversation memory and fact memory are created for the agent.
 4. The current timestamp is assigned to both `created_at` and
    `last_activity_at`.
-5. The resulting `AgentSession` is stored in the in-memory session store.
+5. The agent exports a versioned state snapshot containing messages and facts.
+6. The resulting stored session is encoded as JSON and written to Redis with
+   the configured expiration time.
 
 ### Session Activity
 
-Retrieving an active session updates its `last_activity_at` timestamp while
-preserving its original `created_at` value and agent instance.
+Retrieving a session loads its stored snapshot from Redis, recreates its
+`ChatAgent`, preserves its original `created_at` value, and refreshes both
+`last_activity_at` and the Redis TTL.
+
+Successful synchronous chats, completed streaming chats, and history-clearing
+operations save the updated agent state back to Redis. A streaming response is
+only marked as completed after the updated session has been persisted.
 
 This creates a sliding expiration model: active sessions remain available as
 long as they continue receiving requests.
 
 ### Session Expiration
 
-A session is considered expired when:
+A session expires when its Redis key reaches the configured inactivity limit:
 
 ```text
 current_time >= last_activity_at + SESSION_TTL_SECONDS
 ```
 
-Expired sessions are periodically removed from the in-memory session store by
-the background cleanup task.
+Redis removes expired session keys automatically through its native TTL
+mechanism. The persistent session manager therefore does not need to scan or
+delete expired sessions itself.
 
-The cleanup behavior is configurable through:
+The expiration behavior is configured through:
 
 ```env
 SESSION_TTL_SECONDS=3600
-SESSION_CLEANUP_INTERVAL_SECONDS=300
 ```
 
-With the default configuration, inactive sessions expire after one hour and
-the cleanup task checks for expired sessions every five minutes.
+With the default configuration, inactive sessions expire after one hour.
+Successful session reads and writes refresh that expiration period.
 
-### Current Storage Model
+### Redis-Backed Storage
 
-Session state is currently stored in memory.
+Session state is stored through `SessionRepositoryProtocol`, with
+`RedisSessionRepository` used by the application runtime.
 
-This keeps the runtime simple and makes session isolation explicit, while the
-session management abstraction leaves room for a persistent or distributed
-session store in a future version.
+Each stored session contains:
+
+- The session ID
+- Creation and last-activity timestamps
+- A versioned schema identifier
+- Conversation history
+- Extracted fact memory
+- Tool-call message data
+
+Redis persistence allows sessions to survive API restarts and makes the same
+session data accessible to multiple API instances using the same Redis
+deployment. Docker Compose enables Redis AOF persistence with `appendfsync`
+set to `everysec`.
 
 ## Retrieval-Augmented Generation (RAG)
 
@@ -757,11 +783,20 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173,https://agent.example.com
 
 | Variable | Default | Description |
 |---|---|---|
-| `SESSION_TTL_SECONDS` | `3600` | Maximum inactivity period before a session expires |
-| `SESSION_CLEANUP_INTERVAL_SECONDS` | `300` | Interval between background expired-session cleanup cycles |
+| `SESSION_TTL_SECONDS` | `3600` | Redis TTL applied to inactive sessions and refreshed by successful session activity |
+| `SESSION_CLEANUP_INTERVAL_SECONDS` | `300` | Interval between cleanup-service cycles; Redis-backed sessions expire through native key TTLs |
+
+### Redis
+
+| Variable | Default | Description |
+|---|---|---|
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL used for persistent session storage |
+| `REDIS_SESSION_KEY_PREFIX` | `frank-ai-agent:sessions` | Prefix applied to Redis session keys |
 
 > [!NOTE]
 > `GROQ_API_KEY` must be configured before using the Groq-backed agent.
+> Redis must also be reachable when the API starts. Docker Compose configures
+> the API to use the included Redis service automatically.
 > Do not commit your `.env` file or API keys to version control.
 
 ## REST API
@@ -959,18 +994,18 @@ Response:
 }
 ```
 
-Deleting the session removes the complete in-memory session, including its
-agent and associated memory state.
+Deleting the session removes its Redis-backed state, including conversation
+history, extracted facts, timestamps, and tool-call message data.
 
 ## Docker
 
 Frank AI Agent can be built and run as a full-stack containerized application
-using Docker Compose. The deployment includes the FastAPI backend and a
-production React frontend served by Nginx.
+using Docker Compose. The deployment includes Redis for persistent session
+storage, the FastAPI backend, and a production React frontend served by Nginx.
 
 ### Docker Compose
 
-The simplest way to start the service is:
+The simplest way to start the application is:
 
 ```bash
 docker compose up --build
@@ -978,26 +1013,36 @@ docker compose up --build
 
 Docker Compose will:
 
+- Pull and start the Redis service
+- Persist Redis session data using AOF and the `redis-data` named volume
 - Build the FastAPI application image
 - Build the React frontend using a multi-stage Node.js image
 - Serve the generated frontend assets through Nginx
 - Load backend runtime configuration from `.env`
-- Expose the frontend on port `5173`
+- Configure the API to use the included Redis service
+- Wait for Redis to become healthy before starting the API
+- Wait for the API to become healthy before starting the frontend
+- Expose Redis on the host loopback interface at port `6379`
 - Expose the API on port `8000`
+- Expose the frontend on port `5173`
 - Proxy frontend `/api` and `/health` requests to FastAPI
-- Run health checks for both services
+- Run health checks for Redis, the API, and the frontend
 - Restart the services automatically unless they are explicitly stopped
 
-Once the container is running:
+Once the containers are running:
 
 ```text
 Frontend:   http://localhost:5173
 API:        http://localhost:8000
 Swagger UI: http://localhost:8000/docs
 Health:     http://localhost:8000/health
+Redis:      127.0.0.1:6379
 ```
 
-Run the service in the background:
+Redis is bound to `127.0.0.1`, so it is accessible from the local host without
+being exposed on external network interfaces.
+
+Run the application in the background:
 
 ```bash
 docker compose up --build -d
@@ -1012,10 +1057,10 @@ docker compose ps
 View logs:
 
 ```bash
-docker compose logs -f api frontend
+docker compose logs -f redis api frontend
 ```
 
-Stop the service:
+Stop the application:
 
 ```bash
 docker compose down
@@ -1029,61 +1074,72 @@ docker build -t frank-ai-agent:1.4.0 .
 
 ### Run the Image Manually
 
+The API requires a reachable Redis instance. When running the API image outside
+Docker Compose, set `REDIS_URL` to a Redis address that can be reached from
+inside the container.
+
 **Windows PowerShell**
 
 ```powershell
+$redisUrl = "redis://your-redis-host:6379/0"
+
 docker run --rm `
   --name frank-ai-agent `
   -p 8000:8000 `
   --env-file .env `
   -e APP_VERSION=1.4.0 `
+  -e REDIS_URL=$redisUrl `
   frank-ai-agent:1.4.0
 ```
 
 **macOS / Linux**
 
 ```bash
+export REDIS_URL="redis://your-redis-host:6379/0"
+
 docker run --rm \
   --name frank-ai-agent \
   -p 8000:8000 \
   --env-file .env \
   -e APP_VERSION=1.4.0 \
+  -e REDIS_URL="$REDIS_URL" \
   frank-ai-agent:1.4.0
 ```
 
 > [!NOTE]
 > PowerShell uses the backtick (`) for line continuation.
 > Bash and similar shells use the backslash (`\`).
+> A Redis URL containing `localhost` refers to the API container itself, not
+> the Docker host or another Redis container.
 
-### Container Health Check
+### Container Health Checks
 
-The Docker Compose configuration periodically checks both services:
+Docker Compose periodically checks all three runtime services:
 
 ```text
+Redis:    redis-cli ping
 API:      http://127.0.0.1:8000/health
 Frontend: http://127.0.0.1/health
 ```
 
-The API health check verifies that FastAPI is responding on port 8000.
-The frontend health check sends a request through Nginx to the proxied FastAPI
+The Redis health check verifies that the server responds to commands. The API
+also validates its Redis connection during application startup before accepting
+requests.
+
+The API health check verifies that FastAPI is responding on port `8000`. The
+frontend health check sends a request through Nginx to the proxied FastAPI
 health endpoint, verifying both the web server and backend connection.
 
-The container health check uses an extended startup grace period so that the
-initial embedding-model download does not immediately mark the service as
-unhealthy.
+The API health check uses an extended startup grace period so that the initial
+embedding-model download does not immediately mark the service as unhealthy.
 
 ### Hugging Face Model Cache
 
 When retrieval is enabled, the configured sentence-transformer model is loaded
 during application startup.
 
-Docker Compose persists the Hugging Face model cache using a named volume:
-
-```text
-huggingface-cache
-```
-
-The cache is mounted at:
+Docker Compose persists the Hugging Face model cache using the
+`huggingface-cache` named volume, mounted at:
 
 ```text
 /home/app/.cache/huggingface
@@ -1093,17 +1149,34 @@ The first retrieval-enabled startup may take longer while the embedding model
 is downloaded. Subsequent container recreations reuse the cached model and
 start significantly faster.
 
-The cache is preserved when running:
+### Redis Session Data
+
+Docker Compose persists Redis data using the `redis-data` named volume, mounted
+inside the Redis container at:
+
+```text
+/data
+```
+
+Redis uses append-only file persistence with `appendfsync` set to `everysec`.
+This allows stored sessions to survive Redis container restarts and container
+recreation.
+
+Both named volumes are preserved when running:
 
 ```bash
 docker compose down
 ```
 
-To remove the cache volume explicitly:
+To remove the Redis session data and Hugging Face model cache explicitly:
 
 ```bash
 docker compose down -v
 ```
+
+> [!WARNING]
+> `docker compose down -v` permanently deletes the Redis session data and model
+> cache stored in the named volumes.
 
 ## Testing & Code Quality
 
@@ -1308,10 +1381,18 @@ features planned for future development.
 - [x] Server-Sent Events chat API with sanitized errors
 - [x] Frontend SSE parsing and incremental response rendering
 
+### Unreleased — Persistent Sessions
+
+- [x] Versioned agent state snapshots
+- [x] Strict JSON session serialization and validation
+- [x] Redis session repository with sliding TTL expiration
+- [x] Redis-backed persistent and distributed sessions
+- [x] Session restoration after API restarts
+- [x] Persistent synchronous and streaming chat mutations
+- [x] Redis AOF persistence and Docker health checks
+
 ### Future Development
 
-- [ ] Persistent session storage
-- [ ] Redis-backed distributed sessions
 - [ ] Model Context Protocol (MCP) integration
 - [ ] Multi-agent orchestration
 - [ ] Additional LLM providers

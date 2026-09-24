@@ -7,6 +7,21 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Added immutable, versioned agent-state snapshots for conversation history, facts, and tool-call messages.
+- Added strict JSON encoding and decoding for persisted session state.
+- Added Redis runtime configuration, client lifecycle management, and a TTL-backed session repository.
+- Added a persistent session manager that restores agent state and refreshes sliding expiration.
+- Added a Redis Docker Compose service with health checks, AOF persistence, and a named data volume.
+
+### Changed
+
+- Changed the default session runtime from process-local memory to Redis-backed persistence.
+- Changed successful synchronous chat, completed streaming chat, and history-clearing operations to persist updated session state.
+- Changed streaming completion delivery so the session is persisted before the completed event is emitted.
+- Updated Pyright from 1.1.411 to 1.1.414.
+
 ## [1.4.0] - 2026-09-22
 
 ### Added
