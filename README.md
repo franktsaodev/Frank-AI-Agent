@@ -809,7 +809,8 @@ Interactive documentation is available through Swagger UI at `/docs`.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/health` | Check service health and runtime information |
+| `GET` | `/health` | Check FastAPI liveness and runtime information |
+| `GET` | `/ready` | Check whether Redis is available; return `503` when the service is not ready |
 | `POST` | `/api/v1/sessions` | Create a new agent session |
 | `GET` | `/api/v1/sessions/{session_id}` | Get session information |
 | `DELETE` | `/api/v1/sessions/{session_id}` | Delete a session |
@@ -1035,7 +1036,8 @@ Once the containers are running:
 Frontend:   http://localhost:5173
 API:        http://localhost:8000
 Swagger UI: http://localhost:8000/docs
-Health:     http://localhost:8000/health
+Liveness:  http://localhost:8000/health
+Readiness: http://localhost:8000/ready
 Redis:      127.0.0.1:6379
 ```
 
@@ -1118,7 +1120,7 @@ Docker Compose periodically checks all three runtime services:
 
 ```text
 Redis:    redis-cli ping
-API:      http://127.0.0.1:8000/health
+API:      http://127.0.0.1:8000/ready
 Frontend: http://127.0.0.1/health
 ```
 
@@ -1126,9 +1128,11 @@ The Redis health check verifies that the server responds to commands. The API
 also validates its Redis connection during application startup before accepting
 requests.
 
-The API health check verifies that FastAPI is responding on port `8000`. The
-frontend health check sends a request through Nginx to the proxied FastAPI
-health endpoint, verifying both the web server and backend connection.
+The `/health` endpoint reports whether FastAPI is running. The API container
+health check uses `/ready`, which checks Redis on each request and returns `503`
+when Redis is unavailable. The frontend health check sends a request through
+Nginx to the proxied `/health` endpoint, verifying the web server and backend
+connection.
 
 The API health check uses an extended startup grace period so that the initial
 embedding-model download does not immediately mark the service as unhealthy.

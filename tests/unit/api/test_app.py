@@ -42,6 +42,18 @@ def test_openapi_should_include_health_and_session_routes() -> None:
     paths = schema["paths"]
 
     assert "/health" in paths
+    assert "/ready" in paths
+
+    readiness_responses = paths["/ready"]["get"]["responses"]
+
+    assert (
+        readiness_responses["200"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/ReadinessResponse"
+    )
+    assert (
+        readiness_responses["503"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/ErrorResponse"
+    )
     assert "/api/v1/sessions" in paths
     assert "/api/v1/sessions/{session_id}/chat" in paths
     assert "/api/v1/sessions/{session_id}" in paths

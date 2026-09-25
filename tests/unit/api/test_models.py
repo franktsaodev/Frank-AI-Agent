@@ -9,6 +9,7 @@ from app.api.models import (
     ClearSessionHistoryResponse,
     HealthResponse,
     HistoryMessageResponse,
+    ReadinessResponse,
     SessionDetailResponse,
     SessionHistoryResponse,
 )
@@ -115,6 +116,16 @@ def test_health_response_should_store_runtime_information() -> None:
     assert response.status == "ok"
     assert response.service == "Frank AI Agent"
     assert response.version == "0.1.0"
+
+
+def test_readiness_response_should_store_dependency_status() -> None:
+    response = ReadinessResponse(
+        status="ready",
+        redis="ok",
+    )
+
+    assert response.status == "ready"
+    assert response.redis == "ok"
 
 
 def test_session_history_response_should_store_messages() -> None:

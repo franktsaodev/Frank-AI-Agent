@@ -66,6 +66,11 @@ class HealthResponse(BaseModel):
     version: str
 
 
+class ReadinessResponse(BaseModel):
+    status: Literal["ready"]
+    redis: Literal["ok"]
+
+
 class CreateSessionResponse(BaseModel):
     session_id: str
 

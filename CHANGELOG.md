@@ -14,6 +14,7 @@ Semantic Versioning.
 - Added Redis runtime configuration, client lifecycle management, and a TTL-backed session repository.
 - Added a persistent session manager that restores agent state and refreshes sliding expiration.
 - Added a Redis Docker Compose service with health checks, AOF persistence, and a named data volume.
+- Added a Redis-aware `/ready` endpoint that returns a sanitized `503` response when Redis is unavailable.
 
 ### Changed
 
@@ -21,6 +22,7 @@ Semantic Versioning.
 - Changed successful synchronous chat, completed streaming chat, and history-clearing operations to persist updated session state.
 - Changed streaming completion delivery so the session is persisted before the completed event is emitted.
 - Updated Pyright from 1.1.411 to 1.1.414.
+- Changed the Docker Compose API health check to use `/ready` while retaining `/health` as a liveness endpoint.
 
 ## [1.4.0] - 2026-09-22
 
