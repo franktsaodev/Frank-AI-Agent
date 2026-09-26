@@ -38,6 +38,7 @@ class StoredSessionCodec:
                 "messages": messages,
                 "facts": facts,
             },
+            "revision": session.revision,
         }
 
         return json.dumps(
@@ -75,10 +76,15 @@ class StoredSessionCodec:
             data["schema_version"],
         )
 
-        if schema_version != STORED_SESSION_SCHEMA_VERSION:
+        if schema_version not in (1, STORED_SESSION_SCHEMA_VERSION):
             raise StoredSessionDecodeError(
                 f"Unsupported stored session schema version: {schema_version!r}"
             )
+
+        revision = 0 if schema_version == 1 else self._decode_integer(data["revision"])
+
+        if revision < 0:
+            raise ValueError("Stored session revision cannot be negative.")
 
         agent_state_data = self._decode_json_object(
             data["agent_state"],
@@ -111,6 +117,7 @@ class StoredSessionCodec:
                 ),
                 facts=facts,
             ),
+            revision=revision,
         )
 
     def _encode_message(

@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 from datetime import datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,6 +25,7 @@ from app.models.chat_stream_event import (
 from app.models.message import Message
 from app.models.message_role import MessageRole
 from app.session.agent_session import AgentSession
+from app.session.session_conflict_error import SessionConflictError
 from app.session.session_id import SessionId
 from tests.fakes.fake_session_manager import (
     FakeSessionManager,
@@ -542,6 +543,41 @@ def test_stream_chat_should_emit_error_when_session_save_fails(
     save.assert_called_once_with(
         session,
     )
+
+
+def test_stream_chat_should_emit_conflict_when_session_save_fails(
+    client: TestClient,
+    mock_agent: MagicMock,
+    fake_session_manager: FakeSessionManager,
+) -> None:
+    mock_agent.stream_chat.return_value = iter(
+        [
+            ChatContentDelta(content="Hello Frank!"),
+            ChatStreamCompleted(response="Hello Frank!"),
+        ]
+    )
+
+    with patch.object(
+        fake_session_manager,
+        "save",
+        side_effect=SessionConflictError(
+            session_id=SessionId(value="session-123"),
+        ),
+    ):
+        response = client.post(
+            "/api/v1/sessions/session-123/chat/stream",
+            json={"message": "Hello"},
+        )
+
+    assert response.status_code == 200
+    assert response.text == (
+        "event: content_delta\n"
+        'data: {"content":"Hello Frank!"}\n\n'
+        "event: error\n"
+        'data: {"error":"session_conflict",'
+        '"message":"Session was updated by another request. Please retry."}\n\n'
+    )
+    assert "event: completed" not in response.text
 
 
 @pytest.mark.parametrize(

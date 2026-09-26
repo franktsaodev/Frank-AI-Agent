@@ -11,6 +11,7 @@ from app.exceptions.client_exceptions import (
     ClientRateLimitError,
     ClientTimeoutError,
 )
+from app.session.session_conflict_error import SessionConflictError
 from app.session.session_expired_error import (
     SessionExpiredError,
 )
@@ -184,5 +185,20 @@ def register_exception_handlers(
             content={
                 "error": "session_storage_unavailable",
                 "message": "Session storage is temporarily unavailable.",
+            },
+        )
+
+    @app.exception_handler(SessionConflictError)
+    async def handle_session_conflict(
+        request: Request,
+        error: SessionConflictError,
+    ) -> JSONResponse:
+        del request, error
+
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "session_conflict",
+                "message": "Session was updated by another request. Please retry.",
             },
         )

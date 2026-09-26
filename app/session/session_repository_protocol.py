@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Protocol
 
 from app.session.session_id import SessionId
@@ -9,6 +10,14 @@ class SessionRepositoryProtocol(Protocol):
         self,
         session: StoredSession,
         *,
+        ttl_seconds: int,
+    ) -> None: ...
+
+    def save_if_revision(
+        self,
+        session: StoredSession,
+        *,
+        expected_revision: int,
         ttl_seconds: int,
     ) -> None: ...
 
@@ -26,3 +35,11 @@ class SessionRepositoryProtocol(Protocol):
         self,
         session_id: SessionId,
     ) -> bool: ...
+
+    def get_and_refresh(
+        self,
+        session_id: SessionId,
+        *,
+        last_activity_at: datetime,
+        ttl_seconds: int,
+    ) -> StoredSession | None: ...

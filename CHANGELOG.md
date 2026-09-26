@@ -16,6 +16,8 @@ Semantic Versioning.
 - Added a Redis Docker Compose service with health checks, AOF persistence, and a named data volume.
 - Added a Redis-aware `/ready` endpoint that returns a sanitized `503` response when Redis is unavailable.
 - Added a sanitized `503` response for session requests when Redis storage is unavailable.
+- Added revision-based conflict detection for Redis sessions, with HTTP `409` and streaming `session_conflict` errors.
+- Added automatic migration of existing version 1 session snapshots to version 2 on activity refresh.
 
 ### Changed
 

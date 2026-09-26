@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
@@ -98,6 +99,11 @@ def test_get_should_restore_session_and_refresh_ttl(
             minutes=10,
         ),
         agent_state=agent_state,
+        revision=3,
+    )
+    refreshed_session = replace(
+        stored_session,
+        last_activity_at=session_timestamp,
     )
 
     restored_agent = MagicMock(
@@ -111,7 +117,7 @@ def test_get_should_restore_session_and_refresh_ttl(
     repository = MagicMock(
         spec=SessionRepositoryProtocol,
     )
-    repository.get.return_value = stored_session
+    repository.get_and_refresh.return_value = refreshed_session
 
     manager = PersistentSessionManager(
         session_factory=SessionFactory(),
@@ -125,8 +131,10 @@ def test_get_should_restore_session_and_refresh_ttl(
         stored_session.session_id,
     )
 
-    repository.get.assert_called_once_with(
+    repository.get_and_refresh.assert_called_once_with(
         stored_session.session_id,
+        last_activity_at=session_timestamp,
+        ttl_seconds=session_config.ttl_seconds,
     )
     agent_factory.create.assert_called_once_with(
         state=agent_state,
@@ -136,16 +144,69 @@ def test_get_should_restore_session_and_refresh_ttl(
     assert result.agent is restored_agent
     assert result.created_at == stored_session.created_at
     assert result.last_activity_at == session_timestamp
+    assert result.revision == 3
 
-    repository.save.assert_called_once_with(
-        StoredSession(
-            session_id=stored_session.session_id,
-            created_at=stored_session.created_at,
-            last_activity_at=session_timestamp,
-            agent_state=agent_state,
-        ),
+    repository.save.assert_not_called()
+
+
+def test_get_should_not_overwrite_concurrent_update_when_refreshing_ttl(
+    session_timestamp: datetime,
+    session_clock: FakeSessionClock,
+    session_config: SessionConfig,
+) -> None:
+    older_state = ChatAgentState(
+        messages=(),
+        facts={"user_name": "Old"},
+    )
+    newer_state = ChatAgentState(
+        messages=(),
+        facts={"user_name": "Frank"},
+    )
+    stored_session = StoredSession(
+        session_id=SessionId(value="session-123"),
+        created_at=session_timestamp - timedelta(minutes=30),
+        last_activity_at=session_timestamp - timedelta(minutes=10),
+        agent_state=older_state,
+    )
+    newer_session = replace(
+        stored_session,
+        last_activity_at=session_timestamp,
+        agent_state=newer_state,
+    )
+
+    repository = MagicMock(
+        spec=SessionRepositoryProtocol,
+    )
+    repository.get_and_refresh.return_value = newer_session
+
+    agent_factory = MagicMock(
+        spec=ChatAgentFactoryProtocol,
+    )
+    restored_agent = MagicMock(
+        spec=ChatAgent,
+    )
+    agent_factory.create.return_value = restored_agent
+
+    manager = PersistentSessionManager(
+        session_factory=SessionFactory(),
+        agent_factory=agent_factory,
+        repository=repository,
+        clock=session_clock,
+        config=session_config,
+    )
+
+    result = manager.get(stored_session.session_id)
+
+    repository.get_and_refresh.assert_called_once_with(
+        stored_session.session_id,
+        last_activity_at=session_timestamp,
         ttl_seconds=session_config.ttl_seconds,
     )
+    agent_factory.create.assert_called_once_with(state=newer_state)
+
+    assert result.agent is restored_agent
+    assert result.last_activity_at == session_timestamp
+    repository.save.assert_not_called()
 
 
 def test_get_should_reject_missing_session(
@@ -162,7 +223,7 @@ def test_get_should_reject_missing_session(
     repository = MagicMock(
         spec=SessionRepositoryProtocol,
     )
-    repository.get.return_value = None
+    repository.get_and_refresh.return_value = None
 
     manager = PersistentSessionManager(
         session_factory=SessionFactory(),
@@ -176,14 +237,14 @@ def test_get_should_reject_missing_session(
         SessionNotFoundError,
         match="Session not found: missing-session",
     ) as exception_info:
-        manager.get(
-            session_id,
-        )
+        manager.get(session_id)
 
     assert exception_info.value.session_id is session_id
 
-    repository.get.assert_called_once_with(
+    repository.get_and_refresh.assert_called_once_with(
         session_id,
+        last_activity_at=session_clock.now(),
+        ttl_seconds=session_config.ttl_seconds,
     )
     repository.save.assert_not_called()
     agent_factory.create.assert_not_called()
@@ -218,6 +279,7 @@ def test_save_should_persist_current_agent_state(
         - timedelta(
             minutes=10,
         ),
+        revision=3,
     )
 
     repository = MagicMock(
@@ -239,15 +301,18 @@ def test_save_should_persist_current_agent_state(
     )
 
     agent.export_state.assert_called_once_with()
-    repository.save.assert_called_once_with(
+    repository.save_if_revision.assert_called_once_with(
         StoredSession(
             session_id=session.session_id,
             created_at=session.created_at,
             last_activity_at=session_timestamp,
             agent_state=agent_state,
+            revision=4,
         ),
+        expected_revision=3,
         ttl_seconds=session_config.ttl_seconds,
     )
+    repository.save.assert_not_called()
 
 
 @pytest.mark.parametrize(

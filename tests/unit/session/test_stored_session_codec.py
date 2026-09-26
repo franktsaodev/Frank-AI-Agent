@@ -85,6 +85,7 @@ def test_encode_should_serialize_complete_session_state() -> None:
 
     assert json.loads(result) == {
         "schema_version": STORED_SESSION_SCHEMA_VERSION,
+        "revision": 0,
         "session_id": "session-123",
         "created_at": "2026-09-22T10:00:00+00:00",
         "last_activity_at": "2026-09-22T10:30:00+00:00",
@@ -144,6 +145,25 @@ def test_decode_should_round_trip_complete_session_state() -> None:
     )
 
     assert decoded_session == expected_session
+
+
+def test_decode_should_restore_v1_session_with_revision_zero() -> None:
+    codec = StoredSessionCodec()
+    original_session = create_stored_session()
+
+    legacy_payload = json.loads(
+        codec.encode(original_session),
+    )
+    legacy_payload["schema_version"] = 1
+    legacy_payload.pop("revision", None)
+
+    restored_session = codec.decode(
+        json.dumps(legacy_payload),
+    )
+
+    assert restored_session.session_id == original_session.session_id
+    assert restored_session.agent_state == original_session.agent_state
+    assert restored_session.revision == 0
 
 
 @pytest.mark.parametrize(

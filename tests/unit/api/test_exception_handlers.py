@@ -17,6 +17,7 @@ from app.exceptions.client_exceptions import (
     ClientTimeoutError,
 )
 from app.session.agent_session import AgentSession
+from app.session.session_conflict_error import SessionConflictError
 from app.session.session_id import SessionId
 from tests.fakes.fake_session_manager import FakeSessionManager
 from tests.helpers.lifespan import empty_lifespan
@@ -244,3 +245,26 @@ def test_session_routes_should_return_service_unavailable_when_redis_fails(
         "message": "Session storage is temporarily unavailable.",
     }
     assert "Sensitive Redis connection detail" not in response.text
+
+
+def test_chat_should_return_conflict_when_session_was_updated(
+    client: TestClient,
+    fake_session_manager: FakeSessionManager,
+) -> None:
+    session_id = SessionId(value="session-123")
+
+    with patch.object(
+        fake_session_manager,
+        "save",
+        side_effect=SessionConflictError(session_id=session_id),
+    ):
+        response = client.post(
+            "/api/v1/sessions/session-123/chat",
+            json={"message": "Hello"},
+        )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": "session_conflict",
+        "message": "Session was updated by another request. Please retry.",
+    }

@@ -11,3 +11,4 @@ class AgentSession:
     agent: ChatAgent
     created_at: datetime
     last_activity_at: datetime
+    revision: int = 0

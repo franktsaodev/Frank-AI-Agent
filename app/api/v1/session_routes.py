@@ -33,6 +33,7 @@ from app.models.chat_stream_event import (
     ChatStreamCompleted,
     ChatStreamEvent,
 )
+from app.session.session_conflict_error import SessionConflictError
 from app.session.session_id import SessionId
 from app.session.session_manager_protocol import (
     SessionManagerProtocol,
@@ -306,6 +307,15 @@ def _serialize_chat_stream(
             error="ai_client_error",
             message="The AI service returned an error.",
         )
+
+    except SessionConflictError:
+        logger.info("Chat stream session update conflicted")
+
+        yield serialize_chat_stream_error(
+            error="session_conflict",
+            message="Session was updated by another request. Please retry.",
+        )
+
     except Exception:
         logger.exception("Unexpected chat stream error")
         yield serialize_chat_stream_error(

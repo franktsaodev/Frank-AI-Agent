@@ -1,5 +1,3 @@
-from dataclasses import replace
-
 from app.agent.chat_agent_factory_protocol import (
     ChatAgentFactoryProtocol,
 )
@@ -64,26 +62,17 @@ class PersistentSessionManager:
         self,
         session_id: SessionId,
     ) -> AgentSession:
-        stored_session = self._repository.get(
+        active_stored_session = self._repository.get_and_refresh(
             session_id,
-        )
-
-        if stored_session is None:
-            raise SessionNotFoundError(
-                session_id=session_id,
-            )
-
-        active_stored_session = replace(
-            stored_session,
             last_activity_at=self._clock.now(),
+            ttl_seconds=self._config.ttl_seconds,
         )
+
+        if active_stored_session is None:
+            raise SessionNotFoundError(session_id=session_id)
+
         agent = self._agent_factory.create(
             state=active_stored_session.agent_state,
-        )
-
-        self._repository.save(
-            active_stored_session,
-            ttl_seconds=self._config.ttl_seconds,
         )
 
         return AgentSession(
@@ -91,19 +80,22 @@ class PersistentSessionManager:
             agent=agent,
             created_at=active_stored_session.created_at,
             last_activity_at=active_stored_session.last_activity_at,
+            revision=active_stored_session.revision,
         )
 
     def save(
         self,
         session: AgentSession,
     ) -> None:
-        self._repository.save(
+        self._repository.save_if_revision(
             StoredSession(
                 session_id=session.session_id,
                 created_at=session.created_at,
                 last_activity_at=self._clock.now(),
                 agent_state=session.agent.export_state(),
+                revision=session.revision + 1,
             ),
+            expected_revision=session.revision,
             ttl_seconds=self._config.ttl_seconds,
         )
 

@@ -295,6 +295,17 @@ only marked as completed after the updated session has been persisted.
 This creates a sliding expiration model: active sessions remain available as
 long as they continue receiving requests.
 
+Each stored session has a revision that starts at `0`. Reading a session
+atomically refreshes its activity timestamp and Redis TTL without increasing
+the revision. State-changing writes check the revision that was read and
+increase it only when the write succeeds. If another request has already
+updated the session, the stale request receives HTTP `409` with
+`session_conflict`. A streaming chat emits an SSE `error` event instead of
+`completed` if its final save conflicts.
+
+Existing version 1 session snapshots remain readable and are migrated to
+version 2 when session activity is refreshed.
+
 ### Session Expiration
 
 A session expires when its Redis key reaches the configured inactivity limit:
@@ -329,6 +340,7 @@ Each stored session contains:
 - Conversation history
 - Extracted fact memory
 - Tool-call message data
+- A revision used to detect concurrent updates
 
 Redis persistence allows sessions to survive API restarts and makes the same
 session data accessible to multiple API instances using the same Redis
