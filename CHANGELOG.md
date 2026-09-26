@@ -15,6 +15,7 @@ Semantic Versioning.
 - Added a persistent session manager that restores agent state and refreshes sliding expiration.
 - Added a Redis Docker Compose service with health checks, AOF persistence, and a named data volume.
 - Added a Redis-aware `/ready` endpoint that returns a sanitized `503` response when Redis is unavailable.
+- Added a sanitized `503` response for session requests when Redis storage is unavailable.
 
 ### Changed
 

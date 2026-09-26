@@ -2,6 +2,7 @@ import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from redis.exceptions import RedisError
 
 from app.exceptions.client_exceptions import (
     AIClientError,
@@ -163,5 +164,25 @@ def register_exception_handlers(
             content={
                 "error": "session_expired",
                 "message": ("The session has expired."),
+            },
+        )
+
+    @app.exception_handler(RedisError)
+    async def handle_redis_error(
+        request: Request,
+        error: RedisError,
+    ) -> JSONResponse:
+        del request
+
+        logger.warning(
+            "Redis session storage unavailable: %s",
+            type(error).__name__,
+        )
+
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "session_storage_unavailable",
+                "message": "Session storage is temporarily unavailable.",
             },
         )

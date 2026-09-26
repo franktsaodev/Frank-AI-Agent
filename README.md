@@ -819,6 +819,19 @@ Interactive documentation is available through Swagger UI at `/docs`.
 | `GET` | `/api/v1/sessions/{session_id}/history` | Get conversation history |
 | `DELETE` | `/api/v1/sessions/{session_id}/history` | Clear conversation history |
 
+Session requests that encounter a Redis error before the response starts return
+HTTP `503`:
+
+```json
+{
+  "error": "session_storage_unavailable",
+  "message": "Session storage is temporarily unavailable."
+}
+```
+
+If an error occurs after a streaming response has started, it is reported
+through the stream's `error` event.
+
 ### 1. Create a Session
 
 ```http

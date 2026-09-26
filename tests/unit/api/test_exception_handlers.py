@@ -1,9 +1,10 @@
 from collections.abc import Iterator
 from datetime import datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from redis.exceptions import RedisError
 
 from app.agent.chat_agent import ChatAgent
 from app.api.app import create_app
@@ -190,3 +191,56 @@ def test_chat_should_return_service_unavailable_when_client_is_rate_limited(
             "The AI service is temporarily rate limited. Please try again later."
         ),
     }
+
+
+def test_create_session_should_return_service_unavailable_when_redis_fails(
+    client: TestClient,
+    fake_session_manager: FakeSessionManager,
+) -> None:
+    with patch.object(
+        fake_session_manager,
+        "create",
+        side_effect=RedisError("Sensitive Redis connection detail"),
+    ):
+        response = client.post(
+            "/api/v1/sessions",
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "error": "session_storage_unavailable",
+        "message": "Session storage is temporarily unavailable.",
+    }
+    assert "Sensitive Redis connection detail" not in response.text
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "manager_method"),
+    [
+        ("GET", "/api/v1/sessions/session-123", "get"),
+        ("DELETE", "/api/v1/sessions/session-123", "delete"),
+    ],
+)
+def test_session_routes_should_return_service_unavailable_when_redis_fails(
+    client: TestClient,
+    fake_session_manager: FakeSessionManager,
+    method: str,
+    path: str,
+    manager_method: str,
+) -> None:
+    with patch.object(
+        fake_session_manager,
+        manager_method,
+        side_effect=RedisError("Sensitive Redis connection detail"),
+    ):
+        response = client.request(
+            method,
+            path,
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "error": "session_storage_unavailable",
+        "message": "Session storage is temporarily unavailable.",
+    }
+    assert "Sensitive Redis connection detail" not in response.text
