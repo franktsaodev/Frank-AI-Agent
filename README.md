@@ -303,6 +303,11 @@ updated the session, the stale request receives HTTP `409` with
 `session_conflict`. A streaming chat emits an SSE `error` event instead of
 `completed` if its final save conflicts.
 
+When a conflict occurs, the frontend removes the failed request's provisional
+messages, reloads the latest saved conversation history, and restores the
+submitted text to the composer for a manual retry. If history cannot be loaded,
+the frontend asks the user to reload before retrying.
+
 Existing version 1 session snapshots remain readable and are migrated to
 version 2 when session activity is refreshed.
 

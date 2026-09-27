@@ -5,6 +5,7 @@ import {
     ApiError,
     createSession,
     deleteSession,
+    getSessionHistory,
     streamChatMessage,
 } from './api/client'
 import type { HealthResponse, HistoryMessageResponse } from './api/types'
@@ -197,10 +198,11 @@ function App() {
             return
         }
 
-        setMessages((currentMessages) => [
-            ...currentMessages,
-            createChatMessage('user', message),
-        ])
+        const activeSessionId = sessionId
+
+        const userMessage = createChatMessage('user', message)
+
+        setMessages((currentMessages) => [...currentMessages, userMessage])
         setInput('')
         setChatError(null)
         setIsSending(true)
@@ -209,8 +211,36 @@ function App() {
         let streamCompleted = false
         let streamFailed = false
 
+        async function restoreAfterConflict(): Promise<void> {
+            setMessages((currentMessages) =>
+                currentMessages.filter(
+                    (currentMessage) =>
+                        currentMessage.id !== userMessage.id &&
+                        currentMessage.id !== assistantMessageId,
+                ),
+            )
+            setInput(message)
+
+            try {
+                const sessionHistory = await getSessionHistory(activeSessionId)
+                const restoredMessages = createRestoredMessages(
+                    sessionHistory.messages,
+                )
+
+                nextMessageId.current = restoredMessages.length
+                setMessages(restoredMessages)
+            } catch {
+                setChatError(
+                    'Unable to load the latest conversation. Please reload before retrying.',
+                )
+            }
+        }
+
         try {
-            for await (const event of streamChatMessage(sessionId, message)) {
+            for await (const event of streamChatMessage(
+                activeSessionId,
+                message,
+            )) {
                 if (event.type === 'content_delta') {
                     if (assistantMessageId === null) {
                         const assistantMessage = createChatMessage(
@@ -279,6 +309,11 @@ function App() {
 
                 streamFailed = true
                 setChatError(event.message)
+
+                if (event.error === 'session_conflict') {
+                    await restoreAfterConflict()
+                }
+
                 break
             }
 
@@ -292,6 +327,10 @@ function App() {
                     : 'Unable to reach the agent. Please try again.'
 
             setChatError(errorMessage)
+
+            if (error instanceof ApiError && error.status === 409) {
+                await restoreAfterConflict()
+            }
         } finally {
             setIsSending(false)
         }

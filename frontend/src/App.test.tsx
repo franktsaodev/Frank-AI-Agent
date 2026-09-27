@@ -6,6 +6,7 @@ import {
     ApiError,
     createSession,
     deleteSession,
+    getSessionHistory,
     streamChatMessage,
 } from './api/client'
 import App from './App'
@@ -23,6 +24,7 @@ vi.mock('./api/client', async (importOriginal) => {
         ...actual,
         createSession: vi.fn(),
         deleteSession: vi.fn(),
+        getSessionHistory: vi.fn(),
         streamChatMessage: vi.fn(),
     }
 })
@@ -43,6 +45,7 @@ const resetApplicationInitializationMock = vi.mocked(
 
 const createSessionMock = vi.mocked(createSession)
 const deleteSessionMock = vi.mocked(deleteSession)
+const getSessionHistoryMock = vi.mocked(getSessionHistory)
 const streamChatMessageMock = vi.mocked(streamChatMessage)
 const storeSessionIdMock = vi.mocked(storeSessionId)
 
@@ -74,6 +77,11 @@ async function* createFailingChatStream(
 describe('App', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+
+        getSessionHistoryMock.mockResolvedValue({
+            session_id: 'session-123',
+            messages: [],
+        })
 
         initializeApplicationMock.mockResolvedValue({
             health: healthResponse,
@@ -277,6 +285,214 @@ describe('App', () => {
             'session-123',
             'Hello',
         )
+    })
+
+    it('should discard unpersisted messages and restore input after a stream conflict', async () => {
+        const user = userEvent.setup()
+
+        streamChatMessageMock.mockReturnValue(
+            createChatStream([
+                {
+                    type: 'content_delta',
+                    content: 'Uncommitted response',
+                },
+                {
+                    type: 'error',
+                    error: 'session_conflict',
+                    message:
+                        'Session was updated by another request. Please retry.',
+                },
+            ]),
+        )
+
+        render(<App />)
+
+        await screen.findByText('Agent ready')
+
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
+
+        await user.type(messageInput, 'Hello')
+        await user.click(screen.getByRole('button', { name: 'Send' }))
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Session was updated by another request. Please retry.',
+        )
+
+        await waitFor(() => {
+            expect(
+                screen.queryByText('Uncommitted response'),
+            ).not.toBeInTheDocument()
+            expect(
+                screen.queryByText('Hello', {
+                    selector: '.message-row-user .message-content',
+                }),
+            ).not.toBeInTheDocument()
+            expect(messageInput).toHaveValue('Hello')
+        })
+
+        expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('should load the latest session history after a stream conflict', async () => {
+        const user = userEvent.setup()
+
+        getSessionHistoryMock.mockResolvedValue({
+            session_id: 'session-123',
+            messages: [
+                {
+                    role: 'user',
+                    content: 'Another request',
+                },
+                {
+                    role: 'assistant',
+                    content: 'Saved reply',
+                },
+            ],
+        })
+
+        streamChatMessageMock.mockReturnValue(
+            createChatStream([
+                {
+                    type: 'content_delta',
+                    content: 'Uncommitted response',
+                },
+                {
+                    type: 'error',
+                    error: 'session_conflict',
+                    message:
+                        'Session was updated by another request. Please retry.',
+                },
+            ]),
+        )
+
+        render(<App />)
+        await screen.findByText('Agent ready')
+
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
+
+        await user.type(messageInput, 'My question')
+        await user.click(screen.getByRole('button', { name: 'Send' }))
+
+        expect(await screen.findByText('Saved reply')).toBeInTheDocument()
+        expect(screen.getByText('Another request')).toBeInTheDocument()
+        expect(
+            screen.queryByText('Uncommitted response'),
+        ).not.toBeInTheDocument()
+        expect(messageInput).toHaveValue('My question')
+        expect(getSessionHistoryMock).toHaveBeenCalledOnce()
+        expect(getSessionHistoryMock).toHaveBeenCalledWith('session-123')
+    })
+
+    it('should load the latest history when starting the stream returns HTTP 409', async () => {
+        const user = userEvent.setup()
+
+        getSessionHistoryMock.mockResolvedValue({
+            session_id: 'session-123',
+            messages: [
+                {
+                    role: 'assistant',
+                    content: 'Saved reply from another request',
+                },
+            ],
+        })
+
+        streamChatMessageMock.mockReturnValue(
+            createFailingChatStream(
+                new ApiError(
+                    409,
+                    'Session was updated by another request. Please retry.',
+                ),
+            ),
+        )
+
+        render(<App />)
+        await screen.findByText('Agent ready')
+
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
+
+        await user.type(messageInput, 'My question')
+        await user.click(screen.getByRole('button', { name: 'Send' }))
+
+        expect(
+            await screen.findByText('Saved reply from another request'),
+        ).toBeInTheDocument()
+
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'Session was updated by another request. Please retry.',
+        )
+        expect(messageInput).toHaveValue('My question')
+        expect(
+            screen.queryByText('My question', {
+                selector: '.message-row-user .message-content',
+            }),
+        ).not.toBeInTheDocument()
+        expect(getSessionHistoryMock).toHaveBeenCalledOnce()
+        expect(getSessionHistoryMock).toHaveBeenCalledWith('session-123')
+        expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('should preserve the draft and explain when conflict history cannot be loaded', async () => {
+        const user = userEvent.setup()
+
+        initializeApplicationMock.mockResolvedValue({
+            health: healthResponse,
+            sessionId: 'session-123',
+            history: [
+                {
+                    role: 'assistant',
+                    content: 'Previous saved reply',
+                },
+            ],
+        })
+
+        getSessionHistoryMock.mockRejectedValue(
+            new Error('History unavailable'),
+        )
+
+        streamChatMessageMock.mockReturnValue(
+            createChatStream([
+                {
+                    type: 'content_delta',
+                    content: 'Uncommitted response',
+                },
+                {
+                    type: 'error',
+                    error: 'session_conflict',
+                    message:
+                        'Session was updated by another request. Please retry.',
+                },
+            ]),
+        )
+
+        render(<App />)
+        await screen.findByText('Previous saved reply')
+
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
+
+        await user.type(messageInput, 'My question')
+        await user.click(screen.getByRole('button', { name: 'Send' }))
+
+        expect(
+            await screen.findByText(
+                'Unable to load the latest conversation. Please reload before retrying.',
+            ),
+        ).toBeInTheDocument()
+
+        expect(screen.getByText('Previous saved reply')).toBeInTheDocument()
+        expect(
+            screen.queryByText('Uncommitted response'),
+        ).not.toBeInTheDocument()
+        expect(messageInput).toHaveValue('My question')
+        expect(getSessionHistoryMock).toHaveBeenCalledOnce()
+        expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
     })
 
     it('should show an error when the stream ends before completion', async () => {
