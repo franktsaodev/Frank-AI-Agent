@@ -30,6 +30,7 @@ Semantic Versioning.
 - Changed the frontend to reconcile saved conversation history and preserve the submitted draft after failed or incomplete chat streams.
 - Updated the frontend to replace an expired active session after a chat `404` while preserving the submitted draft.
 - Updated failed stream recovery to replace a missing session when reloading its history returns `404`.
+- Prevented duplicate chat requests when a message is submitted twice before the frontend updates its sending state.
 
 ## [1.4.0] - 2026-09-22
 

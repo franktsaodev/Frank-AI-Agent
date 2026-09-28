@@ -79,6 +79,7 @@ function App() {
 
     const nextMessageId = useRef(0)
     const messagesEndRef = useRef<HTMLDivElement | null>(null)
+    const sendingRef = useRef(false)
 
     useEffect(() => {
         let active = true
@@ -194,9 +195,17 @@ function App() {
 
         const message = input.trim()
 
-        if (!message || sessionId === null || isSending) {
+        if (
+            !message ||
+            sessionId === null ||
+            isSending ||
+            isCreatingSession ||
+            sendingRef.current
+        ) {
             return
         }
+
+        sendingRef.current = true
 
         const activeSessionId = sessionId
 
@@ -364,6 +373,7 @@ function App() {
 
             await restoreAfterFailedStream()
         } finally {
+            sendingRef.current = false
             setIsSending(false)
         }
     }

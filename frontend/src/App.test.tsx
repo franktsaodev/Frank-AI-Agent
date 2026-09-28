@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -241,6 +241,60 @@ describe('App', () => {
         ).toBeInTheDocument()
 
         expect(messageInput).toHaveValue('')
+    })
+
+    it('should submit a message only once when the form is submitted twice immediately', async () => {
+        const user = userEvent.setup()
+        let finishStream!: () => void
+
+        const streamGate = new Promise<void>((resolve) => {
+            finishStream = resolve
+        })
+
+        streamChatMessageMock.mockImplementation(async function* () {
+            await streamGate
+            yield {
+                type: 'completed',
+                response: 'Done',
+            }
+        })
+
+        render(<App />)
+        await screen.findByText('Agent ready')
+
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
+        await user.type(messageInput, 'Hello')
+
+        const form = messageInput.closest('form')
+        if (form === null) {
+            throw new Error('Chat form was not found.')
+        }
+
+        act(() => {
+            form.requestSubmit()
+            form.requestSubmit()
+        })
+
+        const requestCount = streamChatMessageMock.mock.calls.length
+
+        await act(async () => {
+            finishStream()
+        })
+
+        expect(requestCount).toBe(1)
+
+        await waitFor(() => {
+            expect(messageInput).toBeEnabled()
+        })
+
+        await user.type(messageInput, 'Next question')
+        await user.click(screen.getByRole('button', { name: 'Send' }))
+
+        await waitFor(() => {
+            expect(streamChatMessageMock).toHaveBeenCalledTimes(2)
+        })
     })
 
     it('should show an error received from the chat stream', async () => {
