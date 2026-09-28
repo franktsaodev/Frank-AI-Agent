@@ -192,16 +192,16 @@ construction are kept separate from the agent's business flow.
 
 ### Core Layers
 
-| Layer | Responsibility |
-|---|---|
-| API | Exposes health, session, and chat endpoints through FastAPI |
-| Session | Manages isolated agent sessions and session lifetime |
-| Agent | Coordinates prompt composition, memory, retrieval, and agent execution |
-| Memory | Stores conversation history and structured user facts |
-| Retrieval | Loads, indexes, and retrieves external knowledge for prompt augmentation |
-| Tool System | Registers, exposes, and executes plugin-based tools |
-| Tracing | Records agent, LLM, and tool lifecycle events |
-| Configuration | Loads runtime settings and constructs dependencies |
+| Layer         | Responsibility                                                           |
+| ------------- | ------------------------------------------------------------------------ |
+| API           | Exposes health, session, and chat endpoints through FastAPI              |
+| Session       | Manages isolated agent sessions and session lifetime                     |
+| Agent         | Coordinates prompt composition, memory, retrieval, and agent execution   |
+| Memory        | Stores conversation history and structured user facts                    |
+| Retrieval     | Loads, indexes, and retrieves external knowledge for prompt augmentation |
+| Tool System   | Registers, exposes, and executes plugin-based tools                      |
+| Tracing       | Records agent, LLM, and tool lifecycle events                            |
+| Configuration | Loads runtime settings and constructs dependencies                       |
 
 ## Agent Execution Flow
 
@@ -550,22 +550,22 @@ similarity threshold, chunking strategy, or retrieval implementation.
 
 ## Tech Stack
 
-| Category | Technology |
-|---|---|
-| Languages | Python 3.13, TypeScript |
-| API Framework | FastAPI |
-| Frontend | React, Vite |
-| LLM Provider | Groq API |
-| Data Validation | Pydantic |
-| HTTP Clients | HTTPX, Fetch API |
-| Testing | Pytest, Vitest, jsdom, React Testing Library |
-| Linting & Formatting | Ruff, ESLint |
-| Static Type Checking | Pyright, TypeScript |
-| Web Server | Nginx |
-| Containerization | Docker & Docker Compose |
-| Embeddings | Sentence Transformers |
-| Vector Search | In-Memory Cosine Similarity |
-| Document Processing | TXT, Markdown, PDF (PyPDF) |
+| Category             | Technology                                   |
+| -------------------- | -------------------------------------------- |
+| Languages            | Python 3.13, TypeScript                      |
+| API Framework        | FastAPI                                      |
+| Frontend             | React, Vite                                  |
+| LLM Provider         | Groq API                                     |
+| Data Validation      | Pydantic                                     |
+| HTTP Clients         | HTTPX, Fetch API                             |
+| Testing              | Pytest, Vitest, jsdom, React Testing Library |
+| Linting & Formatting | Ruff, ESLint                                 |
+| Static Type Checking | Pyright, TypeScript                          |
+| Web Server           | Nginx                                        |
+| Containerization     | Docker & Docker Compose                      |
+| Embeddings           | Sentence Transformers                        |
+| Vector Search        | In-Memory Cosine Similarity                  |
+| Document Processing  | TXT, Markdown, PDF (PyPDF)                   |
 
 ## Project Structure
 
@@ -613,6 +613,7 @@ Frank-AI-Agent/
 ├── requirements.txt
 ├── requirements-dev.txt
 └── run_api.py
+```
 
 ## Quick Start
 
@@ -714,57 +715,57 @@ environment.
 
 ### LLM Provider
 
-| Variable | Default | Description |
-|---|---|---|
-| `GROQ_API_KEY` | — | Groq API authentication key |
-| `GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model used by the agent |
+| Variable       | Default               | Description                  |
+| -------------- | --------------------- | ---------------------------- |
+| `GROQ_API_KEY` | —                     | Groq API authentication key  |
+| `GROQ_MODEL`   | `openai/gpt-oss-120b` | Groq model used by the agent |
 
 ### Retry Policy
 
-| Variable | Default | Description |
-|---|---|---|
-| `GROQ_RETRY_MAX_ATTEMPTS` | `3` | Maximum number of LLM request attempts |
-| `GROQ_RETRY_INITIAL_DELAY_SECONDS` | `1` | Initial delay before retrying a failed request |
-| `GROQ_RETRY_BACKOFF_MULTIPLIER` | `2.0` | Multiplier used for retry backoff |
+| Variable                           | Default | Description                                    |
+| ---------------------------------- | ------- | ---------------------------------------------- |
+| `GROQ_RETRY_MAX_ATTEMPTS`          | `3`     | Maximum number of LLM request attempts         |
+| `GROQ_RETRY_INITIAL_DELAY_SECONDS` | `1`     | Initial delay before retrying a failed request |
+| `GROQ_RETRY_BACKOFF_MULTIPLIER`    | `2.0`   | Multiplier used for retry backoff              |
 
 ### Agent
 
-| Variable | Default | Description |
-|---|---|---|
-| `AGENT_MAX_ITERATIONS` | `10` | Maximum number of iterations in a single agent execution |
+| Variable               | Default | Description                                              |
+| ---------------------- | ------- | -------------------------------------------------------- |
+| `AGENT_MAX_ITERATIONS` | `10`    | Maximum number of iterations in a single agent execution |
 
 ### Memory
 
-| Variable | Default | Description |
-|---|---|---|
-| `MEMORY_MAX_HISTORY_ROUNDS` | `2` | Maximum number of conversation rounds retained in short-term memory |
-| `MEMORY_ALLOWED_KEYS` | `user_name,favorite_music,occupation` | Fact keys allowed to persist in fact memory |
+| Variable                    | Default                               | Description                                                         |
+| --------------------------- | ------------------------------------- | ------------------------------------------------------------------- |
+| `MEMORY_MAX_HISTORY_ROUNDS` | `2`                                   | Maximum number of conversation rounds retained in short-term memory |
+| `MEMORY_ALLOWED_KEYS`       | `user_name,favorite_music,occupation` | Fact keys allowed to persist in fact memory                         |
 
 ### Retrieval
 
-| Variable | Default | Description |
-|---|---|---|
-| `RETRIEVAL_ENABLED` | `false` | Enables or disables retrieval-augmented generation |
-| `RETRIEVAL_KNOWLEDGE_PATH` | `knowledge` | File or directory used as the knowledge source |
-| `RETRIEVAL_CHUNK_SIZE` | `500` | Maximum text chunk size used during indexing |
-| `RETRIEVAL_CHUNK_OVERLAP` | `50` | Overlap between adjacent text chunks |
-| `RETRIEVAL_TOP_K` | `5` | Maximum number of semantic search results returned |
-| `RETRIEVAL_MIN_SCORE` | `-1.0` | Minimum cosine similarity required to keep a retrieval result (`-1.0` to `1.0`) |
-| `RETRIEVAL_EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Sentence-transformer model used to generate embeddings |
-| `RETRIEVAL_TRIGGER_KEYWORDS` | `documentation,manual,session,deployment,architecture` | Comma-separated keywords that trigger knowledge retrieval |
+| Variable                     | Default                                                | Description                                                                     |
+| ---------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `RETRIEVAL_ENABLED`          | `false`                                                | Enables or disables retrieval-augmented generation                              |
+| `RETRIEVAL_KNOWLEDGE_PATH`   | `knowledge`                                            | File or directory used as the knowledge source                                  |
+| `RETRIEVAL_CHUNK_SIZE`       | `500`                                                  | Maximum text chunk size used during indexing                                    |
+| `RETRIEVAL_CHUNK_OVERLAP`    | `50`                                                   | Overlap between adjacent text chunks                                            |
+| `RETRIEVAL_TOP_K`            | `5`                                                    | Maximum number of semantic search results returned                              |
+| `RETRIEVAL_MIN_SCORE`        | `-1.0`                                                 | Minimum cosine similarity required to keep a retrieval result (`-1.0` to `1.0`) |
+| `RETRIEVAL_EMBEDDING_MODEL`  | `sentence-transformers/all-MiniLM-L6-v2`               | Sentence-transformer model used to generate embeddings                          |
+| `RETRIEVAL_TRIGGER_KEYWORDS` | `documentation,manual,session,deployment,architecture` | Comma-separated keywords that trigger knowledge retrieval                       |
 
 ### Prompt
 
-| Variable | Default | Description |
-|---|---|---|
-| `PROMPT_NAME` | `system_prompt.txt` | System prompt template file |
+| Variable          | Default               | Description                                         |
+| ----------------- | --------------------- | --------------------------------------------------- |
+| `PROMPT_NAME`     | `system_prompt.txt`   | System prompt template file                         |
 | `PROMPT_LANGUAGE` | `Traditional Chinese` | Default response language configured for the prompt |
 
 ### Logging
 
-| Variable | Default | Description |
-|---|---|---|
-| `LOG_LEVEL` | `INFO` | Application log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`) |
+| Variable    | Default | Description                                                                |
+| ----------- | ------- | -------------------------------------------------------------------------- |
+| `LOG_LEVEL` | `INFO`  | Application log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`) |
 
 Third-party libraries such as Hugging Face, Sentence Transformers, HTTPX,
 and file-locking utilities are limited to warning-level output to keep runtime
@@ -772,28 +773,28 @@ logs readable.
 
 ### Tracing
 
-| Variable | Default | Description |
-|---|---|---|
-| `TRACE_LOGGING_ENABLED` | `true` | Enables trace logging |
-| `TRACE_JSON_FILE_PATH` | `logs/traces.jsonl` | Output path for structured JSON trace events |
+| Variable                | Default             | Description                                  |
+| ----------------------- | ------------------- | -------------------------------------------- |
+| `TRACE_LOGGING_ENABLED` | `true`              | Enables trace logging                        |
+| `TRACE_JSON_FILE_PATH`  | `logs/traces.jsonl` | Output path for structured JSON trace events |
 
 ### Tool Plugins
 
-| Variable | Default | Description |
-|---|---|---|
-| `ENABLED_TOOL_PLUGINS` | `core` | Comma-separated tool plugins loaded during application bootstrap |
+| Variable               | Default | Description                                                      |
+| ---------------------- | ------- | ---------------------------------------------------------------- |
+| `ENABLED_TOOL_PLUGINS` | `core`  | Comma-separated tool plugins loaded during application bootstrap |
 
 ### Application
 
-| Variable | Default | Description |
-|---|---|---|
+| Variable           | Default          | Description                                                   |
+| ------------------ | ---------------- | ------------------------------------------------------------- |
 | `APP_SERVICE_NAME` | `Frank AI Agent` | Service name exposed by runtime information and health checks |
-| `APP_VERSION` | `1.4.0` | Application version exposed by the running service |
+| `APP_VERSION`      | `1.4.0`          | Application version exposed by the running service            |
 
 ### CORS
 
-| Variable | Default | Description |
-|---|---|---|
+| Variable               | Default                 | Description                                               |
+| ---------------------- | ----------------------- | --------------------------------------------------------- |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated browser origins allowed to access the API |
 
 Multiple frontend origins can be configured by separating them with commas:
@@ -804,17 +805,17 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173,https://agent.example.com
 
 ### Session
 
-| Variable | Default | Description |
-|---|---|---|
-| `SESSION_TTL_SECONDS` | `3600` | Redis TTL applied to inactive sessions and refreshed by successful session activity |
-| `SESSION_CLEANUP_INTERVAL_SECONDS` | `300` | Interval between cleanup-service cycles; Redis-backed sessions expire through native key TTLs |
+| Variable                           | Default | Description                                                                                   |
+| ---------------------------------- | ------- | --------------------------------------------------------------------------------------------- |
+| `SESSION_TTL_SECONDS`              | `3600`  | Redis TTL applied to inactive sessions and refreshed by successful session activity           |
+| `SESSION_CLEANUP_INTERVAL_SECONDS` | `300`   | Interval between cleanup-service cycles; Redis-backed sessions expire through native key TTLs |
 
 ### Redis
 
-| Variable | Default | Description |
-|---|---|---|
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL used for persistent session storage |
-| `REDIS_SESSION_KEY_PREFIX` | `frank-ai-agent:sessions` | Prefix applied to Redis session keys |
+| Variable                   | Default                    | Description                                              |
+| -------------------------- | -------------------------- | -------------------------------------------------------- |
+| `REDIS_URL`                | `redis://localhost:6379/0` | Redis connection URL used for persistent session storage |
+| `REDIS_SESSION_KEY_PREFIX` | `frank-ai-agent:sessions`  | Prefix applied to Redis session keys                     |
 
 > [!NOTE]
 > `GROQ_API_KEY` must be configured before using the Groq-backed agent.
@@ -830,17 +831,17 @@ Interactive documentation is available through Swagger UI at `/docs`.
 
 ### Endpoints
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/health` | Check FastAPI liveness and runtime information |
-| `GET` | `/ready` | Check whether Redis is available; return `503` when the service is not ready |
-| `POST` | `/api/v1/sessions` | Create a new agent session |
-| `GET` | `/api/v1/sessions/{session_id}` | Get session information |
-| `DELETE` | `/api/v1/sessions/{session_id}` | Delete a session |
-| `POST` | `/api/v1/sessions/{session_id}/chat` | Send a message to the session agent |
-| `POST` | `/api/v1/sessions/{session_id}/chat/stream` | Stream chat events using Server-Sent Events |
-| `GET` | `/api/v1/sessions/{session_id}/history` | Get conversation history |
-| `DELETE` | `/api/v1/sessions/{session_id}/history` | Clear conversation history |
+| Method   | Endpoint                                    | Description                                                                  |
+| -------- | ------------------------------------------- | ---------------------------------------------------------------------------- |
+| `GET`    | `/health`                                   | Check FastAPI liveness and runtime information                               |
+| `GET`    | `/ready`                                    | Check whether Redis is available; return `503` when the service is not ready |
+| `POST`   | `/api/v1/sessions`                          | Create a new agent session                                                   |
+| `GET`    | `/api/v1/sessions/{session_id}`             | Get session information                                                      |
+| `DELETE` | `/api/v1/sessions/{session_id}`             | Delete a session                                                             |
+| `POST`   | `/api/v1/sessions/{session_id}/chat`        | Send a message to the session agent                                          |
+| `POST`   | `/api/v1/sessions/{session_id}/chat/stream` | Stream chat events using Server-Sent Events                                  |
+| `GET`    | `/api/v1/sessions/{session_id}/history`     | Get conversation history                                                     |
+| `DELETE` | `/api/v1/sessions/{session_id}/history`     | Clear conversation history                                                   |
 
 Session requests that encounter a Redis error before the response starts return
 HTTP `503`:
@@ -922,11 +923,11 @@ rules as the standard chat endpoint.
 
 Successful responses use Server-Sent Events with three event types:
 
-| Event | Payload | Description |
-|---|---|---|
-| `content_delta` | `{"content":"..."}` | Contains guarded assistant content |
-| `completed` | `{"response":"..."}` | Marks successful completion with the final response |
-| `error` | `{"error":"...","message":"..."}` | Reports a sanitized error after streaming has started |
+| Event           | Payload                           | Description                                           |
+| --------------- | --------------------------------- | ----------------------------------------------------- |
+| `content_delta` | `{"content":"..."}`               | Contains guarded assistant content                    |
+| `completed`     | `{"response":"..."}`              | Marks successful completion with the final response   |
+| `error`         | `{"error":"...","message":"..."}` | Reports a sanitized error after streaming has started |
 
 Example response:
 
