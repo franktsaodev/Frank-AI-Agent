@@ -211,7 +211,7 @@ function App() {
         let streamCompleted = false
         let streamFailed = false
 
-        async function restoreAfterFailedStream(): Promise<void> {
+        function discardProvisionalMessages(): void {
             setMessages((currentMessages) =>
                 currentMessages.filter(
                     (currentMessage) =>
@@ -220,6 +220,30 @@ function App() {
                 ),
             )
             setInput(message)
+        }
+
+        async function replaceExpiredSession(): Promise<void> {
+            try {
+                const replacementSession = await createSession()
+
+                storeSessionId(replacementSession.session_id)
+                setSessionId(replacementSession.session_id)
+                setMessages([])
+                nextMessageId.current = 0
+                setChatError(
+                    'Session expired. A new conversation is ready. Please send your message again.',
+                )
+            } catch (replacementError: unknown) {
+                setChatError(
+                    replacementError instanceof ApiError
+                        ? replacementError.message
+                        : 'Unable to create a new session. Please try again.',
+                )
+            }
+        }
+
+        async function restoreAfterFailedStream(): Promise<void> {
+            discardProvisionalMessages()
 
             try {
                 const sessionHistory = await getSessionHistory(activeSessionId)
@@ -229,7 +253,15 @@ function App() {
 
                 nextMessageId.current = restoredMessages.length
                 setMessages(restoredMessages)
-            } catch {
+            } catch (historyError: unknown) {
+                if (
+                    historyError instanceof ApiError &&
+                    historyError.status === 404
+                ) {
+                    await replaceExpiredSession()
+                    return
+                }
+
                 setChatError(
                     'Unable to load the latest conversation. Please reload before retrying.',
                 )
@@ -318,33 +350,8 @@ function App() {
             }
         } catch (error: unknown) {
             if (error instanceof ApiError && error.status === 404) {
-                setMessages((currentMessages) =>
-                    currentMessages.filter(
-                        (currentMessage) =>
-                            currentMessage.id !== userMessage.id &&
-                            currentMessage.id !== assistantMessageId,
-                    ),
-                )
-                setInput(message)
-
-                try {
-                    const replacementSession = await createSession()
-
-                    storeSessionId(replacementSession.session_id)
-                    setSessionId(replacementSession.session_id)
-                    setMessages([])
-                    nextMessageId.current = 0
-                    setChatError(
-                        'Session expired. A new conversation is ready. Please send your message again.',
-                    )
-                } catch (replacementError: unknown) {
-                    setChatError(
-                        replacementError instanceof ApiError
-                            ? replacementError.message
-                            : 'Unable to create a new session. Please try again.',
-                    )
-                }
-
+                discardProvisionalMessages()
+                await replaceExpiredSession()
                 return
             }
 

@@ -547,6 +547,69 @@ describe('App', () => {
         expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
     })
 
+    it('should replace the session when history returns 404 after a stream conflict', async () => {
+        const user = userEvent.setup()
+
+        initializeApplicationMock.mockResolvedValue({
+            health: healthResponse,
+            sessionId: 'expired-session',
+            history: [
+                {
+                    role: 'assistant',
+                    content: 'Previous saved reply',
+                },
+            ],
+        })
+        getSessionHistoryMock.mockRejectedValue(
+            new ApiError(404, 'Session not found.'),
+        )
+        createSessionMock.mockResolvedValue({
+            session_id: 'replacement-session',
+        })
+        streamChatMessageMock.mockReturnValue(
+            createChatStream([
+                {
+                    type: 'content_delta',
+                    content: 'Uncommitted response',
+                },
+                {
+                    type: 'error',
+                    error: 'session_conflict',
+                    message:
+                        'Session was updated by another request. Please retry.',
+                },
+            ]),
+        )
+
+        render(<App />)
+        await screen.findByText('Previous saved reply')
+
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
+
+        await user.type(messageInput, 'My question')
+        await user.click(screen.getByRole('button', { name: 'Send' }))
+
+        expect(
+            await screen.findByTitle('replacement-session'),
+        ).toHaveTextContent('replacement-session')
+        expect(
+            screen.queryByText('Previous saved reply'),
+        ).not.toBeInTheDocument()
+        expect(
+            screen.queryByText('Uncommitted response'),
+        ).not.toBeInTheDocument()
+        expect(messageInput).toHaveValue('My question')
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'Session expired. A new conversation is ready. Please send your message again.',
+        )
+        expect(getSessionHistoryMock).toHaveBeenCalledWith('expired-session')
+        expect(storeSessionIdMock).toHaveBeenCalledWith('replacement-session')
+        expect(deleteSessionMock).not.toHaveBeenCalled()
+        expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+    })
+
     it('should reconcile history when the stream ends before completion', async () => {
         const user = userEvent.setup()
 
