@@ -1146,7 +1146,7 @@ docker run --rm \
 ```
 
 > [!NOTE]
-> PowerShell uses the backtick (`) for line continuation.
+> PowerShell uses the backtick character for line continuation.
 > Bash and similar shells use the backslash (`\`).
 > A Redis URL containing `localhost` refers to the API container itself, not
 > the Docker host or another Redis container.
