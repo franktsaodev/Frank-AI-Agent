@@ -28,6 +28,7 @@ Semantic Versioning.
 - Changed the Docker Compose API health check to use `/ready` while retaining `/health` as a liveness endpoint.
 - Updated the frontend to refresh conversation history, discard provisional messages, and preserve the submitted text after a session conflict.
 - Changed the frontend to reconcile saved conversation history and preserve the submitted draft after failed or incomplete chat streams.
+- Updated the frontend to replace an expired active session after a chat `404` while preserving the submitted draft.
 
 ## [1.4.0] - 2026-09-22
 

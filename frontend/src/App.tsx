@@ -317,6 +317,37 @@ function App() {
                 throw new Error('Chat stream ended before completion.')
             }
         } catch (error: unknown) {
+            if (error instanceof ApiError && error.status === 404) {
+                setMessages((currentMessages) =>
+                    currentMessages.filter(
+                        (currentMessage) =>
+                            currentMessage.id !== userMessage.id &&
+                            currentMessage.id !== assistantMessageId,
+                    ),
+                )
+                setInput(message)
+
+                try {
+                    const replacementSession = await createSession()
+
+                    storeSessionId(replacementSession.session_id)
+                    setSessionId(replacementSession.session_id)
+                    setMessages([])
+                    nextMessageId.current = 0
+                    setChatError(
+                        'Session expired. A new conversation is ready. Please send your message again.',
+                    )
+                } catch (replacementError: unknown) {
+                    setChatError(
+                        replacementError instanceof ApiError
+                            ? replacementError.message
+                            : 'Unable to create a new session. Please try again.',
+                    )
+                }
+
+                return
+            }
+
             const errorMessage =
                 error instanceof ApiError
                     ? error.message

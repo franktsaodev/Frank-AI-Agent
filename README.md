@@ -309,6 +309,11 @@ restores the submitted text to the composer. The user can inspect the saved
 conversation before manually retrying. If history cannot be loaded, the
 frontend asks the user to reload before retrying.
 
+If a chat request finds that the active session has expired, the frontend
+creates a replacement session, clears the expired conversation, and keeps the
+submitted text in the composer for manual resending. If the replacement cannot
+be created, the draft remains available and the error is shown.
+
 Existing version 1 session snapshots remain readable and are migrated to
 version 2 when session activity is refreshed.
 

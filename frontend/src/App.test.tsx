@@ -674,6 +674,91 @@ describe('App', () => {
         expect(messageInput).toBeEnabled()
     })
 
+    it('should create a new session and preserve the draft when the active session expires', async () => {
+        const user = userEvent.setup()
+
+        initializeApplicationMock.mockResolvedValue({
+            health: healthResponse,
+            sessionId: 'expired-session',
+            history: [{ role: 'assistant', content: 'Previous reply' }],
+        })
+
+        streamChatMessageMock.mockReturnValue(
+            createFailingChatStream(new ApiError(404, 'Session not found.')),
+        )
+        getSessionHistoryMock.mockRejectedValue(
+            new ApiError(404, 'Session not found.'),
+        )
+        createSessionMock.mockResolvedValue({
+            session_id: 'replacement-session',
+        })
+
+        render(<App />)
+        await screen.findByText('Previous reply')
+
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
+
+        await user.type(messageInput, 'My question')
+        await user.click(screen.getByRole('button', { name: 'Send' }))
+
+        expect(
+            await screen.findByTitle('replacement-session'),
+        ).toHaveTextContent('replacement-session')
+        expect(screen.queryByText('Previous reply')).not.toBeInTheDocument()
+        expect(messageInput).toHaveValue('My question')
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'Session expired. A new conversation is ready. Please send your message again.',
+        )
+        expect(storeSessionIdMock).toHaveBeenCalledWith('replacement-session')
+        expect(deleteSessionMock).not.toHaveBeenCalled()
+        expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('should preserve the draft when replacing an expired session fails', async () => {
+        const user = userEvent.setup()
+
+        initializeApplicationMock.mockResolvedValue({
+            health: healthResponse,
+            sessionId: 'expired-session',
+            history: [{ role: 'assistant', content: 'Previous reply' }],
+        })
+        streamChatMessageMock.mockReturnValue(
+            createFailingChatStream(new ApiError(404, 'Session not found.')),
+        )
+        createSessionMock.mockRejectedValue(
+            new ApiError(503, 'Session storage is temporarily unavailable.'),
+        )
+
+        render(<App />)
+        await screen.findByText('Previous reply')
+
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
+
+        await user.type(messageInput, 'My question')
+        await user.click(screen.getByRole('button', { name: 'Send' }))
+
+        expect(
+            await screen.findByText(
+                'Session storage is temporarily unavailable.',
+            ),
+        ).toBeInTheDocument()
+        expect(screen.getByTitle('expired-session')).toBeInTheDocument()
+        expect(screen.getByText('Previous reply')).toBeInTheDocument()
+        expect(
+            screen.queryByText('My question', {
+                selector: '.message-row-user .message-content',
+            }),
+        ).not.toBeInTheDocument()
+        expect(messageInput).toHaveValue('My question')
+        expect(messageInput).toBeEnabled()
+        expect(storeSessionIdMock).not.toHaveBeenCalled()
+        expect(deleteSessionMock).not.toHaveBeenCalled()
+    })
+
     it('should keep the active session when creating a new one fails', async () => {
         const user = userEvent.setup()
 
