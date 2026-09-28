@@ -211,7 +211,7 @@ function App() {
         let streamCompleted = false
         let streamFailed = false
 
-        async function restoreAfterConflict(): Promise<void> {
+        async function restoreAfterFailedStream(): Promise<void> {
             setMessages((currentMessages) =>
                 currentMessages.filter(
                     (currentMessage) =>
@@ -309,11 +309,7 @@ function App() {
 
                 streamFailed = true
                 setChatError(event.message)
-
-                if (event.error === 'session_conflict') {
-                    await restoreAfterConflict()
-                }
-
+                await restoreAfterFailedStream()
                 break
             }
 
@@ -328,9 +324,7 @@ function App() {
 
             setChatError(errorMessage)
 
-            if (error instanceof ApiError && error.status === 409) {
-                await restoreAfterConflict()
-            }
+            await restoreAfterFailedStream()
         } finally {
             setIsSending(false)
         }

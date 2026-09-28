@@ -27,6 +27,7 @@ Semantic Versioning.
 - Updated Pyright from 1.1.411 to 1.1.414.
 - Changed the Docker Compose API health check to use `/ready` while retaining `/health` as a liveness endpoint.
 - Updated the frontend to refresh conversation history, discard provisional messages, and preserve the submitted text after a session conflict.
+- Changed the frontend to reconcile saved conversation history and preserve the submitted draft after failed or incomplete chat streams.
 
 ## [1.4.0] - 2026-09-22
 

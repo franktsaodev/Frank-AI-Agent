@@ -287,6 +287,58 @@ describe('App', () => {
         )
     })
 
+    it('should restore saved history and draft after a stream error', async () => {
+        const user = userEvent.setup()
+
+        getSessionHistoryMock.mockResolvedValue({
+            session_id: 'session-123',
+            messages: [
+                {
+                    role: 'assistant',
+                    content: 'Previously saved reply',
+                },
+            ],
+        })
+
+        streamChatMessageMock.mockReturnValue(
+            createChatStream([
+                {
+                    type: 'content_delta',
+                    content: 'Uncommitted response',
+                },
+                {
+                    type: 'error',
+                    error: 'client_timeout',
+                    message: 'The AI service took too long to respond.',
+                },
+            ]),
+        )
+
+        render(<App />)
+        await screen.findByText('Agent ready')
+
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
+
+        await user.type(messageInput, 'My question')
+        await user.click(screen.getByRole('button', { name: 'Send' }))
+
+        expect(
+            await screen.findByText('Previously saved reply'),
+        ).toBeInTheDocument()
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'The AI service took too long to respond.',
+        )
+        expect(
+            screen.queryByText('Uncommitted response'),
+        ).not.toBeInTheDocument()
+        expect(messageInput).toHaveValue('My question')
+        expect(getSessionHistoryMock).toHaveBeenCalledOnce()
+        expect(getSessionHistoryMock).toHaveBeenCalledWith('session-123')
+        expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+    })
+
     it('should discard unpersisted messages and restore input after a stream conflict', async () => {
         const user = userEvent.setup()
 
@@ -495,8 +547,18 @@ describe('App', () => {
         expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
     })
 
-    it('should show an error when the stream ends before completion', async () => {
+    it('should reconcile history when the stream ends before completion', async () => {
         const user = userEvent.setup()
+
+        getSessionHistoryMock.mockResolvedValue({
+            session_id: 'session-123',
+            messages: [
+                {
+                    role: 'assistant',
+                    content: 'Earlier saved response',
+                },
+            ],
+        })
 
         streamChatMessageMock.mockReturnValue(
             createChatStream([
@@ -508,29 +570,25 @@ describe('App', () => {
         )
 
         render(<App />)
-
         await screen.findByText('Agent ready')
 
-        await user.type(
-            screen.getByRole('textbox', {
-                name: 'Chat message',
-            }),
-            'Hello',
-        )
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
 
-        await user.click(
-            screen.getByRole('button', {
-                name: 'Send',
-            }),
-        )
-
-        expect(await screen.findByText('Partial response')).toBeInTheDocument()
+        await user.type(messageInput, 'Hello')
+        await user.click(screen.getByRole('button', { name: 'Send' }))
 
         expect(
-            await screen.findByText(
-                'Unable to reach the agent. Please try again.',
-            ),
+            await screen.findByText('Earlier saved response'),
         ).toBeInTheDocument()
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'Unable to reach the agent. Please try again.',
+        )
+        expect(screen.queryByText('Partial response')).not.toBeInTheDocument()
+        expect(messageInput).toHaveValue('Hello')
+        expect(getSessionHistoryMock).toHaveBeenCalledOnce()
+        expect(getSessionHistoryMock).toHaveBeenCalledWith('session-123')
     })
 
     it('should replace the active session for a new conversation', async () => {
@@ -605,8 +663,14 @@ describe('App', () => {
             await screen.findByText('Agent service is unavailable.'),
         ).toBeInTheDocument()
 
-        expect(screen.getByText('Hello')).toBeInTheDocument()
+        expect(
+            screen.queryByText('Hello', {
+                selector: '.message-row-user .message-content',
+            }),
+        ).not.toBeInTheDocument()
 
+        expect(messageInput).toHaveValue('Hello')
+        expect(getSessionHistoryMock).toHaveBeenCalledWith('session-123')
         expect(messageInput).toBeEnabled()
     })
 
