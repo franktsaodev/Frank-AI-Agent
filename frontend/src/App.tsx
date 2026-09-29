@@ -485,7 +485,7 @@ function App() {
 
                     <span className="version-badge">
                         {health === null
-                            ? 'v1.3 in progress'
+                            ? 'API version pending'
                             : `API ${health.version}`}
                     </span>
                 </header>

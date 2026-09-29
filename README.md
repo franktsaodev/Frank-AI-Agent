@@ -790,7 +790,7 @@ logs readable.
 | Variable           | Default          | Description                                                   |
 | ------------------ | ---------------- | ------------------------------------------------------------- |
 | `APP_SERVICE_NAME` | `Frank AI Agent` | Service name exposed by runtime information and health checks |
-| `APP_VERSION`      | `1.4.0`          | Application version exposed by the running service            |
+| `APP_VERSION`      | `1.5.0`          | Application version exposed by the running service            |
 
 ### CORS
 
@@ -1109,7 +1109,7 @@ docker compose down
 ### Build the Docker Image Manually
 
 ```bash
-docker build -t frank-ai-agent:1.4.0 .
+docker build -t frank-ai-agent:1.5.0 .
 ```
 
 ### Run the Image Manually
@@ -1127,9 +1127,9 @@ docker run --rm `
   --name frank-ai-agent `
   -p 8000:8000 `
   --env-file .env `
-  -e APP_VERSION=1.4.0 `
+  -e APP_VERSION=1.5.0 `
   -e REDIS_URL=$redisUrl `
-  frank-ai-agent:1.4.0
+  frank-ai-agent:1.5.0
 ```
 
 **macOS / Linux**
@@ -1141,9 +1141,9 @@ docker run --rm \
   --name frank-ai-agent \
   -p 8000:8000 \
   --env-file .env \
-  -e APP_VERSION=1.4.0 \
+  -e APP_VERSION=1.5.0 \
   -e REDIS_URL="$REDIS_URL" \
-  frank-ai-agent:1.4.0
+  frank-ai-agent:1.5.0
 ```
 
 > [!NOTE]
@@ -1423,7 +1423,7 @@ features planned for future development.
 - [x] Server-Sent Events chat API with sanitized errors
 - [x] Frontend SSE parsing and incremental response rendering
 
-### Unreleased — Persistent Sessions
+### v1.5 — Persistent Sessions
 
 - [x] Versioned agent state snapshots
 - [x] Strict JSON session serialization and validation

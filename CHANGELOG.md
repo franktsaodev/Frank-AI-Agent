@@ -7,6 +7,8 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-29
+
 ### Added
 
 - Added immutable, versioned agent-state snapshots for conversation history, facts, and tool-call messages.
@@ -30,6 +32,9 @@ Semantic Versioning.
 - Changed the frontend to reconcile saved conversation history and preserve the submitted draft after failed or incomplete chat streams.
 - Updated the frontend to replace an expired active session after a chat `404` while preserving the submitted draft.
 - Updated failed stream recovery to replace a missing session when reloading its history returns `404`.
+
+### Fixed
+
 - Prevented duplicate chat requests when a message is submitted twice before the frontend updates its sending state.
 
 ## [1.4.0] - 2026-09-22
