@@ -10,6 +10,11 @@ Semantic Versioning.
 ### Added
 
 - Added server-generated request IDs to API responses and request logs, with CORS exposure for configured origins.
+- Added response-start duration and correlated chat-stream outcome logs.
+
+### Changed
+
+- Changed chat-stream error logging to use fixed error codes without exception messages or tracebacks.
 
 ## [1.5.0] - 2026-09-29
 

@@ -836,9 +836,19 @@ Application responses include a server-generated UUID in the `X-Request-ID`
 header, including SSE responses and unexpected HTTP `500` responses.
 Configured CORS origins can read this header from browser code.
 
-API response-start logs include the same request ID, HTTP method, and status
-code. These new logs omit request bodies, URLs, query strings, and exception
-messages. For SSE, a response-start log does not indicate stream completion.
+API response-start logs include the same request ID, HTTP method, status
+code, and `duration_ms`. This duration measures middleware processing until
+the response is available; it does not measure full response delivery.
+
+Chat-stream finish logs include the request ID, `outcome`, `error_code`,
+and `duration_ms`, measured from the start of stream iteration until it
+ends. Outcomes are `completed`, `failed`, or `incomplete`. A `completed`
+outcome means the completion event was processed and the session was saved
+successfully; it does not confirm that the browser received the response.
+Stream failures can occur after HTTP `200` has already been returned.
+
+These logs omit request bodies, URLs, query strings, and exception messages.
+Chat-stream error logs use fixed error codes without exception tracebacks.
 
 CORS preflight requests are handled directly by the CORS middleware and do
 not receive an application request ID.

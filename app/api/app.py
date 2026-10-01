@@ -1,4 +1,5 @@
 import logging
+from time import perf_counter
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -66,6 +67,7 @@ def create_app(
         request: Request,
         call_next,
     ) -> Response:
+        started_at = perf_counter()
         request_id = str(uuid4())
         request.state.request_id = request_id
 
@@ -86,11 +88,14 @@ def create_app(
 
         response.headers["X-Request-ID"] = request_id
 
+        duration_ms = (perf_counter() - started_at) * 1000
+
         logger.info(
-            "HTTP response started request_id=%s method=%s status=%s",
+            "HTTP response started request_id=%s method=%s status=%s duration_ms=%.3f",
             request_id,
             request.method,
             response.status_code,
+            duration_ms,
         )
 
         return response

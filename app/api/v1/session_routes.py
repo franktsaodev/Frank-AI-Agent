@@ -1,8 +1,9 @@
 import logging
 from collections.abc import Callable, Iterable, Iterator
+from time import perf_counter
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.api.chat_stream_serializer import (
@@ -108,6 +109,7 @@ def chat_with_session(
 def stream_chat_with_session(
     session_id: str,
     request: ChatRequest,
+    http_request: Request,
     manager: SessionManagerDependency,
 ) -> StreamingResponse:
     session = manager.get(
@@ -127,6 +129,7 @@ def stream_chat_with_session(
 
     serialized_events = _serialize_chat_stream(
         events,
+        request_id=http_request.state.request_id,
         on_completed=lambda: manager.save(
             session,
         ),
@@ -239,8 +242,13 @@ def get_session_detail(
 def _serialize_chat_stream(
     events: Iterable[ChatStreamEvent],
     *,
+    request_id: str,
     on_completed: Callable[[], None],
 ) -> Iterator[str]:
+    started_at = perf_counter()
+    outcome = "incomplete"
+    error_code = "none"
+
     try:
         for event in events:
             serialized_event = serialize_chat_stream_event(
@@ -252,73 +260,84 @@ def _serialize_chat_stream(
                 ChatStreamCompleted,
             ):
                 on_completed()
+                outcome = "completed"
 
             yield serialized_event
 
-    except ClientAuthenticationError as error:
-        logger.warning(
-            "Streaming AI client authentication failed: %s",
-            error,
-        )
+    except ClientAuthenticationError:
+        outcome = "failed"
+        error_code = "client_authentication_error"
 
         yield serialize_chat_stream_error(
-            error="client_authentication_error",
+            error=error_code,
             message="The AI service authentication failed.",
         )
 
-    except ClientTimeoutError as error:
-        logger.warning(
-            "Streaming AI client request timed out: %s",
-            error,
-        )
+    except ClientTimeoutError:
+        outcome = "failed"
+        error_code = "client_timeout"
 
         yield serialize_chat_stream_error(
-            error="client_timeout",
+            error=error_code,
             message="The AI service took too long to respond.",
         )
 
-    except ClientConnectionError as error:
-        logger.warning(
-            "Streaming AI client connection failed: %s",
-            error,
-        )
+    except ClientConnectionError:
+        outcome = "failed"
+        error_code = "client_connection_error"
 
         yield serialize_chat_stream_error(
-            error="client_connection_error",
+            error=error_code,
             message="Unable to connect to the AI service.",
         )
 
-    except ClientRateLimitError as error:
-        logger.warning(
-            "Streaming AI client rate limit exceeded: %s",
-            error,
-        )
+    except ClientRateLimitError:
+        outcome = "failed"
+        error_code = "client_rate_limit"
 
         yield serialize_chat_stream_error(
-            error="client_rate_limit",
+            error=error_code,
             message=(
                 "The AI service is temporarily rate limited. Please try again later."
             ),
         )
 
     except AIClientError:
-        logger.exception("Unexpected streaming AI client error")
+        outcome = "failed"
+        error_code = "ai_client_error"
+
         yield serialize_chat_stream_error(
-            error="ai_client_error",
+            error=error_code,
             message="The AI service returned an error.",
         )
 
     except SessionConflictError:
-        logger.info("Chat stream session update conflicted")
+        outcome = "failed"
+        error_code = "session_conflict"
 
         yield serialize_chat_stream_error(
-            error="session_conflict",
+            error=error_code,
             message="Session was updated by another request. Please retry.",
         )
 
-    except Exception:
-        logger.exception("Unexpected chat stream error")
+    except Exception:  # noqa: BLE001
+        # This streaming boundary converts unexpected errors into a safe SSE event.
+        outcome = "failed"
+        error_code = "stream_error"
+
         yield serialize_chat_stream_error(
-            error="stream_error",
+            error=error_code,
             message="The chat stream failed unexpectedly.",
+        )
+
+    finally:
+        duration_ms = (perf_counter() - started_at) * 1000
+
+        logger.info(
+            "Chat stream finished request_id=%s outcome=%s "
+            "error_code=%s duration_ms=%.3f",
+            request_id,
+            outcome,
+            error_code,
+            duration_ms,
         )

@@ -1,6 +1,7 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from unittest.mock import patch
 from uuid import UUID
 
 from fastapi import FastAPI
@@ -270,6 +271,36 @@ def test_request_log_should_match_response_id_without_query_string(
     assert "method=GET" in request_logs[0]
     assert "status=200" in request_logs[0]
     assert "private-value" not in request_logs[0]
+
+
+def test_request_log_should_include_response_start_duration(
+    caplog,
+) -> None:
+    app = create_app(
+        lifespan=empty_lifespan,
+    )
+
+    with (
+        caplog.at_level(logging.INFO, logger="app.api.app"),
+        patch(
+            "app.api.app.perf_counter",
+            side_effect=[10.0, 10.125],
+        ),
+        TestClient(app) as client,
+    ):
+        response = client.get("/health")
+
+    request_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "app.api.app"
+        and "HTTP response started" in record.getMessage()
+    ]
+
+    assert response.status_code == 200
+    assert len(request_logs) == 1
+    assert f"request_id={response.headers['X-Request-ID']}" in request_logs[0]
+    assert "duration_ms=125.000" in request_logs[0]
 
 
 def test_unhandled_error_log_should_match_response_id(

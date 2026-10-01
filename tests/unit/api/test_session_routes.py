@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterator
 from datetime import datetime
 from unittest.mock import MagicMock, patch
@@ -495,6 +496,174 @@ def test_stream_chat_with_session_should_return_sse_events(
     assert fake_session_manager.saved_sessions == [
         session,
     ]
+
+
+def test_stream_chat_should_log_completion_with_request_id_and_duration(
+    client: TestClient,
+    mock_agent: MagicMock,
+    caplog,
+) -> None:
+    mock_agent.stream_chat.return_value = iter(
+        [
+            ChatContentDelta(content="Private response"),
+            ChatStreamCompleted(response="Private response"),
+        ]
+    )
+
+    with (
+        caplog.at_level(
+            logging.INFO,
+            logger="app.api.v1.session_routes",
+        ),
+        patch(
+            "app.api.v1.session_routes.perf_counter",
+            side_effect=[20.0, 20.5],
+        ),
+    ):
+        response = client.post(
+            "/api/v1/sessions/session-123/chat/stream",
+            json={
+                "message": "Private prompt",
+                "metadata": {
+                    "request_id": "client-request-id",
+                },
+            },
+        )
+
+    stream_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "app.api.v1.session_routes"
+        and "Chat stream finished" in record.getMessage()
+    ]
+
+    assert response.status_code == 200
+    assert "event: completed\n" in response.text
+    assert len(stream_logs) == 1
+    assert f"request_id={response.headers['X-Request-ID']}" in stream_logs[0]
+    assert "outcome=completed" in stream_logs[0]
+    assert "duration_ms=500.000" in stream_logs[0]
+    assert "Private prompt" not in stream_logs[0]
+    assert "Private response" not in stream_logs[0]
+    assert "client-request-id" not in stream_logs[0]
+
+
+@pytest.mark.parametrize(
+    ("save_error", "error_code"),
+    [
+        (
+            RuntimeError("Sensitive storage detail"),
+            "stream_error",
+        ),
+        (
+            SessionConflictError(
+                session_id=SessionId(value="session-123"),
+            ),
+            "session_conflict",
+        ),
+    ],
+)
+def test_stream_chat_should_log_failure_when_session_save_fails(
+    client: TestClient,
+    mock_agent: MagicMock,
+    fake_session_manager,
+    caplog,
+    save_error: Exception,
+    error_code: str,
+) -> None:
+    mock_agent.stream_chat.return_value = iter(
+        [
+            ChatStreamCompleted(response="Private response"),
+        ]
+    )
+
+    with (
+        caplog.at_level(
+            logging.INFO,
+            logger="app.api.v1.session_routes",
+        ),
+        patch.object(
+            fake_session_manager,
+            "save",
+            side_effect=save_error,
+        ),
+        patch(
+            "app.api.v1.session_routes.perf_counter",
+            side_effect=[30.0, 30.25],
+        ),
+    ):
+        response = client.post(
+            "/api/v1/sessions/session-123/chat/stream",
+            json={"message": "Private prompt"},
+        )
+
+    route_records = [
+        record
+        for record in caplog.records
+        if record.name == "app.api.v1.session_routes"
+    ]
+    stream_logs = [
+        record.getMessage()
+        for record in route_records
+        if "Chat stream finished" in record.getMessage()
+    ]
+
+    assert response.status_code == 200
+    assert "event: error\n" in response.text
+    assert "event: completed\n" not in response.text
+    assert len(stream_logs) == 1
+    assert f"request_id={response.headers['X-Request-ID']}" in stream_logs[0]
+    assert "outcome=failed" in stream_logs[0]
+    assert f"error_code={error_code}" in stream_logs[0]
+    assert "duration_ms=250.000" in stream_logs[0]
+
+    for record in route_records:
+        assert "Sensitive storage detail" not in record.getMessage()
+        assert "Private prompt" not in record.getMessage()
+        assert "Private response" not in record.getMessage()
+        assert record.exc_info is None
+
+
+def test_stream_chat_should_log_incomplete_when_completion_is_missing(
+    client: TestClient,
+    mock_agent: MagicMock,
+    caplog,
+) -> None:
+    mock_agent.stream_chat.return_value = iter(
+        [
+            ChatContentDelta(content="Partial response"),
+        ]
+    )
+
+    with (
+        caplog.at_level(
+            logging.INFO,
+            logger="app.api.v1.session_routes",
+        ),
+        patch(
+            "app.api.v1.session_routes.perf_counter",
+            side_effect=[40.0, 40.1],
+        ),
+    ):
+        response = client.post(
+            "/api/v1/sessions/session-123/chat/stream",
+            json={"message": "Hello"},
+        )
+
+    stream_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "app.api.v1.session_routes"
+        and "Chat stream finished" in record.getMessage()
+    ]
+
+    assert response.status_code == 200
+    assert "event: completed\n" not in response.text
+    assert len(stream_logs) == 1
+    assert f"request_id={response.headers['X-Request-ID']}" in stream_logs[0]
+    assert "outcome=incomplete" in stream_logs[0]
+    assert "error_code=none" in stream_logs[0]
+    assert "duration_ms=100.000" in stream_logs[0]
 
 
 def test_stream_chat_should_emit_error_when_session_save_fails(
