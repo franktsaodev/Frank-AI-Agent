@@ -1,5 +1,7 @@
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from uuid import UUID
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -171,3 +173,159 @@ def test_cors_should_not_allow_unconfigured_origin(
 
     assert response.status_code == 200
     assert "access-control-allow-origin" not in response.headers
+
+
+def test_responses_should_have_distinct_request_ids() -> None:
+    app = create_app(
+        lifespan=empty_lifespan,
+    )
+
+    with TestClient(app) as client:
+        first_response = client.get("/health")
+        second_response = client.get("/health")
+        missing_response = client.get("/missing")
+
+    request_ids = [
+        response.headers["X-Request-ID"]
+        for response in (first_response, second_response, missing_response)
+    ]
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert missing_response.status_code == 404
+    assert all(str(UUID(request_id)) == request_id for request_id in request_ids)
+    assert len(set(request_ids)) == 3
+
+
+def test_cors_should_expose_request_id_to_configured_origin(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173",
+    )
+
+    app = create_app(
+        lifespan=empty_lifespan,
+    )
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/health",
+            headers={
+                "Origin": "http://localhost:5173",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == ("http://localhost:5173")
+    assert "x-request-id" in response.headers["access-control-expose-headers"].lower()
+    assert (
+        str(UUID(response.headers["X-Request-ID"])) == response.headers["X-Request-ID"]
+    )
+
+
+def test_unhandled_error_should_include_request_id() -> None:
+    app = create_app(
+        lifespan=empty_lifespan,
+    )
+
+    @app.get("/test-unhandled-error")
+    def raise_unhandled_error() -> None:
+        raise RuntimeError("Sensitive internal detail")
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get("/test-unhandled-error")
+
+    assert response.status_code == 500
+    assert "Sensitive internal detail" not in response.text
+
+    request_id = response.headers["X-Request-ID"]
+    assert str(UUID(request_id)) == request_id
+
+
+def test_request_log_should_match_response_id_without_query_string(
+    caplog,
+) -> None:
+    app = create_app(
+        lifespan=empty_lifespan,
+    )
+
+    with (
+        caplog.at_level(logging.INFO, logger="app.api.app"),
+        TestClient(app) as client,
+    ):
+        response = client.get("/health?secret=private-value")
+
+    request_id = response.headers["X-Request-ID"]
+    request_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "app.api.app"
+        and "HTTP response started" in record.getMessage()
+    ]
+
+    assert len(request_logs) == 1
+    assert f"request_id={request_id}" in request_logs[0]
+    assert "method=GET" in request_logs[0]
+    assert "status=200" in request_logs[0]
+    assert "private-value" not in request_logs[0]
+
+
+def test_unhandled_error_log_should_match_response_id(
+    caplog,
+) -> None:
+    app = create_app(
+        lifespan=empty_lifespan,
+    )
+
+    @app.get("/test-error-log")
+    def raise_unhandled_error() -> None:
+        raise RuntimeError("Sensitive internal detail")
+
+    with (
+        caplog.at_level(logging.ERROR, logger="app.api.app"),
+        TestClient(app, raise_server_exceptions=False) as client,
+    ):
+        response = client.get("/test-error-log")
+
+    request_id = response.headers["X-Request-ID"]
+    error_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "app.api.app"
+        and "Unhandled HTTP request" in record.getMessage()
+    ]
+
+    assert response.status_code == 500
+    assert len(error_logs) == 1
+    assert f"request_id={request_id}" in error_logs[0]
+    assert "method=GET" in error_logs[0]
+    assert "Sensitive internal detail" not in error_logs[0]
+
+
+def test_unhandled_error_should_expose_request_id_to_configured_origin(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173",
+    )
+    app = create_app(lifespan=empty_lifespan)
+
+    @app.get("/test-cors-error")
+    def raise_unhandled_error() -> None:
+        raise RuntimeError("Sensitive internal detail")
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get(
+            "/test-cors-error",
+            headers={"Origin": "http://localhost:5173"},
+        )
+
+    assert response.status_code == 500
+    assert response.headers["access-control-allow-origin"] == ("http://localhost:5173")
+    assert "x-request-id" in response.headers["access-control-expose-headers"].lower()
+    assert (
+        str(UUID(response.headers["X-Request-ID"])) == response.headers["X-Request-ID"]
+    )

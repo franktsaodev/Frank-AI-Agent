@@ -7,6 +7,10 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Added server-generated request IDs to API responses and request logs, with CORS exposure for configured origins.
+
 ## [1.5.0] - 2026-09-29
 
 ### Added

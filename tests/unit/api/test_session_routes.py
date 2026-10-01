@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 from datetime import datetime
 from unittest.mock import MagicMock, patch
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -468,6 +469,9 @@ def test_stream_chat_with_session_should_return_sse_events(
 
     assert response.status_code == 200
 
+    request_id = response.headers["X-Request-ID"]
+    assert str(UUID(request_id)) == request_id
+
     assert response.headers["content-type"].startswith("text/event-stream")
     assert response.headers["cache-control"] == "no-cache"
     assert response.headers["x-accel-buffering"] == "no"
@@ -645,6 +649,10 @@ def test_stream_chat_with_session_should_hide_unexpected_error(
     )
 
     assert response.status_code == 200
+
+    request_id = response.headers["X-Request-ID"]
+    assert str(UUID(request_id)) == request_id
+
     assert response.headers["content-type"].startswith("text/event-stream")
 
     assert response.text == (

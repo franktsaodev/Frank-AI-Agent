@@ -830,6 +830,19 @@ Frank AI Agent exposes a session-based REST API under `/api/v1`.
 
 Interactive documentation is available through Swagger UI at `/docs`.
 
+### Request IDs
+
+Application responses include a server-generated UUID in the `X-Request-ID`
+header, including SSE responses and unexpected HTTP `500` responses.
+Configured CORS origins can read this header from browser code.
+
+API response-start logs include the same request ID, HTTP method, and status
+code. These new logs omit request bodies, URLs, query strings, and exception
+messages. For SSE, a response-start log does not indicate stream completion.
+
+CORS preflight requests are handled directly by the CORS middleware and do
+not receive an application request ID.
+
 ### Endpoints
 
 | Method   | Endpoint                                    | Description                                                                  |
