@@ -49,6 +49,7 @@ export interface ChatErrorEvent {
     type: 'error'
     error: string
     message: string
+    requestId?: string | null
 }
 
 export type ChatStreamEvent =

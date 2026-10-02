@@ -789,7 +789,138 @@ describe('App', () => {
         expect(messageInput).toHaveValue('Hello')
         expect(getSessionHistoryMock).toHaveBeenCalledWith('session-123')
         expect(messageInput).toBeEnabled()
+        expect(
+            screen.queryByRole('textbox', { name: 'Request ID' }),
+        ).not.toBeInTheDocument()
     })
+
+    it.each(['HTTP', 'SSE'])(
+        'should show the request ID for a %s chat error',
+        async (errorSource) => {
+            const user = userEvent.setup()
+            const requestId = '83100577-b10b-4953-89fe-b7c29cbcfd36'
+            const errorMessage = 'Agent service is unavailable.'
+
+            getSessionHistoryMock.mockResolvedValue({
+                session_id: 'session-123',
+                messages: [],
+            })
+
+            if (errorSource === 'HTTP') {
+                streamChatMessageMock.mockReturnValue(
+                    createFailingChatStream(
+                        new ApiError(503, errorMessage, requestId),
+                    ),
+                )
+            } else {
+                streamChatMessageMock.mockReturnValue(
+                    createChatStream([
+                        {
+                            type: 'error',
+                            error: 'client_connection_error',
+                            message: errorMessage,
+                            requestId,
+                        },
+                    ]),
+                )
+            }
+
+            render(<App />)
+            await screen.findByText('Agent ready')
+
+            const messageInput = screen.getByRole('textbox', {
+                name: 'Chat message',
+            })
+
+            await user.type(messageInput, 'Hello')
+            await user.click(screen.getByRole('button', { name: 'Send' }))
+
+            expect(await screen.findByRole('alert')).toHaveTextContent(
+                errorMessage,
+            )
+
+            const requestIdInput = await screen.findByRole('textbox', {
+                name: 'Request ID',
+            })
+
+            expect(requestIdInput).toHaveValue(requestId)
+            expect(requestIdInput).toHaveAttribute('readonly')
+            expect(messageInput).toHaveValue('Hello')
+
+            streamChatMessageMock.mockReturnValue(
+                createChatStream([
+                    {
+                        type: 'completed',
+                        response: 'Retry succeeded',
+                    },
+                ]),
+            )
+
+            await user.click(screen.getByRole('button', { name: 'Send' }))
+
+            expect(
+                await screen.findByText('Retry succeeded'),
+            ).toBeInTheDocument()
+            expect(
+                screen.queryByRole('textbox', { name: 'Request ID' }),
+            ).not.toBeInTheDocument()
+            expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+        },
+    )
+
+    it.each(['history-request-id', null])(
+        'should use the recovery request ID when history loading fails (%s)',
+        async (historyRequestId) => {
+            const user = userEvent.setup()
+
+            streamChatMessageMock.mockReturnValue(
+                createChatStream([
+                    {
+                        type: 'error',
+                        error: 'session_conflict',
+                        message: 'Please retry.',
+                        requestId: 'chat-request-id',
+                    },
+                ]),
+            )
+
+            getSessionHistoryMock.mockRejectedValue(
+                new ApiError(
+                    503,
+                    'History storage is unavailable.',
+                    historyRequestId,
+                ),
+            )
+
+            render(<App />)
+            await screen.findByText('Agent ready')
+
+            const messageInput = screen.getByRole('textbox', {
+                name: 'Chat message',
+            })
+
+            await user.type(messageInput, 'Hello')
+            await user.click(screen.getByRole('button', { name: 'Send' }))
+
+            expect(
+                await screen.findByText(
+                    'Unable to load the latest conversation. Please reload before retrying.',
+                ),
+            ).toBeInTheDocument()
+
+            if (historyRequestId === null) {
+                expect(
+                    screen.queryByRole('textbox', { name: 'Request ID' }),
+                ).not.toBeInTheDocument()
+            } else {
+                expect(
+                    screen.getByRole('textbox', { name: 'Request ID' }),
+                ).toHaveValue(historyRequestId)
+            }
+
+            expect(messageInput).toHaveValue('Hello')
+        },
+    )
 
     it('should create a new session and preserve the draft when the active session expires', async () => {
         const user = userEvent.setup()

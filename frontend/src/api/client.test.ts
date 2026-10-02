@@ -280,6 +280,90 @@ describe('API client', () => {
         }
     })
 
+    it('should preserve the request ID when an API request fails', async () => {
+        const requestId = '83100577-b10b-4953-89fe-b7c29cbcfd36'
+
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    error: 'session_storage_unavailable',
+                    message: 'Session storage is unavailable.',
+                }),
+                {
+                    status: 503,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Request-ID': requestId,
+                    },
+                },
+            ),
+        )
+
+        try {
+            await expect(
+                sendChatMessage('session-123', 'Hello'),
+            ).rejects.toMatchObject({
+                name: 'ApiError',
+                status: 503,
+                message: 'Session storage is unavailable.',
+                requestId,
+            })
+        } finally {
+            fetchSpy.mockRestore()
+        }
+    })
+
+    it.each(['83100577-b10b-4953-89fe-b7c29cbcfd36', null])(
+        'should attach the response request ID to a stream error (%s)',
+        async (requestId) => {
+            const headers = new Headers({
+                'Content-Type': 'text/event-stream',
+            })
+
+            if (requestId !== null) {
+                headers.set('X-Request-ID', requestId)
+            }
+
+            const fetchSpy = vi
+                .spyOn(globalThis, 'fetch')
+                .mockResolvedValueOnce(
+                    new Response(
+                        'event: content_delta\n' +
+                            'data: {"content":"Partial reply"}\n\n' +
+                            'event: error\n' +
+                            'data: {"error":"session_conflict",' +
+                            '"message":"Please retry.",' +
+                            '"requestId":"payload-id"}\n\n',
+                        {
+                            status: 200,
+                            headers,
+                        },
+                    ),
+                )
+
+            try {
+                const events = await collectChatEvents(
+                    streamChatMessage('session-123', 'Hello'),
+                )
+
+                expect(events).toEqual([
+                    {
+                        type: 'content_delta',
+                        content: 'Partial reply',
+                    },
+                    {
+                        type: 'error',
+                        error: 'session_conflict',
+                        message: 'Please retry.',
+                        requestId,
+                    },
+                ])
+            } finally {
+                fetchSpy.mockRestore()
+            }
+        },
+    )
+
     it('should use same-origin paths when the API base URL is empty', async () => {
         vi.stubEnv('VITE_API_BASE_URL', '')
         vi.resetModules()

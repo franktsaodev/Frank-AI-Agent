@@ -538,3 +538,24 @@ button.navigation-item:not(:disabled):hover {
         width: calc(100% - 32px);
     }
 }
+
+.request-id {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+}
+
+.request-id input {
+    width: 36ch;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font-family: ui-monospace, Consolas, monospace;
+}

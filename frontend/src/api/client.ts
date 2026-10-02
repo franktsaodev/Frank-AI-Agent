@@ -19,12 +19,18 @@ const apiBaseUrl = (
 
 export class ApiError extends Error {
     readonly status: number
+    readonly requestId: string | null
 
-    constructor(status: number, message: string) {
+    constructor(
+        status: number,
+        message: string,
+        requestId: string | null = null,
+    ) {
         super(message)
 
         this.name = 'ApiError'
         this.status = status
+        this.requestId = requestId
     }
 }
 
@@ -41,7 +47,11 @@ async function createApiError(response: Response): Promise<ApiError> {
         // Keep the status-based fallback when the response is not JSON.
     }
 
-    return new ApiError(response.status, message)
+    return new ApiError(
+        response.status,
+        message,
+        response.headers.get('X-Request-ID'),
+    )
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -169,5 +179,16 @@ export async function* streamChatMessage(
         throw new Error('API returned an empty chat stream response.')
     }
 
-    yield* parseChatStream(response.body)
+    const requestId = response.headers.get('X-Request-ID')
+
+    for await (const event of parseChatStream(response.body)) {
+        if (event.type === 'error') {
+            yield {
+                ...event,
+                requestId,
+            }
+        } else {
+            yield event
+        }
+    }
 }

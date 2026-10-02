@@ -42,6 +42,11 @@ interface ChatMessage {
     content: string
 }
 
+interface ChatErrorDetails {
+    message: string
+    requestId: string | null
+}
+
 function createRestoredMessages(
     history: HistoryMessageResponse[],
 ): ChatMessage[] {
@@ -75,11 +80,28 @@ function App() {
     const [input, setInput] = useState('')
     const [isSending, setIsSending] = useState(false)
     const [isCreatingSession, setIsCreatingSession] = useState(false)
-    const [chatError, setChatError] = useState<string | null>(null)
+    const [chatErrorDetails, setChatErrorDetails] =
+        useState<ChatErrorDetails | null>(null)
+
+    const chatError = chatErrorDetails?.message ?? null
 
     const nextMessageId = useRef(0)
     const messagesEndRef = useRef<HTMLDivElement | null>(null)
     const sendingRef = useRef(false)
+
+    function setChatError(
+        message: string | null,
+        requestId: string | null = null,
+    ): void {
+        setChatErrorDetails(
+            message === null
+                ? null
+                : {
+                      message,
+                      requestId,
+                  },
+        )
+    }
 
     useEffect(() => {
         let active = true
@@ -182,7 +204,10 @@ function App() {
                     ? error.message
                     : 'Unable to create a new session. Please try again.'
 
-            setChatError(message)
+            setChatError(
+                message,
+                error instanceof ApiError ? error.requestId : null,
+            )
         } finally {
             setIsCreatingSession(false)
         }
@@ -247,6 +272,9 @@ function App() {
                     replacementError instanceof ApiError
                         ? replacementError.message
                         : 'Unable to create a new session. Please try again.',
+                    replacementError instanceof ApiError
+                        ? replacementError.requestId
+                        : null,
                 )
             }
         }
@@ -273,6 +301,9 @@ function App() {
 
                 setChatError(
                     'Unable to load the latest conversation. Please reload before retrying.',
+                    historyError instanceof ApiError
+                        ? historyError.requestId
+                        : null,
                 )
             }
         }
@@ -349,7 +380,7 @@ function App() {
                 }
 
                 streamFailed = true
-                setChatError(event.message)
+                setChatError(event.message, event.requestId ?? null)
                 await restoreAfterFailedStream()
                 break
             }
@@ -369,7 +400,10 @@ function App() {
                     ? error.message
                     : 'Unable to reach the agent. Please try again.'
 
-            setChatError(errorMessage)
+            setChatError(
+                errorMessage,
+                error instanceof ApiError ? error.requestId : null,
+            )
 
             await restoreAfterFailedStream()
         } finally {
@@ -629,6 +663,20 @@ function App() {
                         {chatError ??
                             'Press Enter to send · Shift+Enter for a new line'}
                     </p>
+
+                    {chatErrorDetails?.requestId && (
+                        <label className="request-id">
+                            <span>Request ID</span>
+                            <input
+                                type="text"
+                                value={chatErrorDetails.requestId}
+                                readOnly
+                                onFocus={(event) => {
+                                    event.currentTarget.select()
+                                }}
+                            />
+                        </label>
+                    )}
                 </footer>
             </main>
         </div>
