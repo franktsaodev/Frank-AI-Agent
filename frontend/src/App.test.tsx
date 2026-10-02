@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
     ApiError,
+    ChatStreamError,
     createSession,
     deleteSession,
     getSessionHistory,
@@ -865,6 +866,75 @@ describe('App', () => {
                 screen.queryByRole('textbox', { name: 'Request ID' }),
             ).not.toBeInTheDocument()
             expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+        },
+    )
+
+    it.each(['83100577-b10b-4953-89fe-b7c29cbcfd36', null])(
+        'should show the available request ID after a stream read failure (%s)',
+        async (requestId) => {
+            const user = userEvent.setup()
+
+            getSessionHistoryMock.mockResolvedValue({
+                session_id: 'session-123',
+                messages: [
+                    {
+                        role: 'assistant',
+                        content: 'Previously saved reply',
+                    },
+                ],
+            })
+
+            async function* failDuringChat(): AsyncGenerator<ChatStreamEvent> {
+                yield {
+                    type: 'content_delta',
+                    content: 'Uncommitted response',
+                }
+
+                throw new ChatStreamError(
+                    'Private connection failure detail',
+                    requestId,
+                )
+            }
+
+            streamChatMessageMock.mockReturnValue(failDuringChat())
+
+            render(<App />)
+            await screen.findByText('Agent ready')
+
+            const messageInput = screen.getByRole('textbox', {
+                name: 'Chat message',
+            })
+
+            await user.type(messageInput, 'Hello')
+            await user.click(screen.getByRole('button', { name: 'Send' }))
+
+            expect(
+                await screen.findByText('Previously saved reply'),
+            ).toBeInTheDocument()
+
+            expect(screen.getByRole('alert')).toHaveTextContent(
+                'Unable to reach the agent. Please try again.',
+            )
+            expect(
+                screen.queryByText('Private connection failure detail'),
+            ).not.toBeInTheDocument()
+            expect(
+                screen.queryByText('Uncommitted response'),
+            ).not.toBeInTheDocument()
+            expect(messageInput).toHaveValue('Hello')
+
+            if (requestId === null) {
+                expect(
+                    screen.queryByRole('textbox', { name: 'Request ID' }),
+                ).not.toBeInTheDocument()
+            } else {
+                expect(
+                    screen.getByRole('textbox', { name: 'Request ID' }),
+                ).toHaveValue(requestId)
+            }
+
+            expect(getSessionHistoryMock).toHaveBeenCalledWith('session-123')
+            expect(streamChatMessageMock).toHaveBeenCalledOnce()
         },
     )
 

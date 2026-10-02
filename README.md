@@ -836,7 +836,10 @@ Application responses include a server-generated UUID in the `X-Request-ID`
 header, including SSE responses and unexpected HTTP `500` responses.
 Configured CORS origins can read this header from browser code.
 
-The frontend preserves this header for HTTP API errors and SSE error events.
+The frontend preserves this header for HTTP API errors, SSE error events,
+invalid stream responses, stream read or parsing failures, and streams that
+end without a `completed` or `error` event. When the header is unavailable,
+the frontend omits the request ID field.
 Chat errors display the available request ID in a read-only field that can
 be selected and copied for troubleshooting. If recovery fails, the field
 shows the recovery request's ID when available. Starting another chat

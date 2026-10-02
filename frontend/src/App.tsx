@@ -3,6 +3,7 @@ import type { KeyboardEvent, SubmitEvent } from 'react'
 
 import {
     ApiError,
+    ChatStreamError,
     createSession,
     deleteSession,
     getSessionHistory,
@@ -402,7 +403,9 @@ function App() {
 
             setChatError(
                 errorMessage,
-                error instanceof ApiError ? error.requestId : null,
+                error instanceof ApiError || error instanceof ChatStreamError
+                    ? error.requestId
+                    : null,
             )
 
             await restoreAfterFailedStream()

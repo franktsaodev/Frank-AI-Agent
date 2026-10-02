@@ -208,6 +208,169 @@ describe('API client', () => {
         )
     })
 
+    it.each(['83100577-b10b-4953-89fe-b7c29cbcfd36', null])(
+        'should preserve the response request ID when reading the stream fails (%s)',
+        async (requestId) => {
+            const headers = new Headers({
+                'Content-Type': 'text/event-stream',
+            })
+
+            if (requestId !== null) {
+                headers.set('X-Request-ID', requestId)
+            }
+
+            let readCount = 0
+
+            const body = new ReadableStream<Uint8Array>(
+                {
+                    pull(controller) {
+                        readCount += 1
+
+                        if (readCount === 1) {
+                            controller.enqueue(
+                                new TextEncoder().encode(
+                                    'event: content_delta\n' +
+                                        'data: {"content":"Partial reply"}\n\n',
+                                ),
+                            )
+                            return
+                        }
+
+                        controller.error(
+                            new Error('Private connection failure detail'),
+                        )
+                    },
+                },
+                {
+                    highWaterMark: 0,
+                },
+            )
+
+            const fetchSpy = vi
+                .spyOn(globalThis, 'fetch')
+                .mockResolvedValueOnce(new Response(body, { headers }))
+
+            try {
+                const stream = streamChatMessage('session-123', 'Hello')
+
+                expect(await stream.next()).toEqual({
+                    done: false,
+                    value: {
+                        type: 'content_delta',
+                        content: 'Partial reply',
+                    },
+                })
+
+                await expect(stream.next()).rejects.toMatchObject({
+                    name: 'ChatStreamError',
+                    message: 'Unable to read the chat stream.',
+                    requestId,
+                })
+            } finally {
+                fetchSpy.mockRestore()
+            }
+        },
+    )
+
+    it.each([
+        {
+            scenario: 'invalid JSON',
+            body: 'event: content_delta\ndata: {"content":\n\n',
+            message: 'Unable to read the chat stream.',
+        },
+        {
+            scenario: 'invalid event payload',
+            body: 'event: content_delta\ndata: {"content":123}\n\n',
+            message: 'Unable to read the chat stream.',
+        },
+        {
+            scenario: 'missing terminal event',
+            body: 'event: content_delta\ndata: {"content":"Partial reply"}\n\n',
+            message: 'Chat stream ended before completion.',
+        },
+    ])(
+        'should preserve the response request ID for $scenario',
+        async ({ body, message }) => {
+            const requestId = '83100577-b10b-4953-89fe-b7c29cbcfd36'
+
+            const fetchSpy = vi
+                .spyOn(globalThis, 'fetch')
+                .mockResolvedValueOnce(
+                    new Response(body, {
+                        headers: {
+                            'Content-Type': 'text/event-stream',
+                            'X-Request-ID': requestId,
+                        },
+                    }),
+                )
+
+            try {
+                await expect(
+                    collectChatEvents(
+                        streamChatMessage('session-123', 'Hello'),
+                    ),
+                ).rejects.toMatchObject({
+                    name: 'ChatStreamError',
+                    message,
+                    requestId,
+                })
+            } finally {
+                fetchSpy.mockRestore()
+            }
+        },
+    )
+
+    it.each([
+        {
+            terminal: 'completed',
+            block: 'event: completed\ndata: {"response":"Done"}\n\n',
+            expected: {
+                type: 'completed',
+                response: 'Done',
+            },
+        },
+        {
+            terminal: 'error',
+            block:
+                'event: error\n' +
+                'data: {"error":"session_conflict","message":"Please retry."}\n\n',
+            expected: {
+                type: 'error',
+                error: 'session_conflict',
+                message: 'Please retry.',
+                requestId: '83100577-b10b-4953-89fe-b7c29cbcfd36',
+            },
+        },
+    ])(
+        'should stop parsing after the $terminal event',
+        async ({ block, expected }) => {
+            const fetchSpy = vi
+                .spyOn(globalThis, 'fetch')
+                .mockResolvedValueOnce(
+                    new Response(
+                        block + 'event: content_delta\ndata: invalid-json\n\n',
+                        {
+                            headers: {
+                                'Content-Type': 'text/event-stream',
+                                'X-Request-ID':
+                                    '83100577-b10b-4953-89fe-b7c29cbcfd36',
+                            },
+                        },
+                    ),
+                )
+
+            try {
+                const events = await collectChatEvents(
+                    streamChatMessage('session-123', 'Hello'),
+                )
+
+                expect(events).toEqual([expected])
+            } finally {
+                fetchSpy.mockRestore()
+            }
+        },
+    )
+
     it('should reject a response that is not an SSE stream', async () => {
         fetchMock.mockResolvedValue(
             createJsonResponse({

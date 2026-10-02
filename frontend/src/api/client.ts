@@ -34,6 +34,17 @@ export class ApiError extends Error {
     }
 }
 
+export class ChatStreamError extends Error {
+    readonly requestId: string | null
+
+    constructor(message: string, requestId: string | null = null) {
+        super(message)
+
+        this.name = 'ChatStreamError'
+        this.requestId = requestId
+    }
+}
+
 async function createApiError(response: Response): Promise<ApiError> {
     let message = `API request failed with status ${response.status}`
 
@@ -166,29 +177,45 @@ export async function* streamChatMessage(
         throw await createApiError(response)
     }
 
+    const requestId = response.headers.get('X-Request-ID')
     const contentType = response.headers.get('Content-Type')
 
     if (
         contentType === null ||
         !contentType.toLowerCase().startsWith('text/event-stream')
     ) {
-        throw new Error('API returned an invalid chat stream response.')
+        throw new ChatStreamError(
+            'API returned an invalid chat stream response.',
+            requestId,
+        )
     }
 
     if (response.body === null) {
-        throw new Error('API returned an empty chat stream response.')
+        throw new ChatStreamError(
+            'API returned an empty chat stream response.',
+            requestId,
+        )
     }
 
-    const requestId = response.headers.get('X-Request-ID')
-
-    for await (const event of parseChatStream(response.body)) {
-        if (event.type === 'error') {
-            yield {
-                ...event,
-                requestId,
+    try {
+        for await (const event of parseChatStream(response.body)) {
+            if (event.type === 'error') {
+                yield {
+                    ...event,
+                    requestId,
+                }
+                return
             }
-        } else {
+
             yield event
+
+            if (event.type === 'completed') {
+                return
+            }
         }
+    } catch {
+        throw new ChatStreamError('Unable to read the chat stream.', requestId)
     }
+
+    throw new ChatStreamError('Chat stream ended before completion.', requestId)
 }

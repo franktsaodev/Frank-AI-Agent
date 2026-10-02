@@ -16,6 +16,7 @@ Semantic Versioning.
 ### Changed
 
 - Changed chat-stream error logging to use fixed error codes without exception messages or tracebacks.
+- Changed frontend stream error handling to preserve response request IDs for invalid, interrupted, malformed, or incomplete chat streams.
 
 ## [1.5.0] - 2026-09-29
 
