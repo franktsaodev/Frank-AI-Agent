@@ -12,6 +12,7 @@ Semantic Versioning.
 - Added server-generated request IDs to API responses and request logs, with CORS exposure for configured origins.
 - Added response-start duration and correlated chat-stream outcome logs.
 - Added frontend request ID diagnostics for HTTP and SSE chat errors, with a selectable field for troubleshooting.
+- Added request ID diagnostics for frontend initialization failures, with clearing and replacement during connection retries.
 
 ### Changed
 

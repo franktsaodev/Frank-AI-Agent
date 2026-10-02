@@ -192,6 +192,138 @@ describe('App', () => {
         expect(initializeApplicationMock).toHaveBeenCalledTimes(2)
     })
 
+    it('should show the initialization request ID and clear it after retrying', async () => {
+        const user = userEvent.setup()
+        const requestId = '83100577-b10b-4953-89fe-b7c29cbcfd36'
+
+        initializeApplicationMock
+            .mockRejectedValueOnce(
+                new ApiError(503, 'Session storage is unavailable.', requestId),
+            )
+            .mockResolvedValueOnce({
+                health: healthResponse,
+                sessionId: 'recovered-session',
+                history: [],
+            })
+
+        render(<App />)
+
+        expect(await screen.findByText('API unavailable')).toBeInTheDocument()
+
+        const requestIdInput = await screen.findByRole('textbox', {
+            name: 'Request ID',
+        })
+
+        expect(requestIdInput).toHaveValue(requestId)
+        expect(requestIdInput).toHaveAttribute('readonly')
+
+        await user.click(
+            screen.getByRole('button', {
+                name: 'Retry connection',
+            }),
+        )
+
+        expect(await screen.findByText('Agent ready')).toBeInTheDocument()
+        expect(screen.getByTitle('recovered-session')).toHaveTextContent(
+            'recovered-session',
+        )
+        expect(
+            screen.queryByRole('textbox', {
+                name: 'Request ID',
+            }),
+        ).not.toBeInTheDocument()
+    })
+
+    it.each([
+        {
+            scenario: 'an API error with a request ID',
+            error: new ApiError(
+                503,
+                'Private retry failure detail',
+                'retry-request-id',
+            ),
+            requestId: 'retry-request-id',
+        },
+        {
+            scenario: 'an API error without a request ID',
+            error: new ApiError(503, 'Private retry failure detail'),
+            requestId: null,
+        },
+        {
+            scenario: 'a network error',
+            error: new Error('Private retry failure detail'),
+            requestId: null,
+        },
+    ])(
+        'should update initialization diagnostics after retrying fails with $scenario',
+        async ({ error, requestId }) => {
+            const user = userEvent.setup()
+            let rejectRetry!: (reason: Error) => void
+
+            const retryPromise = new Promise<never>((_, reject) => {
+                rejectRetry = reject
+            })
+
+            initializeApplicationMock
+                .mockRejectedValueOnce(
+                    new ApiError(
+                        503,
+                        'Initial failure detail',
+                        'initial-request-id',
+                    ),
+                )
+                .mockReturnValueOnce(retryPromise)
+
+            render(<App />)
+
+            expect(
+                await screen.findByRole('textbox', { name: 'Request ID' }),
+            ).toHaveValue('initial-request-id')
+
+            await user.click(
+                screen.getByRole('button', { name: 'Retry connection' }),
+            )
+
+            expect(screen.getByText('Initializing agent')).toBeInTheDocument()
+            expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+            expect(
+                screen.queryByRole('textbox', { name: 'Request ID' }),
+            ).not.toBeInTheDocument()
+
+            await act(async () => {
+                rejectRetry(error)
+            })
+
+            expect(
+                await screen.findByText('API unavailable'),
+            ).toBeInTheDocument()
+            expect(screen.getByRole('alert')).toHaveTextContent(
+                'Unable to initialize the agent. Please retry.',
+            )
+            expect(
+                screen.queryByText('Private retry failure detail'),
+            ).not.toBeInTheDocument()
+
+            if (requestId === null) {
+                expect(
+                    screen.queryByRole('textbox', { name: 'Request ID' }),
+                ).not.toBeInTheDocument()
+            } else {
+                expect(
+                    screen.getByRole('textbox', { name: 'Request ID' }),
+                ).toHaveValue(requestId)
+            }
+
+            expect(
+                screen.getByRole('textbox', { name: 'Chat message' }),
+            ).toBeDisabled()
+            expect(
+                screen.getByRole('button', { name: 'Retry connection' }),
+            ).toBeEnabled()
+            expect(initializeApplicationMock).toHaveBeenCalledTimes(2)
+        },
+    )
+
     it('should stream and display the agent response', async () => {
         const user = userEvent.setup()
 

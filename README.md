@@ -845,6 +845,11 @@ be selected and copied for troubleshooting. If recovery fails, the field
 shows the recovery request's ID when available. Starting another chat
 submission clears the previous error and request ID.
 
+Initialization failures also display the available request ID with a generic
+error message. Starting a connection retry clears the previous diagnostics.
+If the retry fails, the frontend displays the new failure's request ID when
+available; otherwise, the request ID field remains hidden.
+
 API response-start logs include the same request ID, HTTP method, status
 code, and `duration_ms`. This duration measures middleware processing until
 the response is available; it does not measure full response delivery.

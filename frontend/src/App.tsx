@@ -120,12 +120,19 @@ function App() {
                 setHealth(result.health)
                 setSessionId(result.sessionId)
                 setMessages(restoredMessages)
+                setChatError(null)
                 setConnectionState('online')
             })
-            .catch(() => {
-                if (active) {
-                    setConnectionState('offline')
+            .catch((error: unknown) => {
+                if (!active) {
+                    return
                 }
+
+                setChatError(
+                    'Unable to initialize the agent. Please retry.',
+                    error instanceof ApiError ? error.requestId : null,
+                )
+                setConnectionState('offline')
             })
 
         return () => {
@@ -172,9 +179,13 @@ function App() {
             setSessionId(result.sessionId)
             setMessages(restoredMessages)
             setConnectionState('online')
-        } catch {
+        } catch (error: unknown) {
             setHealth(null)
             setSessionId(null)
+            setChatError(
+                'Unable to initialize the agent. Please retry.',
+                error instanceof ApiError ? error.requestId : null,
+            )
             setConnectionState('offline')
         }
     }
