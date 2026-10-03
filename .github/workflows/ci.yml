@@ -113,7 +113,18 @@ jobs:
         run: cp .env.example .env
 
       - name: Validate Docker Compose
-        run: docker compose config --quiet
+        run: |
+          docker compose config --quiet
+          docker compose --profile monitoring config --quiet
+
+      - name: Build monitoring image
+        run: docker compose --profile monitoring build prometheus
+
+      - name: Validate Prometheus configuration
+        run: |
+          docker compose --profile monitoring run --rm --no-deps \
+            --entrypoint /bin/promtool prometheus \
+            check config /etc/prometheus/prometheus.yml
 
       - name: Build container images
         run: docker compose build

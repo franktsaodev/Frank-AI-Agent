@@ -1192,6 +1192,63 @@ Stop the application:
 docker compose down
 ```
 
+### Prometheus Monitoring
+
+An optional Docker Compose `monitoring` profile runs Prometheus and scrapes
+the API metrics endpoint every 15 seconds.
+
+Start the application with monitoring enabled:
+
+```bash
+docker compose --profile monitoring up --build -d
+```
+
+Open Prometheus at `http://localhost:9090`. Its published port is bound to
+`127.0.0.1`.
+
+The `frank-ai-agent` scrape job collects metrics from `http://api:8000/metrics`
+through the Compose network. In Prometheus, open the target health page and
+confirm that this target is `UP`.
+
+Example PromQL queries:
+
+```promql
+up{job="frank-ai-agent"}
+```
+
+```promql
+frank_ai_agent_http_requests_total{job="frank-ai-agent"}
+```
+
+```promql
+frank_ai_agent_chat_streams_total{job="frank-ai-agent"}
+```
+
+Chat stream outcome series appear after a stream finishes. The duration
+histogram's `_count` records the number of observations, and `_sum` records
+their total duration in seconds.
+
+The monitoring image uses Prometheus `v3.15.0` and includes the configuration
+from `monitoring/prometheus.yml`. After editing this file, rebuild and
+recreate the Prometheus service:
+
+```bash
+docker compose --profile monitoring up --build -d prometheus
+```
+
+Prometheus stores its time-series data in the `prometheus-data` named volume.
+The application metrics registry remains process-local; Prometheus stores
+the samples collected from it.
+
+CI builds the monitoring image and validates its configuration with
+`promtool check config`. Runtime target health is verified separately.
+
+Stop the application and monitoring services:
+
+```bash
+docker compose --profile monitoring down
+```
+
 ### Build the Docker Image Manually
 
 ```bash
