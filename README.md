@@ -867,28 +867,45 @@ Chat-stream error logs use fixed error codes without exception tracebacks.
 CORS preflight requests are handled directly by the CORS middleware and do
 not receive an application request ID.
 
-### HTTP Metrics
+### HTTP and Chat Stream Metrics
 
 `GET /metrics` exposes application metrics in Prometheus text format.
 This endpoint is excluded from the OpenAPI schema.
 
-| Metric                                                | Type      | Description                                       |
-| ----------------------------------------------------- | --------- | ------------------------------------------------- |
-| `frank_ai_agent_http_requests_total`                  | Counter   | Number of HTTP responses started                  |
-| `frank_ai_agent_http_response_start_duration_seconds` | Histogram | Middleware duration until a response is available |
+| Metric                                                | Type      | Description                                            |
+| ----------------------------------------------------- | --------- | ------------------------------------------------------ |
+| `frank_ai_agent_http_requests_total`                  | Counter   | Number of HTTP responses started                       |
+| `frank_ai_agent_http_response_start_duration_seconds` | Histogram | Middleware duration until a response is available      |
+| `frank_ai_agent_chat_streams_total`                   | Counter   | Number of chat streams finished, grouped by outcome    |
+| `frank_ai_agent_chat_stream_duration_seconds`         | Histogram | Duration from stream iteration start until termination |
 
-Both metrics use `method`, `route`, and `status` labels. Matched routes use
-templates such as `/api/v1/sessions/{session_id}/chat`. Unmatched routes
-use `unmatched`, and nonstandard HTTP methods use `OTHER`. Labels do not
-include session IDs, request IDs, query strings, or request bodies.
+HTTP metrics use `method`, `route`, and `status` labels. Matched routes use
+route templates with placeholders such as `{session_id}`. Unmatched routes
+use `unmatched`, and nonstandard HTTP methods use `OTHER`.
 
-The histogram measures the same interval as the response-start log, in
-seconds. It does not measure full response delivery or SSE stream completion.
-An SSE response can have HTTP status `200` even when a later stream event
-reports an error.
+The HTTP histogram measures the same interval as the response-start log,
+in seconds. It does not measure full response delivery or SSE stream
+completion. Requests to the metrics endpoint and CORS preflight requests
+handled directly by the CORS middleware are excluded from HTTP metrics.
 
-Requests to the metrics endpoint and CORS preflight requests handled directly
-by the CORS middleware are excluded from these metrics.
+Chat stream metrics use only the `outcome` label:
+
+- `completed`: Session persistence succeeded and a completion event was produced.
+- `failed`: Stream processing or session persistence failed, including session conflicts.
+- `incomplete`: Stream iteration terminated without completion or a handled failure.
+
+The chat stream histogram measures elapsed time from the start of serializer
+iteration until its finalization block runs, including session persistence.
+It does not confirm that the client received the complete response.
+Requests rejected before stream iteration starts are represented by HTTP
+metrics only.
+
+An SSE response can have HTTP status `200` while its final stream outcome is
+`failed`. HTTP response metrics and chat stream metrics describe these
+different stages.
+
+Metric labels do not include session IDs, request IDs, query strings,
+request bodies, response content, or exception messages.
 
 Each application instance owns an independent, process-local registry.
 Metrics reset when a new application instance is created and are not
@@ -911,7 +928,7 @@ curl http://localhost:8000/metrics
 | `POST`   | `/api/v1/sessions/{session_id}/chat/stream` | Stream chat events using Server-Sent Events                                  |
 | `GET`    | `/api/v1/sessions/{session_id}/history`     | Get conversation history                                                     |
 | `DELETE` | `/api/v1/sessions/{session_id}/history`     | Clear conversation history                                                   |
-| `GET`    | `/metrics`                                  | Retrieve Prometheus HTTP metrics                                             |
+| `GET`    | `/metrics`                                  | Retrieve Prometheus HTTP and chat stream metrics                             |
 
 Session requests that encounter a Redis error before the response starts return
 HTTP `503`:

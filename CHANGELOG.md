@@ -14,6 +14,7 @@ Semantic Versioning.
 - Added frontend request ID diagnostics for HTTP and SSE chat errors, with a selectable field for troubleshooting.
 - Added request ID diagnostics for frontend initialization failures, with clearing and replacement during connection retries.
 - Added a Prometheus-compatible `/metrics` endpoint with per-application HTTP request counters and response-start duration histograms using bounded labels.
+- Added chat stream outcome counters and duration histograms to `/metrics`, with fixed outcome labels and per-application registry isolation.
 
 ### Changed
 

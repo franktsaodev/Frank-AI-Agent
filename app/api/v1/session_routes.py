@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Callable, Iterable, Iterator
 from time import perf_counter
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import StreamingResponse
@@ -10,6 +10,7 @@ from app.api.chat_stream_serializer import (
     serialize_chat_stream_error,
     serialize_chat_stream_event,
 )
+from app.api.http_metrics import ChatStreamOutcome, HttpMetrics
 from app.api.models import (
     ChatRequest,
     ChatResponse,
@@ -127,11 +128,20 @@ def stream_chat_with_session(
         },
     )
 
+    http_metrics = cast(
+        HttpMetrics,
+        http_request.app.state.http_metrics,
+    )
+
     serialized_events = _serialize_chat_stream(
         events,
         request_id=http_request.state.request_id,
         on_completed=lambda: manager.save(
             session,
+        ),
+        on_finished=lambda outcome, duration_seconds: http_metrics.observe_chat_stream(
+            outcome=outcome,
+            duration_seconds=duration_seconds,
         ),
     )
 
@@ -244,9 +254,10 @@ def _serialize_chat_stream(
     *,
     request_id: str,
     on_completed: Callable[[], None],
+    on_finished: Callable[[ChatStreamOutcome, float], None] | None = None,
 ) -> Iterator[str]:
     started_at = perf_counter()
-    outcome = "incomplete"
+    outcome: ChatStreamOutcome = "incomplete"
     error_code = "none"
 
     try:
@@ -331,7 +342,8 @@ def _serialize_chat_stream(
         )
 
     finally:
-        duration_ms = (perf_counter() - started_at) * 1000
+        duration_seconds = perf_counter() - started_at
+        duration_ms = duration_seconds * 1000
 
         logger.info(
             "Chat stream finished request_id=%s outcome=%s "
@@ -341,3 +353,6 @@ def _serialize_chat_stream(
             error_code,
             duration_ms,
         )
+
+        if on_finished is not None:
+            on_finished(outcome, duration_seconds)

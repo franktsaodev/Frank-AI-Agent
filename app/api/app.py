@@ -66,6 +66,7 @@ def create_app(
     )
 
     http_metrics = HttpMetrics()
+    app.state.http_metrics = http_metrics
 
     @app.get("/metrics", include_in_schema=False)
     async def get_metrics() -> Response:

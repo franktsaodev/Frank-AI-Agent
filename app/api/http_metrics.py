@@ -1,9 +1,13 @@
+from typing import Literal
+
 from prometheus_client import (
     CollectorRegistry,
     Counter,
     Histogram,
     generate_latest,
 )
+
+ChatStreamOutcome = Literal["completed", "failed", "incomplete"]
 
 
 class HttpMetrics:
@@ -21,6 +25,33 @@ class HttpMetrics:
             "frank_ai_agent_http_response_start_duration_seconds",
             "Middleware duration until an HTTP response is available.",
             labelnames=("method", "route", "status"),
+            registry=self._registry,
+        )
+
+        self._chat_streams = Counter(
+            "frank_ai_agent_chat_streams_total",
+            "Chat streams finished, grouped by outcome.",
+            labelnames=("outcome",),
+            registry=self._registry,
+        )
+
+        self._chat_stream_duration = Histogram(
+            "frank_ai_agent_chat_stream_duration_seconds",
+            "Duration from chat stream iteration start until termination.",
+            labelnames=("outcome",),
+            buckets=(
+                0.1,
+                0.25,
+                0.5,
+                1.0,
+                2.5,
+                5.0,
+                10.0,
+                30.0,
+                60.0,
+                120.0,
+                300.0,
+            ),
             registry=self._registry,
         )
 
@@ -52,6 +83,17 @@ class HttpMetrics:
 
         self._requests.labels(**labels).inc()
         self._response_start_duration.labels(**labels).observe(
+            duration_seconds,
+        )
+
+    def observe_chat_stream(
+        self,
+        *,
+        outcome: ChatStreamOutcome,
+        duration_seconds: float,
+    ) -> None:
+        self._chat_streams.labels(outcome=outcome).inc()
+        self._chat_stream_duration.labels(outcome=outcome).observe(
             duration_seconds,
         )
 
