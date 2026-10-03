@@ -894,6 +894,10 @@ Chat stream metrics use only the `outcome` label:
 - `failed`: Stream processing or session persistence failed, including session conflicts.
 - `incomplete`: Stream iteration terminated without completion or a handled failure.
 
+Chat stream counters expose all three outcomes at zero when the application
+starts. Duration histogram series are created when an outcome is first
+observed.
+
 The chat stream histogram measures elapsed time from the start of serializer
 iteration until its finalization block runs, including session persistence.
 It does not confirm that the client received the complete response.
@@ -1224,9 +1228,10 @@ frank_ai_agent_http_requests_total{job="frank-ai-agent"}
 frank_ai_agent_chat_streams_total{job="frank-ai-agent"}
 ```
 
-Chat stream outcome series appear after a stream finishes. The duration
-histogram's `_count` records the number of observations, and `_sum` records
-their total duration in seconds.
+Chat stream counters expose zero-valued series before any stream finishes.
+The duration histogram's `_count` records the number of observations, and
+`_sum` records their total duration in seconds. Histogram series appear
+when their outcome is first observed.
 
 The monitoring image uses Prometheus `v3.15.0` and includes the configuration
 from `monitoring/prometheus.yml`. After editing this file, rebuild and
@@ -1240,8 +1245,42 @@ Prometheus stores its time-series data in the `prometheus-data` named volume.
 The application metrics registry remains process-local; Prometheus stores
 the samples collected from it.
 
-CI builds the monitoring image and validates its configuration with
-`promtool check config`. Runtime target health is verified separately.
+The monitoring image also includes alert rules from `monitoring/alerts.yml`.
+Prometheus evaluates these rules every 15 seconds.
+
+| Alert                            | Condition                                                                           |
+| -------------------------------- | ----------------------------------------------------------------------------------- |
+| `FrankAIAgentAPIScrapeFailed`    | The API scrape target remains `up=0` for one minute                                 |
+| `FrankAIAgentChatStreamFailures` | The failed chat stream counter shows a positive increase over the last five minutes |
+
+Both alerts use `severity=warning`. Open `http://localhost:9090/alerts`
+to inspect their states. The scrape failure alert becomes pending before
+firing; it resolves when scraping succeeds again.
+
+The scrape alert checks access to `/metrics`. Redis readiness is checked
+separately through `/ready`. A target removed from the scrape configuration
+is not detected by the `up=0` rule.
+
+The chat stream alert evaluates increases between collected counter samples.
+Failures occurring before the first sample, or changes lost between scrapes
+during a process restart, may not be detected. The alert includes all failures
+classified as `failed`, including session conflicts.
+
+Alerts are evaluated and displayed in Prometheus. External notifications
+require an Alertmanager configuration.
+
+After editing the scrape configuration or alert rules, rebuild and recreate
+the Prometheus service:
+
+```bash
+docker compose --profile monitoring up --build -d prometheus
+```
+
+CI builds the monitoring image, validates its configuration with
+`promtool check config`, and runs the rule tests with `promtool test rules`.
+The tests cover normal operation, short and sustained scrape failures,
+recovery, stream failure increases, and counter resets.
+Runtime target health is verified separately.
 
 Stop the application and monitoring services:
 

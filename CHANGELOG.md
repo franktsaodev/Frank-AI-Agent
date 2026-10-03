@@ -16,11 +16,13 @@ Semantic Versioning.
 - Added a Prometheus-compatible `/metrics` endpoint with per-application HTTP request counters and response-start duration histograms using bounded labels.
 - Added chat stream outcome counters and duration histograms to `/metrics`, with fixed outcome labels and per-application registry isolation.
 - Added an optional Prometheus Docker Compose monitoring profile with a bundled scrape configuration, persistent time-series storage, and CI configuration validation.
+- Added Prometheus alert rules for sustained API metrics scrape failures and observed chat stream failure increases, with automated rule tests in CI.
 
 ### Changed
 
 - Changed chat-stream error logging to use fixed error codes without exception messages or tracebacks.
 - Changed frontend stream error handling to preserve response request IDs for invalid, interrupted, malformed, or incomplete chat streams.
+- Changed chat stream counters to expose zero-valued series for all outcomes at application startup.
 
 ## [1.5.0] - 2026-09-29
 

@@ -35,6 +35,9 @@ class HttpMetrics:
             registry=self._registry,
         )
 
+        for outcome in ("completed", "failed", "incomplete"):
+            self._chat_streams.labels(outcome=outcome)
+
         self._chat_stream_duration = Histogram(
             "frank_ai_agent_chat_stream_duration_seconds",
             "Duration from chat stream iteration start until termination.",

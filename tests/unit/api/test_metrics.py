@@ -334,6 +334,41 @@ def test_metrics_should_group_nonstandard_methods_under_other() -> None:
 
 @pytest.mark.parametrize(
     "outcome",
+    ["completed", "failed", "incomplete"],
+)
+def test_metrics_should_expose_zero_chat_stream_counters_before_any_stream(
+    outcome: str,
+) -> None:
+    app = create_app(lifespan=empty_lifespan)
+
+    with TestClient(app) as client:
+        response = client.get("/metrics")
+
+    assert response.status_code == 200
+
+    labels = {"outcome": outcome}
+
+    assert (
+        get_sample_value(
+            response.text,
+            name="frank_ai_agent_chat_streams_total",
+            labels=labels,
+        )
+        == 0.0
+    )
+
+    assert (
+        get_sample_value(
+            response.text,
+            name="frank_ai_agent_chat_stream_duration_seconds_count",
+            labels=labels,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "outcome",
     ["completed", "incomplete"],
 )
 def test_metrics_should_record_chat_stream_outcome_and_duration(

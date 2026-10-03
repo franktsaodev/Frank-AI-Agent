@@ -1,0 +1,135 @@
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+evaluation_interval: 15s
+
+tests:
+  - name: Healthy API and unrelated failed target do not trigger an alert
+    interval: 15s
+    input_series:
+      - series: 'up{job="frank-ai-agent",instance="api:8000"}'
+        values: "1x8"
+      - series: 'up{job="another-service",instance="other:8000"}'
+        values: "0x8"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: FrankAIAgentAPIScrapeFailed
+        exp_alerts: []
+
+  - name: A short scrape failure does not trigger a firing alert
+    interval: 15s
+    input_series:
+      - series: 'up{job="frank-ai-agent",instance="api:8000"}'
+        values: "0 0 0 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: FrankAIAgentAPIScrapeFailed
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: FrankAIAgentAPIScrapeFailed
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: FrankAIAgentAPIScrapeFailed
+        exp_alerts: []
+
+  - name: A sustained failure becomes pending then firing and resolves after recovery
+    interval: 15s
+    input_series:
+      - series: 'up{job="frank-ai-agent",instance="api:8000"}'
+        values: "0 0 0 0 0 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 45s
+        alertname: FrankAIAgentAPIScrapeFailed
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: FrankAIAgentAPIScrapeFailed
+        exp_alerts:
+          - exp_labels:
+              job: frank-ai-agent
+              instance: api:8000
+              severity: warning
+            exp_annotations:
+              summary: "Frank AI Agent API metrics scrape is failing."
+              description: "Prometheus has been unable to scrape the API metrics endpoint for at least one minute."
+      - eval_time: 1m15s
+        alertname: FrankAIAgentAPIScrapeFailed
+        exp_alerts: []
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="FrankAIAgentAPIScrapeFailed",alertstate="pending"}'
+        eval_time: 45s
+        exp_samples:
+          - labels: 'ALERTS{alertname="FrankAIAgentAPIScrapeFailed",alertstate="pending",job="frank-ai-agent",instance="api:8000",severity="warning"}'
+            value: 1
+  - name: Old failures and increases in other outcomes or jobs do not trigger an alert
+    interval: 15s
+    input_series:
+      - series: 'frank_ai_agent_chat_streams_total{job="frank-ai-agent",instance="api:8000",outcome="failed"}'
+        values: "5x24"
+      - series: 'frank_ai_agent_chat_streams_total{job="frank-ai-agent",instance="api:8000",outcome="completed"}'
+        values: "0+1x24"
+      - series: 'frank_ai_agent_chat_streams_total{job="frank-ai-agent",instance="api:8000",outcome="incomplete"}'
+        values: "0+1x24"
+      - series: 'frank_ai_agent_chat_streams_total{job="another-service",instance="other:8000",outcome="failed"}'
+        values: "0+1x24"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: FrankAIAgentChatStreamFailures
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: FrankAIAgentChatStreamFailures
+        exp_alerts: []
+
+  - name: A missing failed outcome series does not trigger an alert
+    interval: 15s
+    input_series:
+      - series: 'frank_ai_agent_chat_streams_total{job="frank-ai-agent",instance="api:8000",outcome="completed"}'
+        values: "0+1x8"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: FrankAIAgentChatStreamFailures
+        exp_alerts: []
+
+  - name: An observed failure triggers an alert and resolves after leaving the window
+    interval: 15s
+    input_series:
+      - series: 'frank_ai_agent_chat_streams_total{job="frank-ai-agent",instance="api:8000",outcome="failed"}'
+        values: "0x3 1x20"
+    alert_rule_test:
+      - eval_time: 45s
+        alertname: FrankAIAgentChatStreamFailures
+        exp_alerts: []
+      - eval_time: 1m15s
+        alertname: FrankAIAgentChatStreamFailures
+        exp_alerts:
+          - exp_labels:
+              job: frank-ai-agent
+              instance: api:8000
+              outcome: failed
+              severity: warning
+            exp_annotations:
+              summary: "Frank AI Agent chat stream failures were observed."
+              description: "Prometheus observed an increase in failed chat streams within the last five minutes."
+      - eval_time: 6m
+        alertname: FrankAIAgentChatStreamFailures
+        exp_alerts: []
+
+  - name: A counter reset does not trigger an alert but a later failure does
+    interval: 15s
+    input_series:
+      - series: 'frank_ai_agent_chat_streams_total{job="frank-ai-agent",instance="api:8000",outcome="failed"}'
+        values: "5x2 0x1 1x4"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: FrankAIAgentChatStreamFailures
+        exp_alerts: []
+      - eval_time: 1m30s
+        alertname: FrankAIAgentChatStreamFailures
+        exp_alerts:
+          - exp_labels:
+              job: frank-ai-agent
+              instance: api:8000
+              outcome: failed
+              severity: warning
+            exp_annotations:
+              summary: "Frank AI Agent chat stream failures were observed."
+              description: "Prometheus observed an increase in failed chat streams within the last five minutes."

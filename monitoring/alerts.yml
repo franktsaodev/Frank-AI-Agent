@@ -1,0 +1,18 @@
+groups:
+  - name: frank-ai-agent
+    rules:
+      - alert: FrankAIAgentAPIScrapeFailed
+        expr: up{job="frank-ai-agent"} == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Frank AI Agent API metrics scrape is failing."
+          description: "Prometheus has been unable to scrape the API metrics endpoint for at least one minute."
+      - alert: FrankAIAgentChatStreamFailures
+        expr: increase(frank_ai_agent_chat_streams_total{job="frank-ai-agent",outcome="failed"}[5m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Frank AI Agent chat stream failures were observed."
+          description: "Prometheus observed an increase in failed chat streams within the last five minutes."

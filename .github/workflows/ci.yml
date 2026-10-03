@@ -126,5 +126,11 @@ jobs:
             --entrypoint /bin/promtool prometheus \
             check config /etc/prometheus/prometheus.yml
 
+      - name: Test Prometheus alert rules
+        run: |
+          docker compose --profile monitoring run --rm --no-deps \
+            --entrypoint /bin/promtool prometheus \
+            test rules /etc/prometheus/tests/alerts.test.yml
+
       - name: Build container images
         run: docker compose build
