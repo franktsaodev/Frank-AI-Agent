@@ -5,6 +5,8 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST
+from starlette.routing import Route
 
 from app.api.application_lifespan import (
     application_lifespan,
@@ -13,6 +15,7 @@ from app.api.exception_handlers import (
     register_exception_handlers,
 )
 from app.api.health_routes import router as health_router
+from app.api.http_metrics import HttpMetrics
 from app.api.lifespan_types import Lifespan
 from app.api.runtime_provider import get_runtime_info
 from app.api.v1.session_routes import (
@@ -62,6 +65,17 @@ def create_app(
         lifespan=actual_lifespan,
     )
 
+    http_metrics = HttpMetrics()
+
+    @app.get("/metrics", include_in_schema=False)
+    async def get_metrics() -> Response:
+        return Response(
+            content=http_metrics.render(),
+            headers={
+                "Content-Type": CONTENT_TYPE_LATEST,
+            },
+        )
+
     @app.middleware("http")
     async def add_request_id(
         request: Request,
@@ -88,7 +102,21 @@ def create_app(
 
         response.headers["X-Request-ID"] = request_id
 
-        duration_ms = (perf_counter() - started_at) * 1000
+        duration_seconds = perf_counter() - started_at
+        duration_ms = duration_seconds * 1000
+
+        matched_route = request.scope.get("route")
+        route_label = (
+            matched_route.path if isinstance(matched_route, Route) else "unmatched"
+        )
+
+        if route_label != "/metrics":
+            http_metrics.observe_response(
+                method=request.method,
+                route=route_label,
+                status=response.status_code,
+                duration_seconds=duration_seconds,
+            )
 
         logger.info(
             "HTTP response started request_id=%s method=%s status=%s duration_ms=%.3f",
