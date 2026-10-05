@@ -117,8 +117,8 @@ jobs:
           docker compose config --quiet
           docker compose --profile monitoring config --quiet
 
-      - name: Build monitoring image
-        run: docker compose --profile monitoring build prometheus
+      - name: Build monitoring images
+        run: docker compose --profile monitoring build prometheus grafana
 
       - name: Validate Prometheus configuration
         run: |
@@ -131,6 +131,21 @@ jobs:
           docker compose --profile monitoring run --rm --no-deps \
             --entrypoint /bin/promtool prometheus \
             test rules /etc/prometheus/tests/alerts.test.yml
+
+      - name: Verify Grafana provisioning
+        run: |
+          docker run --detach \
+            --name frank-ai-agent-grafana-check \
+            --publish 127.0.0.1:13000:3000 \
+            frank-ai-agent-grafana:13.2.3
+          python3 monitoring/tests/check_grafana.py
+
+      - name: Remove Grafana verification container
+        if: always()
+        run: |
+          if docker container inspect frank-ai-agent-grafana-check > /dev/null 2>&1; then
+            docker rm --force --volumes frank-ai-agent-grafana-check
+          fi
 
       - name: Build container images
         run: docker compose build

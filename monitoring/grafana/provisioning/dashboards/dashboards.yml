@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: frank-ai-agent
+    orgId: 1
+    folder: Frank AI Agent
+    folderUid: frank-ai-agent
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards

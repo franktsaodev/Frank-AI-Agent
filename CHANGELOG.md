@@ -17,6 +17,7 @@ Semantic Versioning.
 - Added chat stream outcome counters and duration histograms to `/metrics`, with fixed outcome labels and per-application registry isolation.
 - Added an optional Prometheus Docker Compose monitoring profile with a bundled scrape configuration, persistent time-series storage, and CI configuration validation.
 - Added Prometheus alert rules for sustained API metrics scrape failures and observed chat stream failure increases, with automated rule tests in CI.
+- Added Grafana to the optional monitoring profile with a provisioned Prometheus data source, a six-panel HTTP and chat stream dashboard, persistent storage, and CI provisioning verification.
 
 ### Changed
 

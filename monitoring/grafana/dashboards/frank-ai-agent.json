@@ -1,0 +1,252 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1",
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "frank-ai-agent-overview"
+  },
+  "spec": {
+    "title": "Frank AI Agent Overview",
+    "description": "HTTP response-start metrics and chat stream outcomes collected by Prometheus.",
+    "editable": false,
+    "schemaVersion": 41,
+    "version": 1,
+    "tags": ["frank-ai-agent", "prometheus"],
+    "timezone": "browser",
+    "refresh": "15s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "API metrics scrape status",
+        "description": "Latest Prometheus scrape status. This checks /metrics access, not Redis readiness.",
+        "type": "stat",
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 8,
+          "h": 5
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "frank-ai-agent-prometheus"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "up{job=\"frank-ai-agent\"}",
+            "legendFormat": "{{instance}}",
+            "instant": true,
+            "range": false
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "noValue": "No data",
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "text": "DOWN",
+                    "color": "red"
+                  },
+                  "1": {
+                    "text": "UP",
+                    "color": "green"
+                  }
+                }
+              }
+            ]
+          },
+          "overrides": []
+        },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "textMode": "value_and_name",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["last"],
+            "fields": ""
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Current chat stream counters",
+        "description": "Current counters grouped by outcome. Counters reset when an application instance restarts; these are not lifetime totals.",
+        "type": "stat",
+        "gridPos": {
+          "x": 8,
+          "y": 0,
+          "w": 16,
+          "h": 5
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "frank-ai-agent-prometheus"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "sum by (outcome) (frank_ai_agent_chat_streams_total{job=\"frank-ai-agent\"})",
+            "legendFormat": "{{outcome}}",
+            "instant": true,
+            "range": false
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "min": 0,
+            "noValue": "No data"
+          },
+          "overrides": []
+        },
+        "options": {
+          "graphMode": "none",
+          "textMode": "value_and_name",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["last"],
+            "fields": ""
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "HTTP response rate by status",
+        "description": "HTTP responses started per second. HTTP 200 for an SSE response does not confirm stream success.",
+        "type": "timeseries",
+        "gridPos": {
+          "x": 0,
+          "y": 5,
+          "w": 12,
+          "h": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "frank-ai-agent-prometheus"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "sum by (status) (rate(frank_ai_agent_http_requests_total{job=\"frank-ai-agent\"}[$__rate_interval]))",
+            "legendFormat": "HTTP {{status}}",
+            "range": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "min": 0
+          },
+          "overrides": []
+        }
+      },
+      {
+        "id": 4,
+        "title": "HTTP response-start duration P95",
+        "description": "Estimated 95th percentile by method and route. Measures time until a response is available, not full response delivery or SSE completion.",
+        "type": "timeseries",
+        "gridPos": {
+          "x": 12,
+          "y": 5,
+          "w": 12,
+          "h": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "frank-ai-agent-prometheus"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "histogram_quantile(0.95, sum by (le, method, route) (rate(frank_ai_agent_http_response_start_duration_seconds_bucket{job=\"frank-ai-agent\"}[$__rate_interval]))) and on (method, route) (sum by (method, route) (rate(frank_ai_agent_http_response_start_duration_seconds_count{job=\"frank-ai-agent\"}[$__rate_interval])) > 0)",
+            "legendFormat": "{{method}} {{route}}",
+            "range": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "min": 0
+          },
+          "overrides": []
+        }
+      },
+      {
+        "id": 5,
+        "title": "Estimated chat stream finishes over 5 minutes",
+        "description": "Counter increases grouped by outcome over a rolling five-minute window. Prometheus extrapolation can produce fractional values.",
+        "type": "timeseries",
+        "gridPos": {
+          "x": 0,
+          "y": 13,
+          "w": 12,
+          "h": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "frank-ai-agent-prometheus"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "sum by (outcome) (increase(frank_ai_agent_chat_streams_total{job=\"frank-ai-agent\"}[5m]))",
+            "legendFormat": "{{outcome}}",
+            "range": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        }
+      },
+      {
+        "id": 6,
+        "title": "Average chat stream duration by outcome",
+        "description": "Mean serializer iteration duration, including session persistence. Outcomes without observations are omitted. Does not confirm complete client delivery.",
+        "type": "timeseries",
+        "gridPos": {
+          "x": 12,
+          "y": 13,
+          "w": 12,
+          "h": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "frank-ai-agent-prometheus"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "(sum by (outcome) (rate(frank_ai_agent_chat_stream_duration_seconds_sum{job=\"frank-ai-agent\"}[$__rate_interval])) / sum by (outcome) (rate(frank_ai_agent_chat_stream_duration_seconds_count{job=\"frank-ai-agent\"}[$__rate_interval]))) and on (outcome) (sum by (outcome) (rate(frank_ai_agent_chat_stream_duration_seconds_count{job=\"frank-ai-agent\"}[$__rate_interval])) > 0)",
+            "legendFormat": "{{outcome}}",
+            "range": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "min": 0
+          },
+          "overrides": []
+        }
+      }
+    ]
+  }
+}

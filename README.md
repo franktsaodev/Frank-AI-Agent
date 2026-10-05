@@ -1198,8 +1198,9 @@ docker compose down
 
 ### Prometheus Monitoring
 
-An optional Docker Compose `monitoring` profile runs Prometheus and scrapes
-the API metrics endpoint every 15 seconds.
+An optional Docker Compose `monitoring` profile runs Prometheus and Grafana.
+Prometheus scrapes the API metrics endpoint every 15 seconds, and Grafana
+provides a provisioned dashboard for the collected metrics.
 
 Start the application with monitoring enabled:
 
@@ -1287,6 +1288,77 @@ Stop the application and monitoring services:
 ```bash
 docker compose --profile monitoring down
 ```
+
+### Grafana Dashboard
+
+The `monitoring` profile includes Grafana OSS `13.2.3`, available at
+`http://localhost:3000`. Its published port is bound to `127.0.0.1`.
+
+On a fresh Grafana installation, sign in with `admin` / `admin` and change
+the password when prompted. Grafana stores its database and account settings
+in the `grafana-data` named volume.
+
+The image automatically provisions a Prometheus data source using
+`http://prometheus:9090` through the Compose network. Its fixed UID is
+`frank-ai-agent-prometheus`.
+
+Open the **Frank AI Agent** folder and select **Frank AI Agent Overview**,
+or visit:
+
+```text
+http://localhost:3000/d/frank-ai-agent-overview
+```
+
+The dashboard refreshes every 15 seconds and defaults to the last hour.
+
+| Panel                                         | Meaning                                                                   |
+| --------------------------------------------- | ------------------------------------------------------------------------- |
+| API metrics scrape status                     | Latest Prometheus scrape status for the API                               |
+| Current chat stream counters                  | Current counters grouped by stream outcome                                |
+| HTTP response rate by status                  | HTTP responses started per second, grouped by status code                 |
+| HTTP response-start duration P95              | Estimated response-start duration percentile, grouped by method and route |
+| Estimated chat stream finishes over 5 minutes | Rolling five-minute counter increases, grouped by outcome                 |
+| Average chat stream duration by outcome       | Mean serializer iteration duration, including session persistence         |
+
+The scrape status checks access to `/metrics`; Redis readiness is checked
+separately through `/ready`.
+
+HTTP response-start duration does not measure full response delivery or
+SSE completion. A stream can start with HTTP `200` and subsequently fail.
+
+Current stream counters reset when an application instance restarts.
+The five-minute increases can contain fractional values because Prometheus
+extrapolates counter changes between collected samples.
+
+Rate and duration panels require observations in their query window.
+A duration panel may show no data before any streams are observed or when
+there are no recent observations. Missing observations are not displayed
+as zero duration.
+
+Grafana settings are maintained in:
+
+- `monitoring/grafana/provisioning/datasources/prometheus.yml`
+- `monitoring/grafana/provisioning/dashboards/dashboards.yml`
+- `monitoring/grafana/dashboards/frank-ai-agent.json`
+
+The data source and dashboard definitions are bundled into the image.
+Update the source files to change the provisioned configuration.
+
+When the API and Prometheus are already running, rebuild and update only
+Grafana:
+
+```bash
+docker compose --profile monitoring build grafana
+docker compose --profile monitoring up -d --no-build --no-deps --wait --wait-timeout 120 grafana
+```
+
+CI builds the Grafana image and starts a disposable verification container.
+`monitoring/tests/check_grafana.py` verifies the provisioned Prometheus data
+source and the six dashboard panels through the Grafana API. The verification
+container is removed afterward.
+
+This CI check verifies provisioning. Live Prometheus connectivity and panel
+query results are verified separately against the running monitoring stack.
 
 ### Build the Docker Image Manually
 
