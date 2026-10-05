@@ -102,8 +102,11 @@ def verify_panel_queries(
     queries: dict[int, tuple[str, bool]],
     headers: dict[str, str],
 ) -> None:
-    if set(queries) != {1, 2, 3, 4, 5, 6}:
-        raise RuntimeError("Expected dashboard panel IDs 1 through 6.")
+    if set(queries) != {1, 2, 3, 4, 5, 6, 7}:
+        raise RuntimeError("Expected dashboard panel IDs 1 through 7.")
+
+    if not queries[7][1]:
+        raise RuntimeError("The active chat stream panel must use an instant query.")
 
     readiness_query = (
         "min(count_over_time("
@@ -200,6 +203,15 @@ def verify_panel_queries(
                 f"Unexpected average duration for {outcome}: {durations}"
             )
 
+    active_streams = results[7]
+
+    if (
+        len(active_streams) != 1
+        or active_streams[0][0] != {}
+        or active_streams[0][1] != 2.0
+    ):
+        raise RuntimeError(f"Unexpected active chat stream count: {active_streams}")
+
     for panel_id in sorted(results):
         print(f"Panel {panel_id} query verified: {len(results[panel_id])} series.")
 
@@ -261,8 +273,8 @@ def main() -> None:
 
     panels = dashboard["panels"]
 
-    if len(panels) != 6:
-        raise RuntimeError("Expected six dashboard panels.")
+    if len(panels) != 7:
+        raise RuntimeError("Expected seven dashboard panels.")
 
     for panel in panels:
         if panel.get("datasource", {}).get("uid") != datasource_uid:
@@ -286,7 +298,7 @@ def main() -> None:
 
     print(
         "Grafana provisioning verified: "
-        "Prometheus data source and six dashboard panels."
+        "Prometheus data source and seven dashboard panels."
     )
 
     if args.queries:

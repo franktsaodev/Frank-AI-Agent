@@ -31,6 +31,7 @@ def render_metrics(batch: int) -> bytes:
     http_duration = "frank_ai_agent_http_response_start_duration_seconds"
     stream_counter = "frank_ai_agent_chat_streams_total"
     stream_duration = "frank_ai_agent_chat_stream_duration_seconds"
+    stream_active = "frank_ai_agent_chat_streams_active"
 
     samples = [
         f"# HELP {http_counter} Synthetic HTTP response counters.",
@@ -86,6 +87,14 @@ def render_metrics(batch: int) -> bytes:
                 duration=duration,
             )
         )
+
+    samples.extend(
+        [
+            f"# HELP {stream_active} Synthetic active chat stream iterations.",
+            f"# TYPE {stream_active} gauge",
+            f"{stream_active} 2",
+        ]
+    )
 
     return ("\n".join(samples) + "\n").encode("utf-8")
 

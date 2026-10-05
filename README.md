@@ -1321,14 +1321,23 @@ http://localhost:3000/d/frank-ai-agent-overview
 
 The dashboard refreshes every 15 seconds and defaults to the last hour.
 
-| Panel                                         | Meaning                                                                   |
-| --------------------------------------------- | ------------------------------------------------------------------------- |
-| API metrics scrape status                     | Latest Prometheus scrape status for the API                               |
-| Current chat stream counters                  | Current counters grouped by stream outcome                                |
-| HTTP response rate by status                  | HTTP responses started per second, grouped by status code                 |
-| HTTP response-start duration P95              | Estimated response-start duration percentile, grouped by method and route |
-| Estimated chat stream finishes over 5 minutes | Rolling five-minute counter increases, grouped by outcome                 |
-| Average chat stream duration by outcome       | Mean serializer iteration duration, including session persistence         |
+| Panel                                         | Meaning                                                                             |
+| --------------------------------------------- | ----------------------------------------------------------------------------------- |
+| API metrics scrape status                     | Latest Prometheus scrape status for the API                                         |
+| Current chat stream counters                  | Current counters grouped by stream outcome                                          |
+| Active chat stream iterations                 | Latest scraped count of active serializer iterations, including session persistence |
+| HTTP response rate by status                  | HTTP responses started per second, grouped by status code                           |
+| HTTP response-start duration P95              | Estimated response-start duration percentile, grouped by method and route           |
+| Estimated chat stream finishes over 5 minutes | Rolling five-minute counter increases, grouped by outcome                           |
+| Average chat stream duration by outcome       | Mean serializer iteration duration, including session persistence                   |
+
+The active stream panel uses an instant query to sum the latest scraped
+`frank_ai_agent_chat_streams_active` values across API targets in the
+`frank-ai-agent` job. It displays zero when the collected samples report
+no active iterations, and `No data` when the query has no samples.
+
+The value reflects Prometheus scrape snapshots. Short-lived iterations
+that start and finish between scrapes may not appear in the panel.
 
 The scrape status checks access to `/metrics`; Redis readiness is checked
 separately through `/ready`.
@@ -1368,9 +1377,13 @@ HTTP and chat stream metrics without invoking the agent or LLM.
 
 `monitoring/tests/check_grafana.py --queries` verifies the provisioned data
 source and dashboard, waits for at least three scrape samples, and executes
-all six panel queries through Grafana's Prometheus data source. It checks
-series labels, counter and rate ratios, the HTTP duration percentile, and
-average stream durations.
+all seven panel queries through Grafana's Prometheus data source. It checks
+series labels, counter and rate ratios, the HTTP duration percentile,
+average stream durations, and the active stream gauge value.
+
+The fixture exposes a constant active stream gauge of two. Verification
+requires the active stream panel to use an instant query and return one
+aggregated series with that value.
 
 Verification replaces `$__rate_interval` with `1m` and preserves each panel's
 instant or range query mode. The dashboard JSON remains unchanged. Startup

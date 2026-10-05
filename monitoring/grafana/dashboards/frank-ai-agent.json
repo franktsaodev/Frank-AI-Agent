@@ -6,7 +6,7 @@
   },
   "spec": {
     "title": "Frank AI Agent Overview",
-    "description": "HTTP response-start metrics and chat stream outcomes collected by Prometheus.",
+    "description": "HTTP response-start metrics, chat stream outcomes, and active serializer iterations collected by Prometheus.",
     "editable": false,
     "schemaVersion": 41,
     "version": 1,
@@ -32,7 +32,7 @@
         "gridPos": {
           "x": 0,
           "y": 0,
-          "w": 8,
+          "w": 6,
           "h": 5
         },
         "datasource": {
@@ -86,9 +86,9 @@
         "description": "Current counters grouped by outcome. Counters reset when an application instance restarts; these are not lifetime totals.",
         "type": "stat",
         "gridPos": {
-          "x": 8,
+          "x": 6,
           "y": 0,
-          "w": 16,
+          "w": 12,
           "h": 5
         },
         "datasource": {
@@ -245,6 +245,49 @@
             "min": 0
           },
           "overrides": []
+        }
+      },
+      {
+        "id": 7,
+        "title": "Active chat stream iterations",
+        "description": "Latest scraped count of serializer iterations in progress across API scrape targets, including session persistence and finalization.",
+        "type": "stat",
+        "gridPos": {
+          "x": 18,
+          "y": 0,
+          "w": 6,
+          "h": 5
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "frank-ai-agent-prometheus"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "sum(frank_ai_agent_chat_streams_active{job=\"frank-ai-agent\"})",
+            "legendFormat": "Active iterations",
+            "instant": true,
+            "range": false
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "min": 0,
+            "noValue": "No data"
+          },
+          "overrides": []
+        },
+        "options": {
+          "graphMode": "none",
+          "textMode": "value_and_name",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["last"],
+            "fields": ""
+          }
         }
       }
     ]
