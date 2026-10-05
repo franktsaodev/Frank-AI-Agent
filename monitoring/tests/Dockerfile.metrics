@@ -1,0 +1,7 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+COPY metrics_fixture.py /app/metrics_fixture.py
+
+CMD ["python", "/app/metrics_fixture.py"]

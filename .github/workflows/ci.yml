@@ -116,9 +116,20 @@ jobs:
         run: |
           docker compose config --quiet
           docker compose --profile monitoring config --quiet
+          docker compose \
+            -p frank-ai-agent-monitoring-check \
+            -f monitoring/tests/docker-compose.monitoring.yml \
+            config --quiet
 
       - name: Build monitoring images
         run: docker compose --profile monitoring build prometheus grafana
+
+      - name: Build monitoring metrics fixture
+        run: |
+          docker compose \
+            -p frank-ai-agent-monitoring-check \
+            -f monitoring/tests/docker-compose.monitoring.yml \
+            build api
 
       - name: Validate Prometheus configuration
         run: |
@@ -132,20 +143,29 @@ jobs:
             --entrypoint /bin/promtool prometheus \
             test rules /etc/prometheus/tests/alerts.test.yml
 
-      - name: Verify Grafana provisioning
+      - name: Verify monitoring integration
         run: |
-          docker run --detach \
-            --name frank-ai-agent-grafana-check \
-            --publish 127.0.0.1:13000:3000 \
-            frank-ai-agent-grafana:13.2.3
-          python3 monitoring/tests/check_grafana.py
+          docker compose \
+            -p frank-ai-agent-monitoring-check \
+            -f monitoring/tests/docker-compose.monitoring.yml \
+            up -d --no-build --wait --wait-timeout 120
+          python3 monitoring/tests/check_grafana.py --queries
 
-      - name: Remove Grafana verification container
+      - name: Show monitoring verification logs
+        if: failure()
+        run: |
+          docker compose \
+            -p frank-ai-agent-monitoring-check \
+            -f monitoring/tests/docker-compose.monitoring.yml \
+            logs --tail 80
+
+      - name: Remove monitoring verification stack
         if: always()
         run: |
-          if docker container inspect frank-ai-agent-grafana-check > /dev/null 2>&1; then
-            docker rm --force --volumes frank-ai-agent-grafana-check
-          fi
+          docker compose \
+            -p frank-ai-agent-monitoring-check \
+            -f monitoring/tests/docker-compose.monitoring.yml \
+            down --volumes
 
       - name: Build container images
         run: docker compose build

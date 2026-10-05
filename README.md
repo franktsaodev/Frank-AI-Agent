@@ -1352,13 +1352,45 @@ docker compose --profile monitoring build grafana
 docker compose --profile monitoring up -d --no-build --no-deps --wait --wait-timeout 120 grafana
 ```
 
-CI builds the Grafana image and starts a disposable verification container.
-`monitoring/tests/check_grafana.py` verifies the provisioned Prometheus data
-source and the six dashboard panels through the Grafana API. The verification
-container is removed afterward.
+CI builds the monitoring images and a lightweight metrics fixture, then starts
+an isolated Prometheus and Grafana test stack. The fixture emits synthetic
+HTTP and chat stream metrics without invoking the agent or LLM.
 
-This CI check verifies provisioning. Live Prometheus connectivity and panel
-query results are verified separately against the running monitoring stack.
+`monitoring/tests/check_grafana.py --queries` verifies the provisioned data
+source and dashboard, waits for at least three scrape samples, and executes
+all six panel queries through Grafana's Prometheus data source. It checks
+series labels, counter and rate ratios, the HTTP duration percentile, and
+average stream durations.
+
+Verification replaces `$__rate_interval` with `1m` and preserves each panel's
+instant or range query mode. The dashboard JSON remains unchanged. Startup
+plugin auto-updates are disabled in the test Grafana service to keep the
+bundled plugin versions stable during verification.
+
+CI prints container logs on failure and removes the test stack and its
+volumes afterward.
+
+To run the same integration verification locally, execute these commands
+from the repository root:
+
+```bash
+docker compose --profile monitoring build prometheus grafana
+docker compose -p frank-ai-agent-monitoring-check -f monitoring/tests/docker-compose.monitoring.yml build api
+docker compose -p frank-ai-agent-monitoring-check -f monitoring/tests/docker-compose.monitoring.yml down --volumes
+docker compose -p frank-ai-agent-monitoring-check -f monitoring/tests/docker-compose.monitoring.yml up -d --no-build --wait --wait-timeout 120
+python monitoring/tests/check_grafana.py --queries
+```
+
+The test stack publishes Grafana on `127.0.0.1:13000` and Prometheus on
+`127.0.0.1:19090`, using a separate Compose network and disposable storage.
+The `--queries` option checks fixture-specific expected values and is
+intended for this test stack.
+
+After verification, including a failed check, clean up the test stack:
+
+```bash
+docker compose -p frank-ai-agent-monitoring-check -f monitoring/tests/docker-compose.monitoring.yml down --volumes
+```
 
 ### Build the Docker Image Manually
 
