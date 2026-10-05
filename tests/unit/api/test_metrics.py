@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from prometheus_client.parser import text_string_to_metric_families
 
 from app.api.app import create_app
+from app.api.http_metrics import HttpMetrics
 from app.api.session_dependencies import get_session_manager
 from app.models.chat_stream_event import (
     ChatContentDelta,
@@ -29,6 +30,16 @@ def get_sample_value(
                 return sample.value
 
     return None
+
+
+def get_active_chat_streams(
+    metrics: HttpMetrics,
+) -> float | None:
+    return get_sample_value(
+        metrics.render().decode("utf-8"),
+        name="frank_ai_agent_chat_streams_active",
+        labels={},
+    )
 
 
 def test_metrics_should_count_http_requests() -> None:
@@ -594,3 +605,250 @@ def test_chat_stream_metrics_should_be_isolated_between_app_instances() -> None:
             name=metric_name,
             labels=labels,
         ) in (None, 0.0)
+
+
+def test_metrics_should_expose_zero_active_chat_streams() -> None:
+    app = create_app(lifespan=empty_lifespan)
+
+    with TestClient(app) as client:
+        response = client.get("/metrics")
+
+    assert response.status_code == 200
+
+    assert (
+        get_sample_value(
+            response.text,
+            name="frank_ai_agent_chat_streams_active",
+            labels={},
+        )
+        == 0.0
+    )
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    ["completed", "failed", "incomplete"],
+)
+def test_metrics_should_track_active_chat_stream_iteration(
+    outcome: str,
+) -> None:
+    app = create_app(lifespan=empty_lifespan)
+    manager = MagicMock()
+
+    app.dependency_overrides[get_session_manager] = lambda: manager
+
+    active_values: list[float | None] = []
+
+    def record_active_value() -> None:
+        metrics_text = app.state.http_metrics.render().decode("utf-8")
+
+        active_values.append(
+            get_sample_value(
+                metrics_text,
+                name="frank_ai_agent_chat_streams_active",
+                labels={},
+            ),
+        )
+
+    def stream_events() -> Iterator[ChatStreamEvent]:
+        record_active_value()
+
+        yield ChatContentDelta(content="Private response")
+
+        record_active_value()
+
+        if outcome == "completed":
+            yield ChatStreamCompleted(response="Private response")
+        elif outcome == "failed":
+            raise RuntimeError("Private stream failure detail")
+
+    manager.get.return_value.agent.stream_chat.return_value = stream_events()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/sessions/private-session/chat/stream",
+            json={"message": "Private prompt"},
+        )
+
+        metrics_response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert metrics_response.status_code == 200
+    assert active_values == [1.0, 1.0]
+
+    assert ("event: completed\n" in response.text) == (outcome == "completed")
+    assert ("event: error\n" in response.text) == (outcome == "failed")
+    assert manager.save.call_count == (1 if outcome == "completed" else 0)
+    assert "Private stream failure detail" not in response.text
+
+    assert (
+        get_sample_value(
+            metrics_response.text,
+            name="frank_ai_agent_chat_streams_active",
+            labels={},
+        )
+        == 0.0
+    )
+
+    assert (
+        get_sample_value(
+            metrics_response.text,
+            name="frank_ai_agent_chat_streams_total",
+            labels={"outcome": outcome},
+        )
+        == 1.0
+    )
+
+
+def test_metrics_should_release_overlapping_chat_streams_when_closed() -> None:
+    metrics = HttpMetrics()
+    finalized: list[str] = []
+
+    def stream_events(name: str) -> Iterator[str]:
+        try:
+            yield name
+        finally:
+            finalized.append(name)
+
+    first_stream = metrics.track_chat_stream(stream_events("first"))
+    second_stream = metrics.track_chat_stream(stream_events("second"))
+
+    try:
+        assert get_active_chat_streams(metrics) == 0.0
+
+        assert next(first_stream) == "first"
+        assert get_active_chat_streams(metrics) == 1.0
+
+        assert next(second_stream) == "second"
+        assert get_active_chat_streams(metrics) == 2.0
+
+        first_stream.close()
+        assert get_active_chat_streams(metrics) == 1.0
+        assert finalized == ["first"]
+
+        first_stream.close()
+        assert get_active_chat_streams(metrics) == 1.0
+        assert finalized == ["first"]
+
+        second_stream.close()
+        assert get_active_chat_streams(metrics) == 0.0
+        assert finalized == ["first", "second"]
+
+        second_stream.close()
+        assert get_active_chat_streams(metrics) == 0.0
+        assert finalized == ["first", "second"]
+    finally:
+        first_stream.close()
+        second_stream.close()
+
+
+def test_metrics_should_not_count_a_chat_stream_closed_before_iteration() -> None:
+    metrics = HttpMetrics()
+    started = MagicMock()
+
+    def stream_events() -> Iterator[str]:
+        started()
+        yield "Private response"
+
+    stream = metrics.track_chat_stream(stream_events())
+
+    assert get_active_chat_streams(metrics) == 0.0
+
+    stream.close()
+    stream.close()
+
+    started.assert_not_called()
+    assert get_active_chat_streams(metrics) == 0.0
+
+
+def test_active_chat_stream_metrics_should_be_isolated_between_apps() -> None:
+    first_app = create_app(lifespan=empty_lifespan)
+    second_app = create_app(lifespan=empty_lifespan)
+
+    first_metrics: HttpMetrics = first_app.state.http_metrics
+    second_metrics: HttpMetrics = second_app.state.http_metrics
+
+    first_stream = first_metrics.track_chat_stream(iter(["first"]))
+    second_stream = second_metrics.track_chat_stream(iter(["second"]))
+
+    try:
+        assert next(first_stream) == "first"
+        assert get_active_chat_streams(first_metrics) == 1.0
+        assert get_active_chat_streams(second_metrics) == 0.0
+
+        assert next(second_stream) == "second"
+        assert get_active_chat_streams(first_metrics) == 1.0
+        assert get_active_chat_streams(second_metrics) == 1.0
+
+        first_stream.close()
+        assert get_active_chat_streams(first_metrics) == 0.0
+        assert get_active_chat_streams(second_metrics) == 1.0
+
+        second_stream.close()
+        assert get_active_chat_streams(first_metrics) == 0.0
+        assert get_active_chat_streams(second_metrics) == 0.0
+    finally:
+        first_stream.close()
+        second_stream.close()
+
+
+@pytest.mark.parametrize(
+    "save_error",
+    [
+        RuntimeError("Private persistence failure"),
+        SessionConflictError(
+            session_id=SessionId(value="private-session"),
+        ),
+    ],
+    ids=["unexpected-error", "session-conflict"],
+)
+def test_metrics_should_release_active_chat_stream_after_save_failure(
+    save_error: Exception,
+) -> None:
+    app = create_app(lifespan=empty_lifespan)
+    metrics: HttpMetrics = app.state.http_metrics
+    manager = MagicMock()
+
+    app.dependency_overrides[get_session_manager] = lambda: manager
+
+    manager.get.return_value.agent.stream_chat.return_value = iter(
+        [
+            ChatStreamCompleted(response="Private response"),
+        ],
+    )
+
+    active_during_save: list[float | None] = []
+
+    def fail_save(session: object) -> None:
+        active_during_save.append(get_active_chat_streams(metrics))
+        raise save_error
+
+    manager.save.side_effect = fail_save
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/sessions/private-session/chat/stream",
+            json={"message": "Private prompt"},
+        )
+
+        metrics_response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert metrics_response.status_code == 200
+    assert active_during_save == [1.0]
+    manager.save.assert_called_once()
+
+    assert "event: error\n" in response.text
+    assert "event: completed\n" not in response.text
+    assert "Private persistence failure" not in response.text
+
+    assert get_active_chat_streams(metrics) == 0.0
+
+    assert (
+        get_sample_value(
+            metrics_response.text,
+            name="frank_ai_agent_chat_streams_total",
+            labels={"outcome": "failed"},
+        )
+        == 1.0
+    )

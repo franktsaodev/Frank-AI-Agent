@@ -146,7 +146,7 @@ def stream_chat_with_session(
     )
 
     return StreamingResponse(
-        content=serialized_events,
+        content=http_metrics.track_chat_stream(serialized_events),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

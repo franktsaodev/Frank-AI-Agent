@@ -872,12 +872,13 @@ not receive an application request ID.
 `GET /metrics` exposes application metrics in Prometheus text format.
 This endpoint is excluded from the OpenAPI schema.
 
-| Metric                                                | Type      | Description                                            |
-| ----------------------------------------------------- | --------- | ------------------------------------------------------ |
-| `frank_ai_agent_http_requests_total`                  | Counter   | Number of HTTP responses started                       |
-| `frank_ai_agent_http_response_start_duration_seconds` | Histogram | Middleware duration until a response is available      |
-| `frank_ai_agent_chat_streams_total`                   | Counter   | Number of chat streams finished, grouped by outcome    |
-| `frank_ai_agent_chat_stream_duration_seconds`         | Histogram | Duration from stream iteration start until termination |
+| Metric                                                | Type      | Description                                                       |
+| ----------------------------------------------------- | --------- | ----------------------------------------------------------------- |
+| `frank_ai_agent_http_requests_total`                  | Counter   | Number of HTTP responses started                                  |
+| `frank_ai_agent_http_response_start_duration_seconds` | Histogram | Middleware duration until a response is available                 |
+| `frank_ai_agent_chat_streams_total`                   | Counter   | Number of chat streams finished, grouped by outcome               |
+| `frank_ai_agent_chat_stream_duration_seconds`         | Histogram | Duration from stream iteration start until termination            |
+| `frank_ai_agent_chat_streams_active`                  | Gauge     | Number of chat stream serializer iterations currently in progress |
 
 HTTP metrics use `method`, `route`, and `status` labels. Matched routes use
 route templates with placeholders such as `{session_id}`. Unmatched routes
@@ -888,7 +889,7 @@ in seconds. It does not measure full response delivery or SSE stream
 completion. Requests to the metrics endpoint and CORS preflight requests
 handled directly by the CORS middleware are excluded from HTTP metrics.
 
-Chat stream metrics use only the `outcome` label:
+Chat stream outcome counters and duration histograms use only the `outcome` label:
 
 - `completed`: Session persistence succeeded and a completion event was produced.
 - `failed`: Stream processing or session persistence failed, including session conflicts.
@@ -897,6 +898,15 @@ Chat stream metrics use only the `outcome` label:
 Chat stream counters expose all three outcomes at zero when the application
 starts. Duration histogram series are created when an outcome is first
 observed.
+
+The `frank_ai_agent_chat_streams_active` gauge has no labels and starts at
+zero. It increments when a tracked serializer begins iteration and
+decrements when iteration finishes or the iterator is closed.
+
+The gauge measures server-side serializer lifetime, including session
+persistence and finalization. Overlapping iterations are counted separately.
+Creating an iterator without starting it does not increment the gauge.
+Each application instance maintains its own active count.
 
 The chat stream histogram measures elapsed time from the start of serializer
 iteration until its finalization block runs, including session persistence.

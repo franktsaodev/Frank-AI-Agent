@@ -1,8 +1,10 @@
+from collections.abc import Generator, Iterable
 from typing import Literal
 
 from prometheus_client import (
     CollectorRegistry,
     Counter,
+    Gauge,
     Histogram,
     generate_latest,
 )
@@ -13,6 +15,12 @@ ChatStreamOutcome = Literal["completed", "failed", "incomplete"]
 class HttpMetrics:
     def __init__(self) -> None:
         self._registry = CollectorRegistry()
+
+        self._chat_streams_active = Gauge(
+            "frank_ai_agent_chat_streams_active",
+            "Chat stream serializer iterations currently in progress.",
+            registry=self._registry,
+        )
 
         self._requests = Counter(
             "frank_ai_agent_http_requests_total",
@@ -99,6 +107,13 @@ class HttpMetrics:
         self._chat_stream_duration.labels(outcome=outcome).observe(
             duration_seconds,
         )
+
+    def track_chat_stream(
+        self,
+        events: Iterable[str],
+    ) -> Generator[str, None, None]:
+        with self._chat_streams_active.track_inprogress():
+            yield from events
 
     def render(self) -> bytes:
         return generate_latest(self._registry)
