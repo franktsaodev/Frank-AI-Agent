@@ -21,6 +21,7 @@ Semantic Versioning.
 - Added an isolated monitoring integration test stack with synthetic metrics, dashboard query validation through Grafana, and automatic CI cleanup.
 - Added a per-application active chat stream gauge with lifecycle tracking and tests for overlapping iterations, early closure, persistence failures, and registry isolation.
 - Added an active chat stream panel to Grafana with synthetic gauge coverage and instant-query verification.
+- Added monitoring integration coverage for active, zero-valued, and missing chat stream gauges, with isolated CI runs and active panel configuration checks.
 
 ### Changed
 

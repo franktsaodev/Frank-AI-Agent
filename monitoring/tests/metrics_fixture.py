@@ -1,4 +1,5 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from os import environ
 from time import monotonic
 
 
@@ -26,7 +27,11 @@ def histogram_samples(
     return samples
 
 
-def render_metrics(batch: int) -> bytes:
+def render_metrics(
+    batch: int,
+    *,
+    active_streams: float | None,
+) -> bytes:
     http_counter = "frank_ai_agent_http_requests_total"
     http_duration = "frank_ai_agent_http_response_start_duration_seconds"
     stream_counter = "frank_ai_agent_chat_streams_total"
@@ -88,19 +93,21 @@ def render_metrics(batch: int) -> bytes:
             )
         )
 
-    samples.extend(
-        [
-            f"# HELP {stream_active} Synthetic active chat stream iterations.",
-            f"# TYPE {stream_active} gauge",
-            f"{stream_active} 2",
-        ]
-    )
+    if active_streams is not None:
+        samples.extend(
+            [
+                f"# HELP {stream_active} Synthetic active chat stream iterations.",
+                f"# TYPE {stream_active} gauge",
+                f"{stream_active} {active_streams}",
+            ]
+        )
 
     return ("\n".join(samples) + "\n").encode("utf-8")
 
 
 class MetricsHandler(BaseHTTPRequestHandler):
     started_at = monotonic()
+    active_streams: float | None = 2.0
 
     def do_GET(self) -> None:
         if self.path == "/health":
@@ -108,7 +115,10 @@ class MetricsHandler(BaseHTTPRequestHandler):
             content_type = "text/plain; charset=utf-8"
         elif self.path == "/metrics":
             batch = int((monotonic() - self.started_at) / 5) + 1
-            body = render_metrics(batch)
+            body = render_metrics(
+                batch,
+                active_streams=self.active_streams,
+            )
             content_type = "text/plain; version=0.0.4; charset=utf-8"
         else:
             self.send_error(404)
@@ -125,6 +135,23 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    active_stream_state = environ.get(
+        "MONITORING_FIXTURE_ACTIVE_STREAM_STATE",
+        "active",
+    )
+    active_values: dict[str, float | None] = {
+        "active": 2.0,
+        "idle": 0.0,
+        "missing": None,
+    }
+
+    if active_stream_state not in active_values:
+        raise ValueError(
+            f"Invalid monitoring fixture active stream state: {active_stream_state}"
+        )
+
+    MetricsHandler.active_streams = active_values[active_stream_state]
+
     with HTTPServer(("0.0.0.0", 8000), MetricsHandler) as server:
         server.serve_forever()
 

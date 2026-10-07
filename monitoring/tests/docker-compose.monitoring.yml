@@ -6,6 +6,9 @@ services:
 
     image: frank-ai-agent-metrics-fixture:local
 
+    environment:
+      MONITORING_FIXTURE_ACTIVE_STREAM_STATE: "${MONITORING_FIXTURE_ACTIVE_STREAM_STATE:-active}"
+
     healthcheck:
       test:
         - CMD

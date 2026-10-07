@@ -101,6 +101,8 @@ def group_values(
 def verify_panel_queries(
     queries: dict[int, tuple[str, bool]],
     headers: dict[str, str],
+    *,
+    active_stream_state: str,
 ) -> None:
     if set(queries) != {1, 2, 3, 4, 5, 6, 7}:
         raise RuntimeError("Expected dashboard panel IDs 1 through 7.")
@@ -204,13 +206,30 @@ def verify_panel_queries(
             )
 
     active_streams = results[7]
+    expected_active_values: dict[str, float | None] = {
+        "active": 2.0,
+        "idle": 0.0,
+        "missing": None,
+    }
+    expected_active_value = expected_active_values[active_stream_state]
 
-    if (
+    if expected_active_value is None:
+        if active_streams:
+            raise RuntimeError(
+                "Unexpected active chat stream count for "
+                f"{active_stream_state}: {active_streams}"
+            )
+    elif (
         len(active_streams) != 1
         or active_streams[0][0] != {}
-        or active_streams[0][1] != 2.0
+        or active_streams[0][1] != expected_active_value
     ):
-        raise RuntimeError(f"Unexpected active chat stream count: {active_streams}")
+        raise RuntimeError(
+            "Unexpected active chat stream count for "
+            f"{active_stream_state}: {active_streams}"
+        )
+
+    print(f"Active stream state verified: {active_stream_state}.")
 
     for panel_id in sorted(results):
         print(f"Panel {panel_id} query verified: {len(results[panel_id])} series.")
@@ -222,11 +241,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Verify Grafana provisioning and optional fixture queries.",
     )
+
     parser.add_argument(
         "--queries",
         action="store_true",
         help="Verify dashboard queries against the monitoring fixture stack.",
     )
+
+    parser.add_argument(
+        "--active-stream-state",
+        choices=("active", "idle", "missing"),
+        default="active",
+        help="Expected active stream gauge state in the monitoring fixture.",
+    )
+
     args = parser.parse_args()
 
     base_url = "http://127.0.0.1:13000"
@@ -280,6 +308,31 @@ def main() -> None:
         if panel.get("datasource", {}).get("uid") != datasource_uid:
             raise RuntimeError("A panel references an unexpected data source.")
 
+    active_panels = [panel for panel in panels if panel.get("id") == 7]
+
+    if len(active_panels) != 1:
+        raise RuntimeError("Expected exactly one active chat stream panel.")
+
+    active_panel = active_panels[0]
+    active_targets = active_panel.get("targets", [])
+
+    if (
+        active_panel.get("title") != "Active chat stream iterations"
+        or active_panel.get("type") != "stat"
+        or active_panel.get("fieldConfig", {}).get("defaults", {}).get("noValue")
+        != "No data"
+    ):
+        raise RuntimeError("Unexpected active chat stream panel configuration.")
+
+    if (
+        len(active_targets) != 1
+        or active_targets[0].get("instant") is not True
+        or active_targets[0].get("range") is not False
+    ):
+        raise RuntimeError(
+            "The active chat stream panel must use only an instant query."
+        )
+
     datasource_request = Request(
         f"{base_url}/api/datasources/uid/{datasource_uid}",
         headers=headers,
@@ -320,7 +373,11 @@ def main() -> None:
                 bool(targets[0].get("instant", False)),
             )
 
-        verify_panel_queries(panel_queries, headers)
+        verify_panel_queries(
+            panel_queries,
+            headers,
+            active_stream_state=args.active_stream_state,
+        )
 
 
 if __name__ == "__main__":

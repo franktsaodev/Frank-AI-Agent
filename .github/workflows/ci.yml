@@ -145,11 +145,28 @@ jobs:
 
       - name: Verify monitoring integration
         run: |
-          docker compose \
-            -p frank-ai-agent-monitoring-check \
-            -f monitoring/tests/docker-compose.monitoring.yml \
-            up -d --no-build --wait --wait-timeout 120
-          python3 monitoring/tests/check_grafana.py --queries
+          set -euo pipefail
+
+          monitoring_compose() {
+            docker compose \
+              -p frank-ai-agent-monitoring-check \
+              -f monitoring/tests/docker-compose.monitoring.yml \
+              "$@"
+          }
+
+          for state in active idle missing; do
+            echo "Verifying active stream state: $state"
+            export MONITORING_FIXTURE_ACTIVE_STREAM_STATE="$state"
+
+            monitoring_compose down --volumes
+            monitoring_compose up -d --no-build --wait --wait-timeout 120
+
+            python3 monitoring/tests/check_grafana.py \
+              --queries \
+              --active-stream-state "$state"
+
+            monitoring_compose down --volumes
+          done
 
       - name: Show monitoring verification logs
         if: failure()

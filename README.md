@@ -1381,17 +1381,32 @@ all seven panel queries through Grafana's Prometheus data source. It checks
 series labels, counter and rate ratios, the HTTP duration percentile,
 average stream durations, and the active stream gauge value.
 
-The fixture exposes a constant active stream gauge of two. Verification
-requires the active stream panel to use an instant query and return one
-aggregated series with that value.
+The fixture supports three active stream states, selected through
+`MONITORING_FIXTURE_ACTIVE_STREAM_STATE`:
+
+| State     | Fixture gauge | Expected active panel query result |
+| --------- | ------------- | ---------------------------------- |
+| `active`  | `2`           | One aggregated series with value 2 |
+| `idle`    | `0`           | One aggregated series with value 0 |
+| `missing` | Omitted       | No series                          |
+
+The default state is `active`. Pass the matching state to the checker
+using `--active-stream-state active`, `--active-stream-state idle`, or
+`--active-stream-state missing`.
+
+Verification requires an instant query with range mode disabled and
+checks the panel's `No data` configuration. It validates query results
+and provisioned settings; browser rendering is not tested.
 
 Verification replaces `$__rate_interval` with `1m` and preserves each panel's
 instant or range query mode. The dashboard JSON remains unchanged. Startup
 plugin auto-updates are disabled in the test Grafana service to keep the
 bundled plugin versions stable during verification.
 
-CI prints container logs on failure and removes the test stack and its
-volumes afterward.
+CI runs all seven panel queries for each of the three states. Each case
+uses a fresh test stack and disposable storage so earlier samples cannot
+affect the missing-gauge case. CI prints container logs on failure and
+removes the test stack and its volumes afterward.
 
 To run the same integration verification locally, execute these commands
 from the repository root:
@@ -1403,6 +1418,12 @@ docker compose -p frank-ai-agent-monitoring-check -f monitoring/tests/docker-com
 docker compose -p frank-ai-agent-monitoring-check -f monitoring/tests/docker-compose.monitoring.yml up -d --no-build --wait --wait-timeout 120
 python monitoring/tests/check_grafana.py --queries
 ```
+
+The commands above verify the default `active` case. To verify `idle` or
+`missing`, set `MONITORING_FIXTURE_ACTIVE_STREAM_STATE` to that state
+before starting the test stack and pass the same value with
+`--active-stream-state` to the checker. Remove the test stack and its
+volumes before switching cases.
 
 The test stack publishes Grafana on `127.0.0.1:13000` and Prometheus on
 `127.0.0.1:19090`, using a separate Compose network and disposable storage.
