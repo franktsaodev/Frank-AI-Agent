@@ -66,6 +66,25 @@ class HttpMetrics:
             registry=self._registry,
         )
 
+        self._chat_stream_first_content_duration = Histogram(
+            "frank_ai_agent_chat_stream_first_content_duration_seconds",
+            "Duration from serializer iteration start until first content is serialized.",
+            buckets=(
+                0.1,
+                0.25,
+                0.5,
+                1.0,
+                2.5,
+                5.0,
+                10.0,
+                30.0,
+                60.0,
+                120.0,
+                300.0,
+            ),
+            registry=self._registry,
+        )
+
     def observe_response(
         self,
         *,
@@ -105,6 +124,15 @@ class HttpMetrics:
     ) -> None:
         self._chat_streams.labels(outcome=outcome).inc()
         self._chat_stream_duration.labels(outcome=outcome).observe(
+            duration_seconds,
+        )
+
+    def observe_chat_stream_first_content(
+        self,
+        *,
+        duration_seconds: float,
+    ) -> None:
+        self._chat_stream_first_content_duration.observe(
             duration_seconds,
         )
 

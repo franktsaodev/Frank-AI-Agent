@@ -517,7 +517,7 @@ def test_stream_chat_should_log_completion_with_request_id_and_duration(
         ),
         patch(
             "app.api.v1.session_routes.perf_counter",
-            side_effect=[20.0, 20.5],
+            side_effect=[20.0, 20.25, 20.5],
         ),
     ):
         response = client.post(
@@ -642,7 +642,7 @@ def test_stream_chat_should_log_incomplete_when_completion_is_missing(
         ),
         patch(
             "app.api.v1.session_routes.perf_counter",
-            side_effect=[40.0, 40.1],
+            side_effect=[40.0, 40.05, 40.1],
         ),
     ):
         response = client.post(

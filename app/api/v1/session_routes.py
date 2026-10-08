@@ -32,6 +32,7 @@ from app.exceptions.client_exceptions import (
     ClientTimeoutError,
 )
 from app.models.chat_stream_event import (
+    ChatContentDelta,
     ChatStreamCompleted,
     ChatStreamEvent,
 )
@@ -142,6 +143,11 @@ def stream_chat_with_session(
         on_finished=lambda outcome, duration_seconds: http_metrics.observe_chat_stream(
             outcome=outcome,
             duration_seconds=duration_seconds,
+        ),
+        on_first_content=lambda duration_seconds: (
+            http_metrics.observe_chat_stream_first_content(
+                duration_seconds=duration_seconds,
+            )
         ),
     )
 
@@ -255,16 +261,26 @@ def _serialize_chat_stream(
     request_id: str,
     on_completed: Callable[[], None],
     on_finished: Callable[[ChatStreamOutcome, float], None] | None = None,
+    on_first_content: Callable[[float], None] | None = None,
 ) -> Iterator[str]:
     started_at = perf_counter()
     outcome: ChatStreamOutcome = "incomplete"
     error_code = "none"
+    first_content_recorded = False
 
     try:
         for event in events:
             serialized_event = serialize_chat_stream_event(
                 event,
             )
+
+            if isinstance(event, ChatContentDelta) and not first_content_recorded:
+                first_content_recorded = True
+
+                if on_first_content is not None:
+                    on_first_content(
+                        perf_counter() - started_at,
+                    )
 
             if isinstance(
                 event,

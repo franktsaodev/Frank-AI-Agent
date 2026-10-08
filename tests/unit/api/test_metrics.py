@@ -404,7 +404,7 @@ def test_metrics_should_record_chat_stream_outcome_and_duration(
     with TestClient(app) as client:
         with patch(
             "app.api.v1.session_routes.perf_counter",
-            side_effect=[20.0, 20.5],
+            side_effect=[20.0, 20.25, 20.5],
         ):
             response = client.post(
                 "/api/v1/sessions/private-session/chat/stream",
@@ -417,6 +417,15 @@ def test_metrics_should_record_chat_stream_outcome_and_duration(
     assert metrics_response.status_code == 200
     assert ("event: completed\n" in response.text) == (outcome == "completed")
     assert manager.save.call_count == (1 if outcome == "completed" else 0)
+
+    first_content_metric = "frank_ai_agent_chat_stream_first_content_duration_seconds"
+
+    for suffix, expected in (("count", 1.0), ("sum", 0.25)):
+        assert get_sample_value(
+            metrics_response.text,
+            name=f"{first_content_metric}_{suffix}",
+            labels={},
+        ) == pytest.approx(expected)
 
     labels = {"outcome": outcome}
 
@@ -493,7 +502,7 @@ def test_metrics_should_record_failed_chat_streams(
     with TestClient(app) as client:
         with patch(
             "app.api.v1.session_routes.perf_counter",
-            side_effect=[30.0, 30.25],
+            side_effect=[30.0, 30.1, 30.25],
         ):
             response = client.post(
                 "/api/v1/sessions/private-session/chat/stream",
@@ -510,6 +519,15 @@ def test_metrics_should_record_failed_chat_streams(
     assert "Private failure detail" not in response.text
     assert manager.save.call_count == (0 if failure_stage == "iteration" else 1)
     assert metrics_response.status_code == 200
+
+    first_content_metric = "frank_ai_agent_chat_stream_first_content_duration_seconds"
+
+    for suffix, expected in (("count", 1.0), ("sum", 0.1)):
+        assert get_sample_value(
+            metrics_response.text,
+            name=f"{first_content_metric}_{suffix}",
+            labels={},
+        ) == pytest.approx(expected)
 
     labels = {"outcome": "failed"}
 
@@ -852,3 +870,155 @@ def test_metrics_should_release_active_chat_stream_after_save_failure(
         )
         == 1.0
     )
+
+
+def test_metrics_should_record_first_chat_content_once() -> None:
+    app = create_app(lifespan=empty_lifespan)
+    manager = MagicMock()
+
+    app.dependency_overrides[get_session_manager] = lambda: manager
+
+    events: list[ChatStreamEvent] = [
+        ChatContentDelta(content="Private first content"),
+        ChatContentDelta(content="Private later content"),
+        ChatStreamCompleted(response="Private complete response"),
+    ]
+
+    manager.get.return_value.agent.stream_chat.return_value = iter(events)
+
+    with TestClient(app) as client:
+        with patch(
+            "app.api.v1.session_routes.perf_counter",
+            side_effect=[20.0, 20.25, 20.5],
+        ):
+            response = client.post(
+                "/api/v1/sessions/private-session/chat/stream",
+                json={"message": "Private prompt"},
+            )
+
+        metrics_response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert "event: completed\n" in response.text
+    assert metrics_response.status_code == 200
+    manager.save.assert_called_once_with(manager.get.return_value)
+
+    metric_name = "frank_ai_agent_chat_stream_first_content_duration_seconds"
+
+    assert (
+        get_sample_value(
+            metrics_response.text,
+            name=f"{metric_name}_count",
+            labels={},
+        )
+        == 1.0
+    )
+    assert get_sample_value(
+        metrics_response.text,
+        name=f"{metric_name}_sum",
+        labels={},
+    ) == pytest.approx(0.25)
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    ["completed", "incomplete", "failed"],
+)
+def test_metrics_should_not_record_first_content_without_a_content_delta(
+    outcome: str,
+) -> None:
+    app = create_app(lifespan=empty_lifespan)
+    manager = MagicMock()
+
+    app.dependency_overrides[get_session_manager] = lambda: manager
+
+    def events() -> Iterator[ChatStreamEvent]:
+        if outcome == "completed":
+            yield ChatStreamCompleted(response="Private complete response")
+        elif outcome == "failed":
+            raise RuntimeError("Private failure detail")
+
+    manager.get.return_value.agent.stream_chat.return_value = events()
+
+    with TestClient(app) as client:
+        with patch(
+            "app.api.v1.session_routes.perf_counter",
+            side_effect=[10.0, 10.5],
+        ):
+            response = client.post(
+                "/api/v1/sessions/private-session/chat/stream",
+                json={"message": "Private prompt"},
+            )
+
+        metrics_response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert metrics_response.status_code == 200
+    assert ("event: completed\n" in response.text) == (outcome == "completed")
+    assert ("event: error\n" in response.text) == (outcome == "failed")
+    assert manager.save.call_count == (1 if outcome == "completed" else 0)
+
+    metric_name = "frank_ai_agent_chat_stream_first_content_duration_seconds"
+
+    for suffix in ("count", "sum"):
+        assert (
+            get_sample_value(
+                metrics_response.text,
+                name=f"{metric_name}_{suffix}",
+                labels={},
+            )
+            == 0.0
+        )
+
+
+def test_metrics_should_isolate_first_content_observations_between_apps() -> None:
+    first_app = create_app(lifespan=empty_lifespan)
+    second_app = create_app(lifespan=empty_lifespan)
+    manager = MagicMock()
+
+    first_app.dependency_overrides[get_session_manager] = lambda: manager
+    manager.get.return_value.agent.stream_chat.return_value = iter(
+        [
+            ChatContentDelta(content="Private first content"),
+            ChatStreamCompleted(response="Private complete response"),
+        ]
+    )
+
+    with (
+        TestClient(first_app) as first_client,
+        TestClient(second_app) as second_client,
+    ):
+        with patch(
+            "app.api.v1.session_routes.perf_counter",
+            side_effect=[20.0, 20.25, 20.5],
+        ):
+            response = first_client.post(
+                "/api/v1/sessions/private-session/chat/stream",
+                json={"message": "Private prompt"},
+            )
+
+        first_metrics = first_client.get("/metrics")
+        second_metrics = second_client.get("/metrics")
+
+    assert response.status_code == 200
+    assert "event: completed\n" in response.text
+    assert first_metrics.status_code == 200
+    assert second_metrics.status_code == 200
+
+    metric_name = "frank_ai_agent_chat_stream_first_content_duration_seconds"
+
+    for suffix, expected in (("count", 1.0), ("sum", 0.25)):
+        assert get_sample_value(
+            first_metrics.text,
+            name=f"{metric_name}_{suffix}",
+            labels={},
+        ) == pytest.approx(expected)
+
+        assert (
+            get_sample_value(
+                second_metrics.text,
+                name=f"{metric_name}_{suffix}",
+                labels={},
+            )
+            == 0.0
+        )

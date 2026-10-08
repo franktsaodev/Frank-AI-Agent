@@ -872,13 +872,14 @@ not receive an application request ID.
 `GET /metrics` exposes application metrics in Prometheus text format.
 This endpoint is excluded from the OpenAPI schema.
 
-| Metric                                                | Type      | Description                                                       |
-| ----------------------------------------------------- | --------- | ----------------------------------------------------------------- |
-| `frank_ai_agent_http_requests_total`                  | Counter   | Number of HTTP responses started                                  |
-| `frank_ai_agent_http_response_start_duration_seconds` | Histogram | Middleware duration until a response is available                 |
-| `frank_ai_agent_chat_streams_total`                   | Counter   | Number of chat streams finished, grouped by outcome               |
-| `frank_ai_agent_chat_stream_duration_seconds`         | Histogram | Duration from stream iteration start until termination            |
-| `frank_ai_agent_chat_streams_active`                  | Gauge     | Number of chat stream serializer iterations currently in progress |
+| Metric                                                      | Type      | Description                                                                          |
+| ----------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------ |
+| `frank_ai_agent_http_requests_total`                        | Counter   | Number of HTTP responses started                                                     |
+| `frank_ai_agent_http_response_start_duration_seconds`       | Histogram | Middleware duration until a response is available                                    |
+| `frank_ai_agent_chat_streams_total`                         | Counter   | Number of chat streams finished, grouped by outcome                                  |
+| `frank_ai_agent_chat_stream_duration_seconds`               | Histogram | Duration from stream iteration start until termination                               |
+| `frank_ai_agent_chat_streams_active`                        | Gauge     | Number of chat stream serializer iterations currently in progress                    |
+| `frank_ai_agent_chat_stream_first_content_duration_seconds` | Histogram | Duration from serializer iteration start until the first content delta is serialized |
 
 HTTP metrics use `method`, `route`, and `status` labels. Matched routes use
 route templates with placeholders such as `{session_id}`. Unmatched routes
@@ -908,11 +909,25 @@ persistence and finalization. Overlapping iterations are counted separately.
 Creating an iterator without starting it does not increment the gauge.
 Each application instance maintains its own active count.
 
-The chat stream histogram measures elapsed time from the start of serializer
+The chat stream duration histogram measures elapsed time from the start of serializer
 iteration until its finalization block runs, including session persistence.
 It does not confirm that the client received the complete response.
 Requests rejected before stream iteration starts are represented by HTTP
 metrics only.
+
+The first-content histogram has no labels. Its `_count` and `_sum` start
+at zero. Each stream records one observation after its first
+`ChatContentDelta` is successfully serialized, before that event is yielded.
+
+Streams without a content delta do not add an observation, including
+streams that complete without deltas or fail before producing content.
+A later stream or persistence failure does not remove an observation
+already recorded.
+
+This interval starts when serializer iteration begins. It excludes
+request processing before iteration, network delivery, and browser
+rendering. It is a server-side first-content measurement rather than
+the model provider's time to first token.
 
 An SSE response can have HTTP status `200` while its final stream outcome is
 `failed`. HTTP response metrics and chat stream metrics describe these
