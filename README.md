@@ -1336,15 +1336,16 @@ http://localhost:3000/d/frank-ai-agent-overview
 
 The dashboard refreshes every 15 seconds and defaults to the last hour.
 
-| Panel                                         | Meaning                                                                             |
-| --------------------------------------------- | ----------------------------------------------------------------------------------- |
-| API metrics scrape status                     | Latest Prometheus scrape status for the API                                         |
-| Current chat stream counters                  | Current counters grouped by stream outcome                                          |
-| Active chat stream iterations                 | Latest scraped count of active serializer iterations, including session persistence |
-| HTTP response rate by status                  | HTTP responses started per second, grouped by status code                           |
-| HTTP response-start duration P95              | Estimated response-start duration percentile, grouped by method and route           |
-| Estimated chat stream finishes over 5 minutes | Rolling five-minute counter increases, grouped by outcome                           |
-| Average chat stream duration by outcome       | Mean serializer iteration duration, including session persistence                   |
+| Panel                                         | Meaning                                                                                         |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| API metrics scrape status                     | Latest Prometheus scrape status for the API                                                     |
+| Current chat stream counters                  | Current counters grouped by stream outcome                                                      |
+| Active chat stream iterations                 | Latest scraped count of active serializer iterations, including session persistence             |
+| HTTP response rate by status                  | HTTP responses started per second, grouped by status code                                       |
+| HTTP response-start duration P95              | Estimated response-start duration percentile, grouped by method and route                       |
+| Estimated chat stream finishes over 5 minutes | Rolling five-minute counter increases, grouped by outcome                                       |
+| Average chat stream duration by outcome       | Mean serializer iteration duration, including session persistence                               |
+| Chat stream first-content duration P95        | Estimated duration percentile from serializer iteration start until first content is serialized |
 
 The active stream panel uses an instant query to sum the latest scraped
 `frank_ai_agent_chat_streams_active` values across API targets in the
@@ -1369,6 +1370,18 @@ A duration panel may show no data before any streams are observed or when
 there are no recent observations. Missing observations are not displayed
 as zero duration.
 
+The first-content P95 panel aggregates histogram buckets across API targets
+in the `frank-ai-agent` job and displays an estimated 95th percentile in
+seconds. Prometheus estimates the percentile by interpolation within the
+histogram buckets.
+
+The measured interval starts when serializer iteration begins and ends
+after the first content delta is successfully serialized. It excludes
+request processing before iteration, network delivery, and browser rendering.
+
+The panel uses a range query. At evaluation times with no observations in
+the rate window, the query returns no sample rather than a zero duration.
+
 Grafana settings are maintained in:
 
 - `monitoring/grafana/provisioning/datasources/prometheus.yml`
@@ -1392,9 +1405,10 @@ HTTP and chat stream metrics without invoking the agent or LLM.
 
 `monitoring/tests/check_grafana.py --queries` verifies the provisioned data
 source and dashboard, waits for at least three scrape samples, and executes
-all seven panel queries through Grafana's Prometheus data source. It checks
+all eight panel queries through Grafana's Prometheus data source. It checks
 series labels, counter and rate ratios, the HTTP duration percentile,
-average stream durations, and the active stream gauge value.
+average stream durations, the active stream gauge value, and the
+first-content duration percentile.
 
 The fixture supports three active stream states, selected through
 `MONITORING_FIXTURE_ACTIVE_STREAM_STATE`:
@@ -1409,19 +1423,42 @@ The default state is `active`. Pass the matching state to the checker
 using `--active-stream-state active`, `--active-stream-state idle`, or
 `--active-stream-state missing`.
 
-Verification requires an instant query with range mode disabled and
-checks the panel's `No data` configuration. It validates query results
-and provisioned settings; browser rendering is not tested.
+Active stream panel verification requires an instant query with range mode
+disabled and checks the panel's `No data` configuration. It validates query
+results and provisioned settings; browser rendering is not tested.
+
+The fixture also supports two first-content states, selected through
+`MONITORING_FIXTURE_FIRST_CONTENT_STATE`:
+
+| State        | Fixture histogram                           | Expected first-content P95 query result   |
+| ------------ | ------------------------------------------- | ----------------------------------------- |
+| `observed`   | Increasing observations with duration 0.2 s | One aggregated series with value 0.2425 s |
+| `unobserved` | Histogram present with zero observations    | No series                                 |
+
+The default state is `observed`. Pass the matching state to the checker
+using `--first-content-state observed` or `--first-content-state unobserved`.
+
+The expected P95 differs from the fixture's observation duration because
+Prometheus interpolates within the histogram bucket. Verification requires
+a range query with instant mode disabled, seconds units, and the `No data`
+configuration.
+
+For `unobserved`, the checker separately confirms that the histogram count
+exists and equals zero, then requires the panel query to return no series.
 
 Verification replaces `$__rate_interval` with `1m` and preserves each panel's
 instant or range query mode. The dashboard JSON remains unchanged. Startup
 plugin auto-updates are disabled in the test Grafana service to keep the
 bundled plugin versions stable during verification.
 
-CI runs all seven panel queries for each of the three states. Each case
-uses a fresh test stack and disposable storage so earlier samples cannot
-affect the missing-gauge case. CI prints container logs on failure and
-removes the test stack and its volumes afterward.
+CI runs all eight panel queries in four cases: the `active`, `idle`, and
+`missing` gauge states with first-content observations, plus the `active`
+gauge state without first-content observations.
+
+Each case uses a fresh test stack and disposable storage so earlier samples
+cannot affect the missing-gauge or zero-observation checks. CI prints
+container logs on failure and removes the test stack and its volumes
+afterward.
 
 To run the same integration verification locally, execute these commands
 from the repository root:
@@ -1434,11 +1471,17 @@ docker compose -p frank-ai-agent-monitoring-check -f monitoring/tests/docker-com
 python monitoring/tests/check_grafana.py --queries
 ```
 
-The commands above verify the default `active` case. To verify `idle` or
-`missing`, set `MONITORING_FIXTURE_ACTIVE_STREAM_STATE` to that state
-before starting the test stack and pass the same value with
-`--active-stream-state` to the checker. Remove the test stack and its
-volumes before switching cases.
+The commands above verify the default `active` gauge state with `observed`
+first content. To verify `idle` or `missing`, set
+`MONITORING_FIXTURE_ACTIVE_STREAM_STATE` before starting the test stack and
+pass the same value with `--active-stream-state` to the checker.
+
+To verify zero first-content observations, set
+`MONITORING_FIXTURE_FIRST_CONTENT_STATE=unobserved` before starting the test
+stack and pass `--first-content-state unobserved` to the checker.
+
+Remove the test stack and its volumes before switching cases. Restore or
+unset the fixture environment variables afterward.
 
 The test stack publishes Grafana on `127.0.0.1:13000` and Prometheus on
 `127.0.0.1:19090`, using a separate Compose network and disposable storage.

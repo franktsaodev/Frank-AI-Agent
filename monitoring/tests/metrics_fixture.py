@@ -9,18 +9,23 @@ def histogram_samples(
     labels: str,
     count: int,
     duration: float,
+    buckets: tuple[float, ...] = (0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
 ) -> list[str]:
-    samples = []
+    samples: list[str] = []
+    bucket_prefix = f"{labels}," if labels else ""
+    label_suffix = f"{{{labels}}}" if labels else ""
 
-    for boundary in (0.1, 0.25, 0.5, 1.0, 2.5, 5.0):
+    for boundary in buckets:
         bucket_count = count if duration <= boundary else 0
-        samples.append(f'{name}_bucket{{{labels},le="{boundary}"}} {bucket_count}')
+        samples.append(
+            f'{name}_bucket{{{bucket_prefix}le="{boundary}"}} {bucket_count}'
+        )
 
     samples.extend(
         [
-            f'{name}_bucket{{{labels},le="+Inf"}} {count}',
-            f"{name}_count{{{labels}}} {count}",
-            f"{name}_sum{{{labels}}} {count * duration}",
+            f'{name}_bucket{{{bucket_prefix}le="+Inf"}} {count}',
+            f"{name}_count{label_suffix} {count}",
+            f"{name}_sum{label_suffix} {count * duration}",
         ]
     )
 
@@ -31,12 +36,14 @@ def render_metrics(
     batch: int,
     *,
     active_streams: float | None,
+    first_content_observed: bool,
 ) -> bytes:
     http_counter = "frank_ai_agent_http_requests_total"
     http_duration = "frank_ai_agent_http_response_start_duration_seconds"
     stream_counter = "frank_ai_agent_chat_streams_total"
     stream_duration = "frank_ai_agent_chat_stream_duration_seconds"
     stream_active = "frank_ai_agent_chat_streams_active"
+    first_content_duration = "frank_ai_agent_chat_stream_first_content_duration_seconds"
 
     samples = [
         f"# HELP {http_counter} Synthetic HTTP response counters.",
@@ -93,6 +100,34 @@ def render_metrics(
             )
         )
 
+    samples.extend(
+        [
+            f"# HELP {first_content_duration} Synthetic first-content durations.",
+            f"# TYPE {first_content_duration} histogram",
+        ]
+    )
+    samples.extend(
+        histogram_samples(
+            name=first_content_duration,
+            labels="",
+            count=5 * batch if first_content_observed else 0,
+            duration=0.2,
+            buckets=(
+                0.1,
+                0.25,
+                0.5,
+                1.0,
+                2.5,
+                5.0,
+                10.0,
+                30.0,
+                60.0,
+                120.0,
+                300.0,
+            ),
+        )
+    )
+
     if active_streams is not None:
         samples.extend(
             [
@@ -108,6 +143,7 @@ def render_metrics(
 class MetricsHandler(BaseHTTPRequestHandler):
     started_at = monotonic()
     active_streams: float | None = 2.0
+    first_content_observed = True
 
     def do_GET(self) -> None:
         if self.path == "/health":
@@ -118,6 +154,7 @@ class MetricsHandler(BaseHTTPRequestHandler):
             body = render_metrics(
                 batch,
                 active_streams=self.active_streams,
+                first_content_observed=self.first_content_observed,
             )
             content_type = "text/plain; version=0.0.4; charset=utf-8"
         else:
@@ -151,6 +188,18 @@ def main() -> None:
         )
 
     MetricsHandler.active_streams = active_values[active_stream_state]
+
+    first_content_state = environ.get(
+        "MONITORING_FIXTURE_FIRST_CONTENT_STATE",
+        "observed",
+    )
+
+    if first_content_state not in {"observed", "unobserved"}:
+        raise ValueError(
+            f"Invalid monitoring fixture first-content state: {first_content_state}"
+        )
+
+    MetricsHandler.first_content_observed = first_content_state == "observed"
 
     with HTTPServer(("0.0.0.0", 8000), MetricsHandler) as server:
         server.serve_forever()

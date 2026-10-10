@@ -23,6 +23,7 @@ Semantic Versioning.
 - Added an active chat stream panel to Grafana with synthetic gauge coverage and instant-query verification.
 - Added monitoring integration coverage for active, zero-valued, and missing chat stream gauges, with isolated CI runs and active panel configuration checks.
 - Added a per-application chat stream first-content duration histogram, with one observation per stream and coverage for missing content, later failures, and registry isolation.
+- Added a Grafana first-content duration P95 panel with synthetic histogram coverage, percentile validation, and zero-observation query checks in CI.
 
 ### Changed
 

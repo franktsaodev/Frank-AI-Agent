@@ -103,9 +103,10 @@ def verify_panel_queries(
     headers: dict[str, str],
     *,
     active_stream_state: str,
+    first_content_state: str,
 ) -> None:
-    if set(queries) != {1, 2, 3, 4, 5, 6, 7}:
-        raise RuntimeError("Expected dashboard panel IDs 1 through 7.")
+    if set(queries) != {1, 2, 3, 4, 5, 6, 7, 8}:
+        raise RuntimeError("Expected dashboard panel IDs 1 through 8.")
 
     if not queries[7][1]:
         raise RuntimeError("The active chat stream panel must use an instant query.")
@@ -229,6 +230,46 @@ def verify_panel_queries(
             f"{active_stream_state}: {active_streams}"
         )
 
+    first_content_percentile = results[8]
+
+    if first_content_state == "unobserved":
+        first_content_counts = query_grafana(
+            headers,
+            "sum("
+            "frank_ai_agent_chat_stream_first_content_duration_seconds_count"
+            '{job="frank-ai-agent"})',
+        )
+
+        if (
+            len(first_content_counts) != 1
+            or first_content_counts[0][0] != {}
+            or first_content_counts[0][1] != 0.0
+        ):
+            raise RuntimeError(
+                "Expected an existing first-content histogram with zero observations: "
+                f"{first_content_counts}"
+            )
+
+        if first_content_percentile:
+            raise RuntimeError(
+                "Expected no first-content P95 without observations: "
+                f"{first_content_percentile}"
+            )
+    elif (
+        len(first_content_percentile) != 1
+        or first_content_percentile[0][0] != {}
+        or not isclose(
+            first_content_percentile[0][1],
+            0.2425,
+            rel_tol=1e-6,
+        )
+    ):
+        raise RuntimeError(
+            f"Unexpected chat stream first-content P95: {first_content_percentile}"
+        )
+
+    print(f"First-content state verified: {first_content_state}.")
+
     print(f"Active stream state verified: {active_stream_state}.")
 
     for panel_id in sorted(results):
@@ -253,6 +294,13 @@ def main() -> None:
         choices=("active", "idle", "missing"),
         default="active",
         help="Expected active stream gauge state in the monitoring fixture.",
+    )
+
+    parser.add_argument(
+        "--first-content-state",
+        choices=("observed", "unobserved"),
+        default="observed",
+        help="Expected first-content histogram state in the monitoring fixture.",
     )
 
     args = parser.parse_args()
@@ -301,8 +349,8 @@ def main() -> None:
 
     panels = dashboard["panels"]
 
-    if len(panels) != 7:
-        raise RuntimeError("Expected seven dashboard panels.")
+    if len(panels) != 8:
+        raise RuntimeError("Expected eight dashboard panels.")
 
     for panel in panels:
         if panel.get("datasource", {}).get("uid") != datasource_uid:
@@ -333,6 +381,34 @@ def main() -> None:
             "The active chat stream panel must use only an instant query."
         )
 
+    first_content_panels = [panel for panel in panels if panel.get("id") == 8]
+
+    if len(first_content_panels) != 1:
+        raise RuntimeError("Expected exactly one first-content duration panel.")
+
+    first_content_panel = first_content_panels[0]
+    first_content_targets = first_content_panel.get("targets", [])
+    first_content_defaults = first_content_panel.get("fieldConfig", {}).get(
+        "defaults", {}
+    )
+
+    if (
+        first_content_panel.get("title") != "Chat stream first-content duration P95"
+        or first_content_panel.get("type") != "timeseries"
+        or first_content_defaults.get("unit") != "s"
+        or first_content_defaults.get("noValue") != "No data"
+    ):
+        raise RuntimeError("Unexpected first-content duration panel configuration.")
+
+    if (
+        len(first_content_targets) != 1
+        or first_content_targets[0].get("instant") is not False
+        or first_content_targets[0].get("range") is not True
+    ):
+        raise RuntimeError(
+            "The first-content duration panel must use only a range query."
+        )
+
     datasource_request = Request(
         f"{base_url}/api/datasources/uid/{datasource_uid}",
         headers=headers,
@@ -351,7 +427,7 @@ def main() -> None:
 
     print(
         "Grafana provisioning verified: "
-        "Prometheus data source and seven dashboard panels."
+        "Prometheus data source and eight dashboard panels."
     )
 
     if args.queries:
@@ -377,6 +453,7 @@ def main() -> None:
             panel_queries,
             headers,
             active_stream_state=args.active_stream_state,
+            first_content_state=args.first_content_state,
         )
 
 

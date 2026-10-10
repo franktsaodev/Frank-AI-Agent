@@ -154,19 +154,29 @@ jobs:
               "$@"
           }
 
-          for state in active idle missing; do
-            echo "Verifying active stream state: $state"
-            export MONITORING_FIXTURE_ACTIVE_STREAM_STATE="$state"
+          verify_monitoring() {
+            local active_state="$1"
+            local first_content_state="$2"
+
+            echo "Verifying active streams: $active_state; first content: $first_content_state"
+            export MONITORING_FIXTURE_ACTIVE_STREAM_STATE="$active_state"
+            export MONITORING_FIXTURE_FIRST_CONTENT_STATE="$first_content_state"
 
             monitoring_compose down --volumes
             monitoring_compose up -d --no-build --wait --wait-timeout 120
 
             python3 monitoring/tests/check_grafana.py \
               --queries \
-              --active-stream-state "$state"
+              --active-stream-state "$active_state" \
+              --first-content-state "$first_content_state"
 
             monitoring_compose down --volumes
-          done
+          }
+
+          verify_monitoring active observed
+          verify_monitoring idle observed
+          verify_monitoring missing observed
+          verify_monitoring active unobserved
 
       - name: Show monitoring verification logs
         if: failure()
