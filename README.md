@@ -1274,14 +1274,16 @@ the samples collected from it.
 The monitoring image also includes alert rules from `monitoring/alerts.yml`.
 Prometheus evaluates these rules every 15 seconds.
 
-| Alert                            | Condition                                                                           |
-| -------------------------------- | ----------------------------------------------------------------------------------- |
-| `FrankAIAgentAPIScrapeFailed`    | The API scrape target remains `up=0` for one minute                                 |
-| `FrankAIAgentChatStreamFailures` | The failed chat stream counter shows a positive increase over the last five minutes |
+| Alert                                    | Condition                                                                                                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FrankAIAgentAPIScrapeFailed`            | The API scrape target remains `up=0` for one minute                                                                                                           |
+| `FrankAIAgentChatStreamFailures`         | The failed chat stream counter shows a positive increase over the last five minutes                                                                           |
+| `FrankAIAgentChatStreamFirstContentSlow` | Job-wide first-content P95 exceeds 5 seconds and the estimated five-minute observation increase is at least 10, with both conditions holding for five minutes |
 
-Both alerts use `severity=warning`. Open `http://localhost:9090/alerts`
-to inspect their states. The scrape failure alert becomes pending before
-firing; it resolves when scraping succeeds again.
+All three alerts use `severity=warning`. Open `http://localhost:9090/alerts`
+to inspect their states. The scrape failure and first-content latency
+alerts become pending before firing. Alerts resolve when their conditions
+no longer hold.
 
 The scrape alert checks access to `/metrics`. Redis readiness is checked
 separately through `/ready`. A target removed from the scrape configuration
@@ -1295,6 +1297,26 @@ classified as `failed`, including session conflicts.
 Alerts are evaluated and displayed in Prometheus. External notifications
 require an Alertmanager configuration.
 
+The first-content latency alert aggregates histogram buckets across API
+targets in the `frank-ai-agent` job. It uses a fixed five-minute rate window
+to estimate P95 and a five-minute counter increase to filter low traffic.
+Both the P95 threshold and the observation threshold must remain satisfied
+at each rule evaluation for five minutes before the alert fires.
+
+The observation threshold uses Prometheus `increase()`, which extrapolates
+between collected samples. It is an estimated increase rather than an exact
+event count. The initial thresholds are defined in `monitoring/alerts.yml`
+and can be adjusted to the application's expected traffic and latency.
+
+This alert measures the server-side interval from serializer iteration
+start until the first content delta is successfully serialized. It excludes
+request processing before iteration, network delivery, and browser rendering.
+Streams without a content delta do not contribute an observation.
+
+Zero observations or missing first-content metrics do not trigger this
+latency alert. Scrape failures and chat stream failures are covered by the
+separate alerts.
+
 After editing the scrape configuration or alert rules, rebuild and recreate
 the Prometheus service:
 
@@ -1306,7 +1328,12 @@ CI builds the monitoring image, validates its configuration with
 `promtool check config`, and runs the rule tests with `promtool test rules`.
 The tests cover normal operation, short and sustained scrape failures,
 recovery, stream failure increases, and counter resets.
-Runtime target health is verified separately.
+
+First-content latency tests cover normal latency, unrelated jobs, pending
+and firing states, short slowdowns, low observation counts, zero observations,
+missing metrics, and recovery after firing.
+
+Runtime target health and loaded rule health are verified separately.
 
 Stop the application and monitoring services:
 

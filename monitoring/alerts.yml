@@ -16,3 +16,25 @@ groups:
         annotations:
           summary: "Frank AI Agent chat stream failures were observed."
           description: "Prometheus observed an increase in failed chat streams within the last five minutes."
+      - alert: FrankAIAgentChatStreamFirstContentSlow
+        expr: |
+          (
+            histogram_quantile(
+              0.95,
+              sum by (job, le) (
+                rate(frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent"}[5m])
+              )
+            ) > 5
+          )
+          and on (job)
+          (
+            sum by (job) (
+              increase(frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent"}[5m])
+            ) >= 10
+          )
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Frank AI Agent chat stream first content is slow."
+          description: "The job-wide first-content P95 has exceeded 5 seconds for at least five minutes while the rolling five-minute observation increase is at least 10."

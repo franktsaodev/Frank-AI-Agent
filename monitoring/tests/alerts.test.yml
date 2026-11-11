@@ -133,3 +133,177 @@ tests:
             exp_annotations:
               summary: "Frank AI Agent chat stream failures were observed."
               description: "Prometheus observed an increase in failed chat streams within the last five minutes."
+
+  - name: Sustained first-content latency becomes pending then firing
+    interval: 15s
+    input_series:
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="5.0"}'
+        values: "0x40"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="10.0"}'
+        values: "0+1x40"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="+Inf"}'
+        values: "0+1x40"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent",instance="api:8000"}'
+        values: "0+1x40"
+
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts:
+          - exp_labels:
+              job: frank-ai-agent
+              severity: warning
+            exp_annotations:
+              summary: "Frank AI Agent chat stream first content is slow."
+              description: "The job-wide first-content P95 has exceeded 5 seconds for at least five minutes while the rolling five-minute observation increase is at least 10."
+
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="FrankAIAgentChatStreamFirstContentSlow",alertstate="pending"}'
+        eval_time: 6m
+        exp_samples:
+          - labels: 'ALERTS{alertname="FrankAIAgentChatStreamFirstContentSlow",alertstate="pending",job="frank-ai-agent",severity="warning"}'
+            value: 1
+
+  - name: Normal first-content latency and a slow unrelated job do not alert
+    interval: 15s
+    input_series:
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="2.5"}'
+        values: "0+1x40"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="5.0"}'
+        values: "0+1x40"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="+Inf"}'
+        values: "0+1x40"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent",instance="api:8000"}'
+        values: "0+1x40"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="another-service",instance="other:8000",le="5.0"}'
+        values: "0x40"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="another-service",instance="other:8000",le="10.0"}'
+        values: "0+1x40"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="another-service",instance="other:8000",le="+Inf"}'
+        values: "0+1x40"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="another-service",instance="other:8000"}'
+        values: "0+1x40"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+
+  - name: A short first-content slowdown clears pending without firing
+    interval: 15s
+    input_series:
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="5.0"}'
+        values: "0x12 100+100x27"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="10.0"}'
+        values: "0+1x12 112+100x27"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="+Inf"}'
+        values: "0+1x12 112+100x27"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent",instance="api:8000"}'
+        values: "0+1x12 112+100x27"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="FrankAIAgentChatStreamFirstContentSlow",alertstate="pending"}'
+        eval_time: 3m
+        exp_samples:
+          - labels: 'ALERTS{alertname="FrankAIAgentChatStreamFirstContentSlow",alertstate="pending",job="frank-ai-agent",severity="warning"}'
+            value: 1
+      - expr: 'ALERTS{alertname="FrankAIAgentChatStreamFirstContentSlow"}'
+        eval_time: 4m
+        exp_samples: []
+
+  - name: Slow first content with too few observations does not alert
+    interval: 1m
+    input_series:
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="5.0"}'
+        values: "0x12"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="10.0"}'
+        values: "0+1x12"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="+Inf"}'
+        values: "0+1x12"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent",instance="api:8000"}'
+        values: "0+1x12"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="FrankAIAgentChatStreamFirstContentSlow"}'
+        eval_time: 8m
+        exp_samples: []
+
+  - name: Zero first-content observations do not alert
+    interval: 1m
+    input_series:
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="5.0"}'
+        values: "0x12"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="10.0"}'
+        values: "0x12"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="+Inf"}'
+        values: "0x12"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent",instance="api:8000"}'
+        values: "0x12"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+
+  - name: Missing first-content metrics do not trigger the latency alert
+    interval: 1m
+    input_series:
+      - series: 'up{job="frank-ai-agent",instance="api:8000"}'
+        values: "1x12"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+
+  - name: A firing first-content latency alert resolves after recovery
+    interval: 15s
+    input_series:
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="5.0"}'
+        values: "0x32 100+100x15"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="10.0"}'
+        values: "0+1x32 132+100x15"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api:8000",le="+Inf"}'
+        values: "0+1x32 132+100x15"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent",instance="api:8000"}'
+        values: "0+1x32 132+100x15"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts:
+          - exp_labels:
+              job: frank-ai-agent
+              severity: warning
+            exp_annotations:
+              summary: "Frank AI Agent chat stream first content is slow."
+              description: "The job-wide first-content P95 has exceeded 5 seconds for at least five minutes while the rolling five-minute observation increase is at least 10."
+      - eval_time: 10m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
