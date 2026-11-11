@@ -1303,6 +1303,15 @@ to estimate P95 and a five-minute counter increase to filter low traffic.
 Both the P95 threshold and the observation threshold must remain satisfied
 at each rule evaluation for five minutes before the alert fires.
 
+The rule calculates rates and counter increases for each instance's series
+before aggregating by job, so counter resets are handled independently.
+It calculates P95 from the combined histogram bucket rates rather than
+averaging instance percentiles.
+
+Observation counts are combined across instances for the minimum traffic
+threshold. A low-volume slow instance may not trigger the alert when
+higher-volume normal traffic keeps the job-wide P95 below the threshold.
+
 The observation threshold uses Prometheus `increase()`, which extrapolates
 between collected samples. It is an estimated increase rather than an exact
 event count. The initial thresholds are defined in `monitoring/alerts.yml`
@@ -1332,6 +1341,11 @@ recovery, stream failure increases, and counter resets.
 First-content latency tests cover normal latency, unrelated jobs, pending
 and firing states, short slowdowns, low observation counts, zero observations,
 missing metrics, and recovery after firing.
+
+Multi-instance tests verify combined observation thresholds, traffic-weighted
+histogram aggregation, and an independent counter reset followed by new
+slow observations. Expected firing alerts retain job-level labels without
+an instance label.
 
 Runtime target health and loaded rule health are verified separately.
 

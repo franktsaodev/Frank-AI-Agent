@@ -307,3 +307,136 @@ tests:
       - eval_time: 12m
         alertname: FrankAIAgentChatStreamFirstContentSlow
         exp_alerts: []
+
+  - name: Low-volume instances jointly satisfy the first-content observation threshold
+    interval: 1m
+    input_series:
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-a:8000",le="5.0"}'
+        values: "0x15"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-a:8000",le="10.0"}'
+        values: "0+1x15"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-a:8000",le="+Inf"}'
+        values: "0+1x15"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent",instance="api-a:8000"}'
+        values: "0+1x15"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-b:8000",le="5.0"}'
+        values: "0x15"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-b:8000",le="10.0"}'
+        values: "0+1x15"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-b:8000",le="+Inf"}'
+        values: "0+1x15"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent",instance="api-b:8000"}'
+        values: "0+1x15"
+
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts:
+          - exp_labels:
+              job: frank-ai-agent
+              severity: warning
+            exp_annotations:
+              summary: "Frank AI Agent chat stream first content is slow."
+              description: "The job-wide first-content P95 has exceeded 5 seconds for at least five minutes while the rolling five-minute observation increase is at least 10."
+
+    promql_expr_test:
+      - expr: 'sum by (job, instance) (increase(frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent"}[5m]))'
+        eval_time: 8m
+        exp_samples:
+          - labels: '{job="frank-ai-agent",instance="api-a:8000"}'
+            value: 5
+          - labels: '{job="frank-ai-agent",instance="api-b:8000"}'
+            value: 5
+      - expr: 'ALERTS{alertname="FrankAIAgentChatStreamFirstContentSlow",alertstate="pending"}'
+        eval_time: 8m
+        exp_samples:
+          - labels: 'ALERTS{alertname="FrankAIAgentChatStreamFirstContentSlow",alertstate="pending",job="frank-ai-agent",severity="warning"}'
+            value: 1
+
+  - name: High-volume normal traffic keeps the aggregated first-content P95 below the threshold
+    interval: 15s
+    input_series:
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-slow:8000",le="5.0"}'
+        values: "0x48"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-slow:8000",le="10.0"}'
+        values: "0+1x48"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-slow:8000",le="+Inf"}'
+        values: "0+1x48"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent",instance="api-slow:8000"}'
+        values: "0+1x48"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-fast:8000",le="5.0"}'
+        values: "0+100x48"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-fast:8000",le="10.0"}'
+        values: "0+100x48"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-fast:8000",le="+Inf"}'
+        values: "0+100x48"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent",instance="api-fast:8000"}'
+        values: "0+100x48"
+
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="FrankAIAgentChatStreamFirstContentSlow"}'
+        eval_time: 8m
+        exp_samples: []
+
+  - name: One instance reset does not alert but later sustained slow content does
+    interval: 15s
+    input_series:
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-a:8000",le="5.0"}'
+        values: "0x60"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-a:8000",le="10.0"}'
+        values: "1000x11 0x12 1+1x35"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-a:8000",le="+Inf"}'
+        values: "1000x11 0x12 1+1x35"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent",instance="api-a:8000"}'
+        values: "1000x11 0x12 1+1x35"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-b:8000",le="5.0"}'
+        values: "1000x60"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-b:8000",le="10.0"}'
+        values: "1000x60"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_bucket{job="frank-ai-agent",instance="api-b:8000",le="+Inf"}'
+        values: "1000x60"
+      - series: 'frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent",instance="api-b:8000"}'
+        values: "1000x60"
+
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: FrankAIAgentChatStreamFirstContentSlow
+        exp_alerts:
+          - exp_labels:
+              job: frank-ai-agent
+              severity: warning
+            exp_annotations:
+              summary: "Frank AI Agent chat stream first content is slow."
+              description: "The job-wide first-content P95 has exceeded 5 seconds for at least five minutes while the rolling five-minute observation increase is at least 10."
+
+    promql_expr_test:
+      - expr: 'sum by (job) (increase(frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent"}[5m]))'
+        eval_time: 4m
+        exp_samples:
+          - labels: '{job="frank-ai-agent"}'
+            value: 0
+      - expr: 'ALERTS{alertname="FrankAIAgentChatStreamFirstContentSlow"}'
+        eval_time: 4m
+        exp_samples: []
+      - expr: 'ALERTS{alertname="FrankAIAgentChatStreamFirstContentSlow",alertstate="pending"}'
+        eval_time: 9m
+        exp_samples:
+          - labels: 'ALERTS{alertname="FrankAIAgentChatStreamFirstContentSlow",alertstate="pending",job="frank-ai-agent",severity="warning"}'
+            value: 1
