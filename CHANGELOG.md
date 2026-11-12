@@ -26,6 +26,7 @@ Semantic Versioning.
 - Added a Grafana first-content duration P95 panel with synthetic histogram coverage, percentile validation, and zero-observation query checks in CI.
 - Added a job-wide first-content P95 latency alert with a minimum observation threshold, a five-minute pending period, and automated rule tests for slowdowns, low traffic, missing observations, and recovery.
 - Added first-content latency alert regression tests for combined observation thresholds across instances, traffic-weighted histogram aggregation, and independent counter resets followed by sustained slow observations.
+- Added a monitoring alert runbook with diagnostic commands and recovery guidance, linked from all three alerts through tested `runbook_url` annotations.
 
 ### Changed
 

@@ -51,6 +51,7 @@ tests:
             exp_annotations:
               summary: "Frank AI Agent API metrics scrape is failing."
               description: "Prometheus has been unable to scrape the API metrics endpoint for at least one minute."
+              runbook_url: "https://github.com/franktsaodev/Frank-AI-Agent/blob/master/docs/monitoring-runbook.md#api-metrics-scrape-failure"
       - eval_time: 1m15s
         alertname: FrankAIAgentAPIScrapeFailed
         exp_alerts: []
@@ -109,6 +110,7 @@ tests:
             exp_annotations:
               summary: "Frank AI Agent chat stream failures were observed."
               description: "Prometheus observed an increase in failed chat streams within the last five minutes."
+              runbook_url: "https://github.com/franktsaodev/Frank-AI-Agent/blob/master/docs/monitoring-runbook.md#chat-stream-failures"
       - eval_time: 6m
         alertname: FrankAIAgentChatStreamFailures
         exp_alerts: []
@@ -133,6 +135,7 @@ tests:
             exp_annotations:
               summary: "Frank AI Agent chat stream failures were observed."
               description: "Prometheus observed an increase in failed chat streams within the last five minutes."
+              runbook_url: "https://github.com/franktsaodev/Frank-AI-Agent/blob/master/docs/monitoring-runbook.md#chat-stream-failures"
 
   - name: Sustained first-content latency becomes pending then firing
     interval: 15s
@@ -159,6 +162,7 @@ tests:
             exp_annotations:
               summary: "Frank AI Agent chat stream first content is slow."
               description: "The job-wide first-content P95 has exceeded 5 seconds for at least five minutes while the rolling five-minute observation increase is at least 10."
+              runbook_url: "https://github.com/franktsaodev/Frank-AI-Agent/blob/master/docs/monitoring-runbook.md#slow-first-content"
 
     promql_expr_test:
       - expr: 'ALERTS{alertname="FrankAIAgentChatStreamFirstContentSlow",alertstate="pending"}'
@@ -301,6 +305,7 @@ tests:
             exp_annotations:
               summary: "Frank AI Agent chat stream first content is slow."
               description: "The job-wide first-content P95 has exceeded 5 seconds for at least five minutes while the rolling five-minute observation increase is at least 10."
+              runbook_url: "https://github.com/franktsaodev/Frank-AI-Agent/blob/master/docs/monitoring-runbook.md#slow-first-content"
       - eval_time: 10m
         alertname: FrankAIAgentChatStreamFirstContentSlow
         exp_alerts: []
@@ -341,6 +346,7 @@ tests:
             exp_annotations:
               summary: "Frank AI Agent chat stream first content is slow."
               description: "The job-wide first-content P95 has exceeded 5 seconds for at least five minutes while the rolling five-minute observation increase is at least 10."
+              runbook_url: "https://github.com/franktsaodev/Frank-AI-Agent/blob/master/docs/monitoring-runbook.md#slow-first-content"
 
     promql_expr_test:
       - expr: 'sum by (job, instance) (increase(frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent"}[5m]))'
@@ -425,6 +431,7 @@ tests:
             exp_annotations:
               summary: "Frank AI Agent chat stream first content is slow."
               description: "The job-wide first-content P95 has exceeded 5 seconds for at least five minutes while the rolling five-minute observation increase is at least 10."
+              runbook_url: "https://github.com/franktsaodev/Frank-AI-Agent/blob/master/docs/monitoring-runbook.md#slow-first-content"
 
     promql_expr_test:
       - expr: 'sum by (job) (increase(frank_ai_agent_chat_stream_first_content_duration_seconds_count{job="frank-ai-agent"}[5m]))'

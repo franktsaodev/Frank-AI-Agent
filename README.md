@@ -1297,6 +1297,13 @@ classified as `failed`, including session conflicts.
 Alerts are evaluated and displayed in Prometheus. External notifications
 require an Alertmanager configuration.
 
+See the [monitoring alert runbook](docs/monitoring-runbook.md) for diagnostic
+commands, response guidance, and recovery checks for all three alerts.
+
+Each alert includes a `runbook_url` annotation pointing to its corresponding
+section. Rule tests verify these annotation values. Diagnostic commands in
+the runbook use PowerShell 7 and run from the repository root.
+
 The first-content latency alert aggregates histogram buckets across API
 targets in the `frank-ai-agent` job. It uses a fixed five-minute rate window
 to estimate P95 and a five-minute counter increase to filter low traffic.
