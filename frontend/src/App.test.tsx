@@ -324,6 +324,360 @@ describe('App', () => {
         },
     )
 
+    it('should stop an active response and restore the draft without a chat error', async () => {
+        const user = userEvent.setup()
+        let finishStream!: () => void
+
+        const streamGate = new Promise<void>((resolve) => {
+            finishStream = resolve
+        })
+
+        streamChatMessageMock.mockImplementation(
+            async function* (
+                _sessionId,
+                _message,
+                signal,
+            ): AsyncGenerator<ChatStreamEvent> {
+                signal?.addEventListener('abort', finishStream, {
+                    once: true,
+                })
+
+                try {
+                    yield {
+                        type: 'content_delta',
+                        content: 'Unpersisted partial response',
+                    }
+
+                    await streamGate
+
+                    throw new ChatStreamError(
+                        'Unable to read the chat stream.',
+                        'stopped-stream-request-id',
+                    )
+                } finally {
+                    signal?.removeEventListener('abort', finishStream)
+                }
+            },
+        )
+
+        render(<App />)
+
+        try {
+            await screen.findByText('Agent ready')
+
+            const messageInput = screen.getByRole('textbox', {
+                name: 'Chat message',
+            })
+
+            await user.type(messageInput, 'Question to stop')
+            await user.click(
+                screen.getByRole('button', {
+                    name: 'Send',
+                }),
+            )
+
+            expect(
+                await screen.findByText('Unpersisted partial response'),
+            ).toBeInTheDocument()
+            expect(messageInput).toBeDisabled()
+
+            await user.click(
+                await screen.findByRole('button', {
+                    name: 'Stop response',
+                }),
+            )
+
+            expect(streamChatMessageMock.mock.calls[0]?.[2]?.aborted).toBe(true)
+
+            await waitFor(() => {
+                expect(messageInput).toBeEnabled()
+            })
+
+            expect(getSessionHistoryMock).toHaveBeenCalledTimes(1)
+            expect(getSessionHistoryMock).toHaveBeenCalledWith('session-123')
+            expect(messageInput).toHaveValue('Question to stop')
+
+            expect(
+                screen.queryByText('Unpersisted partial response'),
+            ).not.toBeInTheDocument()
+            expect(
+                screen.queryByLabelText('Agent is thinking'),
+            ).not.toBeInTheDocument()
+            expect(
+                screen.queryByRole('button', {
+                    name: 'Stop response',
+                }),
+            ).not.toBeInTheDocument()
+
+            expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+            expect(
+                screen.queryByRole('textbox', {
+                    name: 'Request ID',
+                }),
+            ).not.toBeInTheDocument()
+
+            expect(
+                screen.getByRole('button', {
+                    name: 'Send',
+                }),
+            ).toBeEnabled()
+
+            expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+        } finally {
+            await act(async () => {
+                finishStream()
+            })
+        }
+    })
+
+    it.each(['read failure', 'late completion', 'clean end'])(
+        'should stop before first content and wait for history recovery (%s)',
+        async (termination) => {
+            const user = userEvent.setup()
+
+            let finishStream!: () => void
+            const streamGate = new Promise<void>((resolve) => {
+                finishStream = resolve
+            })
+
+            let finishHistory!: () => void
+            const historyGate = new Promise<void>((resolve) => {
+                finishHistory = resolve
+            })
+
+            getSessionHistoryMock.mockImplementationOnce(async () => {
+                await historyGate
+
+                return {
+                    session_id: 'session-123',
+                    messages: [],
+                }
+            })
+
+            streamChatMessageMock.mockImplementationOnce(
+                async function* (
+                    _sessionId,
+                    _message,
+                    signal,
+                ): AsyncGenerator<ChatStreamEvent> {
+                    signal?.addEventListener('abort', finishStream, {
+                        once: true,
+                    })
+
+                    try {
+                        await streamGate
+
+                        if (termination === 'read failure') {
+                            throw new ChatStreamError(
+                                'Unable to read the chat stream.',
+                                'cancelled-request-id',
+                            )
+                        }
+
+                        if (termination === 'late completion') {
+                            yield {
+                                type: 'content_delta',
+                                content: 'Late partial content',
+                            }
+                            yield {
+                                type: 'completed',
+                                response: 'Late completed response',
+                            }
+                        }
+                    } finally {
+                        signal?.removeEventListener('abort', finishStream)
+                    }
+                },
+            )
+
+            render(<App />)
+
+            try {
+                await screen.findByText('Agent ready')
+
+                const messageInput = screen.getByRole('textbox', {
+                    name: 'Chat message',
+                })
+
+                await user.type(messageInput, 'Stop before first content')
+                await user.click(screen.getByRole('button', { name: 'Send' }))
+
+                await user.click(
+                    await screen.findByRole('button', {
+                        name: 'Stop response',
+                    }),
+                )
+
+                await waitFor(() => {
+                    expect(getSessionHistoryMock).toHaveBeenCalledTimes(1)
+                })
+
+                expect(streamChatMessageMock.mock.calls[0]?.[2]?.aborted).toBe(
+                    true,
+                )
+                expect(getSessionHistoryMock).toHaveBeenCalledWith(
+                    'session-123',
+                )
+
+                expect(messageInput).toBeDisabled()
+                expect(messageInput).toHaveValue('Stop before first content')
+                expect(
+                    screen.getByRole('button', {
+                        name: 'Restoring conversation…',
+                    }),
+                ).toBeDisabled()
+                expect(
+                    screen.getByRole('button', {
+                        name: /New conversation/,
+                    }),
+                ).toBeDisabled()
+                expect(
+                    screen.queryByLabelText('Agent is thinking'),
+                ).not.toBeInTheDocument()
+
+                // 即使直接觸發表單提交，恢復完成前也不能重送。
+                const form = messageInput.closest('form')
+
+                if (form === null) {
+                    throw new Error('Chat composer form was not found.')
+                }
+
+                await act(async () => {
+                    form.requestSubmit()
+                })
+
+                expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+                expect(
+                    screen.queryByText('Late partial content'),
+                ).not.toBeInTheDocument()
+                expect(
+                    screen.queryByText('Late completed response'),
+                ).not.toBeInTheDocument()
+                expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+                await act(async () => {
+                    finishHistory()
+                })
+
+                await waitFor(() => {
+                    expect(messageInput).toBeEnabled()
+                })
+
+                expect(messageInput).toHaveValue('Stop before first content')
+                expect(
+                    screen.getByRole('button', { name: 'Send' }),
+                ).toBeEnabled()
+                expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+                expect(
+                    screen.queryByRole('textbox', { name: 'Request ID' }),
+                ).not.toBeInTheDocument()
+                expect(
+                    screen.queryByText('Late completed response'),
+                ).not.toBeInTheDocument()
+            } finally {
+                await act(async () => {
+                    finishStream()
+                    finishHistory()
+                })
+            }
+        },
+    )
+
+    it.each(['history-recovery-request-id', null])(
+        'should show recovery diagnostics when stopped history cannot be loaded (%s)',
+        async (requestId) => {
+            const user = userEvent.setup()
+
+            let finishStream!: () => void
+            const streamGate = new Promise<void>((resolve) => {
+                finishStream = resolve
+            })
+
+            getSessionHistoryMock.mockRejectedValueOnce(
+                new ApiError(500, 'History unavailable', requestId),
+            )
+
+            streamChatMessageMock.mockImplementationOnce(
+                async function* (
+                    _sessionId,
+                    _message,
+                    signal,
+                ): AsyncGenerator<ChatStreamEvent> {
+                    signal?.addEventListener('abort', finishStream, {
+                        once: true,
+                    })
+
+                    try {
+                        yield {
+                            type: 'content_delta',
+                            content: 'Discard this partial response',
+                        }
+
+                        await streamGate
+
+                        throw new ChatStreamError(
+                            'Unable to read the chat stream.',
+                            'cancelled-stream-request-id',
+                        )
+                    } finally {
+                        signal?.removeEventListener('abort', finishStream)
+                    }
+                },
+            )
+
+            render(<App />)
+
+            try {
+                await screen.findByText('Agent ready')
+
+                const messageInput = screen.getByRole('textbox', {
+                    name: 'Chat message',
+                })
+
+                await user.type(messageInput, 'Preserve this draft')
+                await user.click(screen.getByRole('button', { name: 'Send' }))
+
+                await screen.findByText('Discard this partial response')
+
+                await user.click(
+                    screen.getByRole('button', { name: 'Stop response' }),
+                )
+
+                expect(await screen.findByRole('alert')).toHaveTextContent(
+                    'Unable to load the latest conversation. Please reload before retrying.',
+                )
+
+                await waitFor(() => {
+                    expect(messageInput).toBeEnabled()
+                })
+
+                expect(messageInput).toHaveValue('Preserve this draft')
+                expect(
+                    screen.queryByText('Discard this partial response'),
+                ).not.toBeInTheDocument()
+
+                if (requestId === null) {
+                    expect(
+                        screen.queryByRole('textbox', { name: 'Request ID' }),
+                    ).not.toBeInTheDocument()
+                } else {
+                    expect(
+                        screen.getByRole('textbox', { name: 'Request ID' }),
+                    ).toHaveValue(requestId)
+                }
+
+                expect(getSessionHistoryMock).toHaveBeenCalledWith(
+                    'session-123',
+                )
+                expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+            } finally {
+                await act(async () => {
+                    finishStream()
+                })
+            }
+        },
+    )
+
     it('should stream and display the agent response', async () => {
         const user = userEvent.setup()
 
@@ -360,12 +714,11 @@ describe('App', () => {
             }),
         )
 
-        await waitFor(() => {
-            expect(streamChatMessageMock).toHaveBeenCalledWith(
-                'session-123',
-                'How do sessions expire?',
-            )
-        })
+        expect(streamChatMessageMock).toHaveBeenCalledWith(
+            'session-123',
+            'How do sessions expire?',
+            expect.any(AbortSignal),
+        )
 
         expect(screen.getByText('How do sessions expire?')).toBeInTheDocument()
 
@@ -471,6 +824,7 @@ describe('App', () => {
         expect(streamChatMessageMock).toHaveBeenCalledWith(
             'session-123',
             'Hello',
+            expect.any(AbortSignal),
         )
     })
 

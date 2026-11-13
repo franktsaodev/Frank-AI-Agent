@@ -35,6 +35,8 @@ const capabilities = [
 ] as const
 
 type ConnectionState = 'checking' | 'online' | 'offline'
+type ChatStreamState =
+    'idle' | 'streaming' | 'stopping' | 'recovering' | 'finishing'
 type ChatMessageRole = 'user' | 'assistant'
 
 interface ChatMessage {
@@ -79,7 +81,9 @@ function App() {
     const [sessionId, setSessionId] = useState<string | null>(null)
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [input, setInput] = useState('')
-    const [isSending, setIsSending] = useState(false)
+    const [chatStreamState, setChatStreamState] =
+        useState<ChatStreamState>('idle')
+    const isSending = chatStreamState !== 'idle'
     const [isCreatingSession, setIsCreatingSession] = useState(false)
     const [chatErrorDetails, setChatErrorDetails] =
         useState<ChatErrorDetails | null>(null)
@@ -89,6 +93,8 @@ function App() {
     const nextMessageId = useRef(0)
     const messagesEndRef = useRef<HTMLDivElement | null>(null)
     const sendingRef = useRef(false)
+    const mountedRef = useRef(false)
+    const streamAbortControllerRef = useRef<AbortController | null>(null)
 
     function setChatError(
         message: string | null,
@@ -106,6 +112,7 @@ function App() {
 
     useEffect(() => {
         let active = true
+        mountedRef.current = true
 
         void initializeApplication()
             .then((result) => {
@@ -137,6 +144,10 @@ function App() {
 
         return () => {
             active = false
+            mountedRef.current = false
+            const controller = streamAbortControllerRef.current
+            streamAbortControllerRef.current = null
+            controller?.abort()
         }
     }, [])
 
@@ -225,6 +236,17 @@ function App() {
         }
     }
 
+    function handleStopResponse(): void {
+        const controller = streamAbortControllerRef.current
+
+        if (controller === null || controller.signal.aborted) {
+            return
+        }
+
+        setChatStreamState('stopping')
+        controller.abort()
+    }
+
     async function handleSubmit(
         event: SubmitEvent<HTMLFormElement>,
     ): Promise<void> {
@@ -243,6 +265,8 @@ function App() {
         }
 
         sendingRef.current = true
+        const abortController = new AbortController()
+        streamAbortControllerRef.current = abortController
 
         const activeSessionId = sessionId
 
@@ -251,7 +275,7 @@ function App() {
         setMessages((currentMessages) => [...currentMessages, userMessage])
         setInput('')
         setChatError(null)
-        setIsSending(true)
+        setChatStreamState('streaming')
 
         let assistantMessageId: number | null = null
         let streamCompleted = false
@@ -272,6 +296,10 @@ function App() {
             try {
                 const replacementSession = await createSession()
 
+                if (!mountedRef.current) {
+                    return
+                }
+
                 storeSessionId(replacementSession.session_id)
                 setSessionId(replacementSession.session_id)
                 setMessages([])
@@ -280,6 +308,10 @@ function App() {
                     'Session expired. A new conversation is ready. Please send your message again.',
                 )
             } catch (replacementError: unknown) {
+                if (!mountedRef.current) {
+                    return
+                }
+
                 setChatError(
                     replacementError instanceof ApiError
                         ? replacementError.message
@@ -292,10 +324,16 @@ function App() {
         }
 
         async function restoreAfterFailedStream(): Promise<void> {
+            streamAbortControllerRef.current = null
+            setChatStreamState('recovering')
             discardProvisionalMessages()
 
             try {
                 const sessionHistory = await getSessionHistory(activeSessionId)
+
+                if (!mountedRef.current) {
+                    return
+                }
                 const restoredMessages = createRestoredMessages(
                     sessionHistory.messages,
                 )
@@ -303,6 +341,10 @@ function App() {
                 nextMessageId.current = restoredMessages.length
                 setMessages(restoredMessages)
             } catch (historyError: unknown) {
+                if (!mountedRef.current) {
+                    return
+                }
+
                 if (
                     historyError instanceof ApiError &&
                     historyError.status === 404
@@ -324,7 +366,12 @@ function App() {
             for await (const event of streamChatMessage(
                 activeSessionId,
                 message,
+                abortController.signal,
             )) {
+                if (abortController.signal.aborted || !mountedRef.current) {
+                    throw new DOMException('Response stopped.', 'AbortError')
+                }
+
                 if (event.type === 'content_delta') {
                     if (assistantMessageId === null) {
                         const assistantMessage = createChatMessage(
@@ -360,6 +407,8 @@ function App() {
 
                 if (event.type === 'completed') {
                     streamCompleted = true
+                    streamAbortControllerRef.current = null
+                    setChatStreamState('finishing')
 
                     if (assistantMessageId === null) {
                         const assistantMessage = createChatMessage(
@@ -397,10 +446,27 @@ function App() {
                 break
             }
 
+            if (abortController.signal.aborted && !streamCompleted) {
+                throw new DOMException('Response stopped.', 'AbortError')
+            }
+
             if (!streamCompleted && !streamFailed) {
                 throw new Error('Chat stream ended before completion.')
             }
         } catch (error: unknown) {
+            if (!mountedRef.current) {
+                return
+            }
+
+            streamAbortControllerRef.current = null
+            setChatStreamState('recovering')
+
+            if (abortController.signal.aborted) {
+                setChatError(null)
+                await restoreAfterFailedStream()
+                return
+            }
+
             if (error instanceof ApiError && error.status === 404) {
                 discardProvisionalMessages()
                 await replaceExpiredSession()
@@ -421,8 +487,14 @@ function App() {
 
             await restoreAfterFailedStream()
         } finally {
+            if (streamAbortControllerRef.current === abortController) {
+                streamAbortControllerRef.current = null
+            }
             sendingRef.current = false
-            setIsSending(false)
+
+            if (mountedRef.current) {
+                setChatStreamState('idle')
+            }
         }
     }
 
@@ -447,6 +519,14 @@ function App() {
             : connectionState === 'offline'
               ? 'Start the FastAPI service'
               : 'Creating an isolated session'
+
+    const sendButtonLabel = {
+        idle: 'Send',
+        streaming: 'Stop response',
+        stopping: 'Stopping…',
+        recovering: 'Restoring conversation…',
+        finishing: 'Finishing…',
+    }[chatStreamState]
 
     const canSend =
         sessionId !== null &&
@@ -608,7 +688,7 @@ function App() {
                                 </article>
                             ))}
 
-                            {isSending && (
+                            {chatStreamState === 'streaming' && (
                                 <article className="message-row message-row-assistant">
                                     <div
                                         className="message-avatar"
@@ -663,8 +743,16 @@ function App() {
                             rows={1}
                         />
 
-                        <button type="submit" disabled={!canSend}>
-                            {isSending ? 'Thinking…' : 'Send'}
+                        <button
+                            type={isSending ? 'button' : 'submit'}
+                            disabled={
+                                isSending
+                                    ? chatStreamState !== 'streaming'
+                                    : !canSend
+                            }
+                            onClick={isSending ? handleStopResponse : undefined}
+                        >
+                            {sendButtonLabel}
                         </button>
                     </form>
 

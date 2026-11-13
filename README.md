@@ -309,6 +309,20 @@ restores the submitted text to the composer. The user can inspect the saved
 conversation before manually retrying. If history cannot be loaded, the
 frontend asks the user to reload before retrying.
 
+While a chat request is active, select **Stop response** to abort the
+browser's stream request. The frontend ignores subsequent stream events,
+removes provisional messages, reloads the saved conversation history, and
+restores the submitted text to the composer.
+
+Sending messages and starting a new conversation remain disabled until
+recovery finishes. Stopping a response does not show a connection error;
+if history recovery fails, the frontend displays recovery diagnostics.
+
+Browser cancellation does not guarantee that backend generation or session
+persistence has stopped. The restored history reflects the saved state
+available when it is fetched. Review that history before manually resending
+the restored draft.
+
 If a chat request returns `404`, or reloading history after a failed stream
 returns `404`, the frontend creates a replacement session, clears the old
 conversation, and keeps the submitted text in the composer for manual
