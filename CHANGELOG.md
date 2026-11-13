@@ -28,6 +28,7 @@ Semantic Versioning.
 - Added first-content latency alert regression tests for combined observation thresholds across instances, traffic-weighted histogram aggregation, and independent counter resets followed by sustained slow observations.
 - Added a monitoring alert runbook with diagnostic commands and recovery guidance, linked from all three alerts through tested `runbook_url` annotations.
 - Added a frontend Stop response action with browser request cancellation, late-event protection, saved-history recovery, draft restoration, and cancellation regression tests.
+- Added frontend cancellation lifecycle regression tests for resending with a fresh abort signal, aborting on unmount without history recovery, and replacing an expired session after stopping while preserving the draft.
 
 ### Changed
 

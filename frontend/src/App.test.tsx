@@ -75,6 +75,39 @@ async function* createFailingChatStream(
     throw error
 }
 
+async function* createAbortableChatStream(
+    signal: AbortSignal | undefined,
+    onFinished: () => void = () => undefined,
+): AsyncGenerator<ChatStreamEvent> {
+    let finishStream!: () => void
+    const streamGate = new Promise<void>((resolve) => {
+        finishStream = resolve
+    })
+
+    signal?.addEventListener('abort', finishStream, { once: true })
+
+    if (signal?.aborted) {
+        finishStream()
+    }
+
+    try {
+        yield {
+            type: 'content_delta',
+            content: 'Provisional response to cancel',
+        }
+
+        await streamGate
+
+        throw new ChatStreamError(
+            'Unable to read the chat stream.',
+            'cancelled-stream-request-id',
+        )
+    } finally {
+        signal?.removeEventListener('abort', finishStream)
+        onFinished()
+    }
+}
+
 describe('App', () => {
     beforeEach(() => {
         vi.clearAllMocks()
@@ -323,6 +356,199 @@ describe('App', () => {
             expect(initializeApplicationMock).toHaveBeenCalledTimes(2)
         },
     )
+
+    it('should resend after stopping with a fresh abort signal', async () => {
+        const user = userEvent.setup()
+
+        streamChatMessageMock
+            .mockImplementationOnce((_sessionId, _message, signal) =>
+                createAbortableChatStream(signal),
+            )
+            .mockReturnValueOnce(
+                createChatStream([
+                    {
+                        type: 'completed',
+                        response: 'Response after retry',
+                    },
+                ]),
+            )
+
+        const { unmount } = render(<App />)
+
+        try {
+            await screen.findByText('Agent ready')
+
+            const messageInput = screen.getByRole('textbox', {
+                name: 'Chat message',
+            })
+
+            await user.type(messageInput, 'Retry this question')
+            await user.click(screen.getByRole('button', { name: 'Send' }))
+            await screen.findByText('Provisional response to cancel')
+
+            const firstSignal = streamChatMessageMock.mock.calls[0]?.[2]
+            expect(firstSignal).toBeInstanceOf(AbortSignal)
+            expect(firstSignal?.aborted).toBe(false)
+
+            await user.click(
+                screen.getByRole('button', { name: 'Stop response' }),
+            )
+
+            await waitFor(() => {
+                expect(messageInput).toBeEnabled()
+            })
+
+            expect(firstSignal?.aborted).toBe(true)
+            expect(messageInput).toHaveValue('Retry this question')
+            expect(getSessionHistoryMock).toHaveBeenCalledTimes(1)
+            expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+            await user.click(screen.getByRole('button', { name: 'Send' }))
+
+            expect(
+                await screen.findByText('Response after retry'),
+            ).toBeInTheDocument()
+
+            await waitFor(() => {
+                expect(messageInput).toBeEnabled()
+            })
+
+            const secondSignal = streamChatMessageMock.mock.calls[1]?.[2]
+
+            expect(secondSignal).toBeInstanceOf(AbortSignal)
+            expect(secondSignal).not.toBe(firstSignal)
+            expect(secondSignal?.aborted).toBe(false)
+            expect(streamChatMessageMock).toHaveBeenNthCalledWith(
+                2,
+                'session-123',
+                'Retry this question',
+                secondSignal,
+            )
+            expect(streamChatMessageMock).toHaveBeenCalledTimes(2)
+            expect(getSessionHistoryMock).toHaveBeenCalledTimes(1)
+            expect(messageInput).toHaveValue('')
+            expect(
+                screen.queryByText('Provisional response to cancel'),
+            ).not.toBeInTheDocument()
+            expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+        } finally {
+            await act(async () => {
+                unmount()
+            })
+        }
+    })
+
+    it('should abort on unmount without starting history recovery', async () => {
+        const user = userEvent.setup()
+        const streamFinished = vi.fn()
+
+        streamChatMessageMock.mockImplementationOnce(
+            (_sessionId, _message, signal) =>
+                createAbortableChatStream(signal, streamFinished),
+        )
+
+        const { unmount } = render(<App />)
+
+        try {
+            await screen.findByText('Agent ready')
+
+            await user.type(
+                screen.getByRole('textbox', { name: 'Chat message' }),
+                'Leave while streaming',
+            )
+            await user.click(screen.getByRole('button', { name: 'Send' }))
+            await screen.findByText('Provisional response to cancel')
+
+            const signal = streamChatMessageMock.mock.calls[0]?.[2]
+
+            expect(signal).toBeInstanceOf(AbortSignal)
+            expect(signal?.aborted).toBe(false)
+
+            await act(async () => {
+                unmount()
+            })
+
+            expect(signal?.aborted).toBe(true)
+
+            await waitFor(() => {
+                expect(streamFinished).toHaveBeenCalledTimes(1)
+            })
+
+            expect(getSessionHistoryMock).not.toHaveBeenCalled()
+            expect(createSessionMock).not.toHaveBeenCalled()
+            expect(storeSessionIdMock).not.toHaveBeenCalled()
+            expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+        } finally {
+            await act(async () => {
+                unmount()
+            })
+        }
+    })
+
+    it('should replace an expired session after stopping and preserve the draft', async () => {
+        const user = userEvent.setup()
+
+        getSessionHistoryMock.mockRejectedValueOnce(
+            new ApiError(404, 'Session not found.'),
+        )
+        createSessionMock.mockResolvedValueOnce({
+            session_id: 'replacement-session',
+        })
+        streamChatMessageMock.mockImplementationOnce(
+            (_sessionId, _message, signal) => createAbortableChatStream(signal),
+        )
+
+        const { unmount } = render(<App />)
+
+        try {
+            await screen.findByText('Agent ready')
+
+            const messageInput = screen.getByRole('textbox', {
+                name: 'Chat message',
+            })
+
+            await user.type(messageInput, 'Keep this stopped draft')
+            await user.click(screen.getByRole('button', { name: 'Send' }))
+            await screen.findByText('Provisional response to cancel')
+
+            await user.click(
+                screen.getByRole('button', { name: 'Stop response' }),
+            )
+
+            expect(
+                await screen.findByTitle('replacement-session'),
+            ).toHaveTextContent('replacement-session')
+
+            await waitFor(() => {
+                expect(messageInput).toBeEnabled()
+            })
+
+            expect(messageInput).toHaveValue('Keep this stopped draft')
+            expect(screen.getByRole('alert')).toHaveTextContent(
+                'Session expired. A new conversation is ready. Please send your message again.',
+            )
+            expect(
+                screen.queryByText('Provisional response to cancel'),
+            ).not.toBeInTheDocument()
+            expect(
+                screen.queryByRole('textbox', { name: 'Request ID' }),
+            ).not.toBeInTheDocument()
+
+            expect(getSessionHistoryMock).toHaveBeenCalledTimes(1)
+            expect(getSessionHistoryMock).toHaveBeenCalledWith('session-123')
+            expect(createSessionMock).toHaveBeenCalledTimes(1)
+            expect(storeSessionIdMock).toHaveBeenCalledWith(
+                'replacement-session',
+            )
+            expect(deleteSessionMock).not.toHaveBeenCalled()
+            expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+            expect(streamChatMessageMock.mock.calls[0]?.[2]?.aborted).toBe(true)
+        } finally {
+            await act(async () => {
+                unmount()
+            })
+        }
+    })
 
     it('should stop an active response and restore the draft without a chat error', async () => {
         const user = userEvent.setup()
