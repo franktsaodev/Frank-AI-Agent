@@ -313,6 +313,11 @@ In the chat composer, Enter sends the message and Shift+Enter inserts a
 newline. Enter events marked as composing are left to the input method
 without submitting the message.
 
+The composer automatically adjusts its height as text changes, up to
+180 pixels. Longer drafts scroll inside the input. Clearing or submitting
+the draft shrinks the composer, and restoring a draft recalculates its
+height. Resizing the browser window also recalculates the height.
+
 While a chat request is active, select **Stop response** to abort the
 browser's stream request. The frontend ignores subsequent stream events,
 removes provisional messages, reloads the saved conversation history, and

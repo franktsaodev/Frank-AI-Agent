@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, SubmitEvent } from 'react'
 
 import {
@@ -92,6 +92,7 @@ function App() {
 
     const nextMessageId = useRef(0)
     const messagesEndRef = useRef<HTMLDivElement | null>(null)
+    const composerRef = useRef<HTMLTextAreaElement | null>(null)
     const sendingRef = useRef(false)
     const mountedRef = useRef(false)
     const streamAbortControllerRef = useRef<AbortController | null>(null)
@@ -156,6 +157,39 @@ function App() {
             behavior: 'smooth',
         })
     }, [messages, isSending])
+
+    useLayoutEffect(() => {
+        const textarea = composerRef.current
+
+        if (textarea === null) {
+            return
+        }
+
+        function resizeComposer(): void {
+            if (textarea === null) {
+                return
+            }
+
+            // 先解除舊高度，才能在內容減少時縮回。
+            textarea.style.overflowY = 'hidden'
+            textarea.style.height = 'auto'
+
+            const contentHeight = textarea.scrollHeight
+
+            textarea.style.height = `${Math.min(
+                180,
+                Math.max(44, contentHeight),
+            )}px`
+            textarea.style.overflowY = contentHeight > 180 ? 'auto' : 'hidden'
+        }
+
+        resizeComposer()
+        window.addEventListener('resize', resizeComposer)
+
+        return () => {
+            window.removeEventListener('resize', resizeComposer)
+        }
+    }, [input])
 
     function createChatMessage(
         role: ChatMessageRole,
@@ -726,6 +760,7 @@ function App() {
                 <footer className="composer">
                     <form className="composer-control" onSubmit={handleSubmit}>
                         <textarea
+                            ref={composerRef}
                             aria-label="Chat message"
                             value={input}
                             onChange={(event) => {

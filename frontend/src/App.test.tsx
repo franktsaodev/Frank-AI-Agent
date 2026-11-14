@@ -357,6 +357,124 @@ describe('App', () => {
         },
     )
 
+    it('should grow and shrink the composer within its height limit', async () => {
+        render(<App />)
+        await screen.findByText('Agent ready')
+
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
+
+        let contentHeight = 96
+
+        Object.defineProperty(messageInput, 'scrollHeight', {
+            configurable: true,
+            get: () => contentHeight,
+        })
+
+        fireEvent.change(messageInput, {
+            target: { value: 'First line\nSecond line\nThird line' },
+        })
+
+        expect(messageInput).toHaveStyle({ height: '96px' })
+
+        contentHeight = 144
+
+        fireEvent(window, new Event('resize'))
+
+        expect(messageInput).toHaveStyle({ height: '144px' })
+
+        expect(streamChatMessageMock).not.toHaveBeenCalled()
+
+        contentHeight = 320
+
+        fireEvent.change(messageInput, {
+            target: { value: 'Long multiline draft\n'.repeat(20) },
+        })
+
+        expect(messageInput).toHaveStyle({
+            height: '180px',
+            overflowY: 'auto',
+        })
+
+        expect(messageInput).toHaveValue('Long multiline draft\n'.repeat(20))
+        expect(streamChatMessageMock).not.toHaveBeenCalled()
+
+        contentHeight = 44
+
+        fireEvent.change(messageInput, {
+            target: { value: '' },
+        })
+
+        expect(messageInput).toHaveStyle({
+            height: '44px',
+            overflowY: 'hidden',
+        })
+
+        expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+    })
+
+    it('should shrink the composer on submit and resize the restored draft after stopping', async () => {
+        const user = userEvent.setup()
+
+        streamChatMessageMock.mockImplementationOnce(
+            (_sessionId, _message, signal) => createAbortableChatStream(signal),
+        )
+
+        const { unmount } = render(<App />)
+
+        try {
+            await screen.findByText('Agent ready')
+
+            const messageInput = screen.getByRole('textbox', {
+                name: 'Chat message',
+            }) as HTMLTextAreaElement
+
+            Object.defineProperty(messageInput, 'scrollHeight', {
+                configurable: true,
+                get: () => (messageInput.value.length > 0 ? 116 : 44),
+            })
+
+            const draft = 'First draft line\nSecond draft line'
+
+            fireEvent.change(messageInput, {
+                target: { value: draft },
+            })
+
+            expect(messageInput).toHaveStyle({ height: '116px' })
+
+            await user.click(screen.getByRole('button', { name: 'Send' }))
+            await screen.findByText('Provisional response to cancel')
+
+            expect(messageInput).toHaveValue('')
+            expect(messageInput).toHaveStyle({
+                height: '44px',
+                overflowY: 'hidden',
+            })
+
+            await user.click(
+                screen.getByRole('button', { name: 'Stop response' }),
+            )
+
+            await waitFor(() => {
+                expect(messageInput).toBeEnabled()
+            })
+
+            expect(messageInput).toHaveValue(draft)
+            expect(messageInput).toHaveStyle({
+                height: '116px',
+                overflowY: 'hidden',
+            })
+            expect(getSessionHistoryMock).toHaveBeenCalledTimes(1)
+            expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+            expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+        } finally {
+            await act(async () => {
+                unmount()
+            })
+        }
+    })
+
     it('should preserve composing Enter and submit only after composition ends', async () => {
         const user = userEvent.setup()
 

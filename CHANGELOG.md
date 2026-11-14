@@ -29,6 +29,7 @@ Semantic Versioning.
 - Added a monitoring alert runbook with diagnostic commands and recovery guidance, linked from all three alerts through tested `runbook_url` annotations.
 - Added a frontend Stop response action with browser request cancellation, late-event protection, saved-history recovery, draft restoration, and cancellation regression tests.
 - Added frontend cancellation lifecycle regression tests for resending with a fresh abort signal, aborting on unmount without history recovery, and replacing an expired session after stopping while preserving the draft.
+- Added automatic chat composer height adjustment with a 180-pixel limit, internal scrolling for longer drafts, and regression tests for resizing, submission, and restored drafts.
 
 ### Fixed
 
