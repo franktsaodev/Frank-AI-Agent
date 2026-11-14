@@ -30,6 +30,10 @@ Semantic Versioning.
 - Added a frontend Stop response action with browser request cancellation, late-event protection, saved-history recovery, draft restoration, and cancellation regression tests.
 - Added frontend cancellation lifecycle regression tests for resending with a fresh abort signal, aborting on unmount without history recovery, and replacing an expired session after stopping while preserving the draft.
 
+### Fixed
+
+- Fixed accidental chat submission when Enter is used during IME composition, with regression tests for composing Enter and Shift+Enter multiline input.
+
 ### Changed
 
 - Changed chat-stream error logging to use fixed error codes without exception messages or tracebacks.

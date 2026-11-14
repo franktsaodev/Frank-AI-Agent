@@ -309,6 +309,10 @@ restores the submitted text to the composer. The user can inspect the saved
 conversation before manually retrying. If history cannot be loaded, the
 frontend asks the user to reload before retrying.
 
+In the chat composer, Enter sends the message and Shift+Enter inserts a
+newline. Enter events marked as composing are left to the input method
+without submitting the message.
+
 While a chat request is active, select **Stop response** to abort the
 browser's stream request. The frontend ignores subsequent stream events,
 removes provisional messages, reloads the saved conversation history, and

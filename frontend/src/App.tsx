@@ -501,6 +501,10 @@ function App() {
     function handleComposerKeyDown(
         event: KeyboardEvent<HTMLTextAreaElement>,
     ): void {
+        if (event.nativeEvent.isComposing) {
+            return
+        }
+
         if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault()
             event.currentTarget.form?.requestSubmit()

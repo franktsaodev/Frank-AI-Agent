@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -356,6 +356,97 @@ describe('App', () => {
             expect(initializeApplicationMock).toHaveBeenCalledTimes(2)
         },
     )
+
+    it('should preserve composing Enter and submit only after composition ends', async () => {
+        const user = userEvent.setup()
+
+        streamChatMessageMock.mockReturnValueOnce(
+            createChatStream([
+                {
+                    type: 'completed',
+                    response: 'Confirmed message received',
+                },
+            ]),
+        )
+
+        render(<App />)
+        await screen.findByText('Agent ready')
+
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
+
+        await user.type(messageInput, '中文訊息')
+
+        fireEvent.compositionStart(messageInput)
+
+        const composingEnterAllowed = fireEvent.keyDown(messageInput, {
+            key: 'Enter',
+            code: 'Enter',
+            isComposing: true,
+        })
+
+        expect(streamChatMessageMock).not.toHaveBeenCalled()
+        expect(composingEnterAllowed).toBe(true)
+        expect(messageInput).toHaveValue('中文訊息')
+        expect(messageInput).toBeEnabled()
+
+        fireEvent.compositionEnd(messageInput, {
+            data: '中文訊息',
+        })
+
+        await user.keyboard('{Enter}')
+
+        expect(
+            await screen.findByText('Confirmed message received'),
+        ).toBeInTheDocument()
+        expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+        expect(streamChatMessageMock).toHaveBeenCalledWith(
+            'session-123',
+            '中文訊息',
+            expect.any(AbortSignal),
+        )
+    })
+
+    it('should insert a newline with Shift+Enter without submitting', async () => {
+        const user = userEvent.setup()
+
+        streamChatMessageMock.mockReturnValueOnce(
+            createChatStream([
+                {
+                    type: 'completed',
+                    response: 'Multiline message received',
+                },
+            ]),
+        )
+
+        render(<App />)
+        await screen.findByText('Agent ready')
+
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
+
+        await user.type(messageInput, 'First line')
+        await user.keyboard('{Shift>}{Enter}{/Shift}')
+        await user.type(messageInput, 'Second line')
+
+        expect(messageInput).toHaveValue('First line\nSecond line')
+        expect(streamChatMessageMock).not.toHaveBeenCalled()
+        expect(messageInput).toBeEnabled()
+
+        await user.keyboard('{Enter}')
+
+        expect(
+            await screen.findByText('Multiline message received'),
+        ).toBeInTheDocument()
+        expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+        expect(streamChatMessageMock).toHaveBeenCalledWith(
+            'session-123',
+            'First line\nSecond line',
+            expect.any(AbortSignal),
+        )
+    })
 
     it('should resend after stopping with a fresh abort signal', async () => {
         const user = userEvent.setup()
