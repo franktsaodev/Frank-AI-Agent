@@ -564,3 +564,44 @@ button.navigation-item:not(:disabled):hover {
     color: inherit;
     font-family: ui-monospace, Consolas, monospace;
 }
+
+.response-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.response-actions button {
+    padding: 5px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    color: var(--muted);
+    background: var(--surface);
+    font: inherit;
+}
+
+.response-actions button:not(:disabled) {
+    cursor: pointer;
+}
+
+.response-actions button:not(:disabled):hover {
+    color: var(--text);
+    border-color: var(--accent);
+}
+
+.response-actions button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.response-actions button:disabled {
+    opacity: 0.6;
+}
+
+.response-actions [role='status'] {
+    overflow-wrap: anywhere;
+}

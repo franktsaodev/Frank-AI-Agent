@@ -124,6 +124,89 @@ describe('App', () => {
         })
     })
 
+    it.each([
+        {
+            outcome: 'success',
+            shouldFail: false,
+            feedback: 'Copied.',
+        },
+        {
+            outcome: 'failure',
+            shouldFail: true,
+            feedback: 'Unable to copy. Please select and copy the response.',
+        },
+    ])(
+        'should report clipboard copy $outcome without sending a chat request',
+        async ({ shouldFail, feedback }) => {
+            const user = userEvent.setup()
+            const response =
+                'First response line\nSecond response line\n' +
+                '[Source: knowledge/session.md]'
+
+            initializeApplicationMock.mockResolvedValueOnce({
+                health: healthResponse,
+                sessionId: 'session-123',
+                history: [
+                    {
+                        role: 'user',
+                        content: 'Saved user question',
+                    },
+                    {
+                        role: 'assistant',
+                        content: response,
+                    },
+                ],
+            })
+
+            const writeText = vi
+                .spyOn(navigator.clipboard, 'writeText')
+                .mockImplementation(async () => {
+                    if (shouldFail) {
+                        throw new Error('Clipboard permission denied')
+                    }
+                })
+
+            try {
+                render(<App />)
+                await screen.findByText('Agent ready')
+
+                const copyButtons = screen.getAllByRole('button', {
+                    name: 'Copy response',
+                })
+
+                // 只有助手訊息提供複製按鈕。
+                expect(copyButtons).toHaveLength(1)
+
+                await user.click(copyButtons[0])
+
+                expect(await screen.findByRole('status')).toHaveTextContent(
+                    feedback,
+                )
+                expect(writeText).toHaveBeenCalledTimes(1)
+                expect(writeText).toHaveBeenCalledWith(response)
+
+                expect(
+                    screen.getByText('Saved user question'),
+                ).toBeInTheDocument()
+                expect(
+                    screen.getByLabelText(
+                        'Verified citation: Source: knowledge/session.md',
+                    ),
+                ).toBeInTheDocument()
+                expect(
+                    screen.getByRole('textbox', { name: 'Chat message' }),
+                ).toHaveValue('')
+
+                expect(streamChatMessageMock).not.toHaveBeenCalled()
+                expect(createSessionMock).not.toHaveBeenCalled()
+                expect(getSessionHistoryMock).not.toHaveBeenCalled()
+                expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+            } finally {
+                writeText.mockRestore()
+            }
+        },
+    )
+
     it('should show the initializing state while initialization is pending', () => {
         initializeApplicationMock.mockReturnValue(createPendingPromise())
 

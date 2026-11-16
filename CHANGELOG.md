@@ -30,6 +30,7 @@ Semantic Versioning.
 - Added a frontend Stop response action with browser request cancellation, late-event protection, saved-history recovery, draft restoration, and cancellation regression tests.
 - Added frontend cancellation lifecycle regression tests for resending with a fresh abort signal, aborting on unmount without history recovery, and replacing an expired session after stopping while preserving the draft.
 - Added automatic chat composer height adjustment with a 180-pixel limit, internal scrolling for longer drafts, and regression tests for resizing, submission, and restored drafts.
+- Added per-response clipboard copying with preserved text and citation markers, independent success and failure feedback, and regression tests for retries, pending copies, and content updates.
 
 ### Fixed
 

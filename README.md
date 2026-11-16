@@ -318,6 +318,18 @@ The composer automatically adjusts its height as text changes, up to
 the draft shrinks the composer, and restoring a draft recalculates its
 height. Resizing the browser window also recalculates the height.
 
+Each non-empty assistant message has a **Copy** button. It copies the
+message's original text, preserving line breaks and `[Source: ...]`
+markers without the citation badge icons.
+
+Each message displays its own copy result. If clipboard access is
+unavailable or denied, select and copy the response manually. Copying
+does not send a chat request or change the conversation.
+
+During streaming, Copy captures the text available when clicked; later
+content is not included. Copy again after completion to capture the
+finished response.
+
 While a chat request is active, select **Stop response** to abort the
 browser's stream request. The frontend ignores subsequent stream events,
 removes provisional messages, reloads the saved conversation history, and

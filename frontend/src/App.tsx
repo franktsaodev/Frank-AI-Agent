@@ -10,6 +10,7 @@ import {
     streamChatMessage,
 } from './api/client'
 import type { HealthResponse, HistoryMessageResponse } from './api/types'
+import { CopyResponseButton } from './components/CopyResponseButton'
 import { MessageContent } from './components/MessageContent'
 import {
     initializeApplication,
@@ -722,6 +723,14 @@ function App() {
                                                 content={message.content}
                                             />
                                         </div>
+
+                                        {message.role === 'assistant' &&
+                                            message.content.length > 0 && (
+                                                <CopyResponseButton
+                                                    key={`${sessionId}:${message.id}`}
+                                                    content={message.content}
+                                                />
+                                            )}
                                     </div>
                                 </article>
                             ))}
