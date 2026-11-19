@@ -82,6 +82,9 @@ function App() {
     const [sessionId, setSessionId] = useState<string | null>(null)
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [input, setInput] = useState('')
+    const [pausedScrollSessionId, setPausedScrollSessionId] = useState<
+        string | null
+    >(null)
     const [chatStreamState, setChatStreamState] =
         useState<ChatStreamState>('idle')
     const isSending = chatStreamState !== 'idle'
@@ -93,6 +96,13 @@ function App() {
 
     const nextMessageId = useRef(0)
     const messagesEndRef = useRef<HTMLDivElement | null>(null)
+    const conversationScrollRef = useRef<{
+        sessionId: string | null
+        following: boolean
+    }>({
+        sessionId: null,
+        following: true,
+    })
     const composerRef = useRef<HTMLTextAreaElement | null>(null)
     const sendingRef = useRef(false)
     const mountedRef = useRef(false)
@@ -153,11 +163,21 @@ function App() {
         }
     }, [])
 
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({
-            behavior: 'smooth',
-        })
-    }, [messages, isSending])
+    useLayoutEffect(() => {
+        if (conversationScrollRef.current.sessionId !== sessionId) {
+            conversationScrollRef.current = {
+                sessionId,
+                following: true,
+            }
+        }
+
+        if (conversationScrollRef.current.following) {
+            messagesEndRef.current?.scrollIntoView({
+                behavior: 'instant',
+                block: 'end',
+            })
+        }
+    }, [messages, isSending, sessionId, input])
 
     useLayoutEffect(() => {
         const textarea = composerRef.current
@@ -191,6 +211,19 @@ function App() {
             window.removeEventListener('resize', resizeComposer)
         }
     }, [input])
+
+    function handleJumpToLatest(): void {
+        conversationScrollRef.current = {
+            sessionId,
+            following: true,
+        }
+        setPausedScrollSessionId(null)
+
+        messagesEndRef.current?.scrollIntoView({
+            behavior: 'instant',
+            block: 'end',
+        })
+    }
 
     function createChatMessage(
         role: ChatMessageRole,
@@ -664,6 +697,20 @@ function App() {
                             : 'conversation conversation-active'
                     }
                     aria-labelledby="conversation-heading"
+                    onScroll={(event) => {
+                        const container = event.currentTarget
+                        const distanceFromBottom =
+                            container.scrollHeight -
+                            container.clientHeight -
+                            container.scrollTop
+                        const following = distanceFromBottom <= 64
+
+                        conversationScrollRef.current = {
+                            sessionId,
+                            following,
+                        }
+                        setPausedScrollSessionId(following ? null : sessionId)
+                    }}
                 >
                     {messages.length === 0 ? (
                         <div className="welcome">
@@ -767,6 +814,18 @@ function App() {
                 </section>
 
                 <footer className="composer">
+                    {sessionId !== null &&
+                        pausedScrollSessionId === sessionId &&
+                        messages.length > 0 && (
+                            <div className="jump-latest">
+                                <button
+                                    type="button"
+                                    onClick={handleJumpToLatest}
+                                >
+                                    Jump to latest
+                                </button>
+                            </div>
+                        )}
                     <form className="composer-control" onSubmit={handleSubmit}>
                         <textarea
                             ref={composerRef}

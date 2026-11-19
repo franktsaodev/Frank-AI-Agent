@@ -124,6 +124,301 @@ describe('App', () => {
         })
     })
 
+    it('should preserve the reading position until jumping to the latest message', async () => {
+        const user = userEvent.setup()
+
+        let finishStream!: () => void
+        const streamGate = new Promise<void>((resolve) => {
+            finishStream = resolve
+        })
+
+        streamChatMessageMock.mockImplementationOnce(
+            async function* (): AsyncGenerator<ChatStreamEvent> {
+                yield {
+                    type: 'content_delta',
+                    content: 'Initial streamed content',
+                }
+
+                await streamGate
+
+                yield {
+                    type: 'completed',
+                    response:
+                        'Finished response while reading earlier messages',
+                }
+            },
+        )
+
+        const scrollIntoView = vi.mocked(Element.prototype.scrollIntoView)
+        const { unmount } = render(<App />)
+
+        try {
+            await screen.findByText('Agent ready')
+
+            await user.type(
+                screen.getByRole('textbox', { name: 'Chat message' }),
+                'Continue the conversation',
+            )
+            await user.click(screen.getByRole('button', { name: 'Send' }))
+            await screen.findByText('Initial streamed content')
+
+            const conversation = screen.getByRole('log').closest('section')
+
+            if (conversation === null) {
+                throw new Error('Conversation scroll container was not found.')
+            }
+
+            // 模擬有捲動空間，且使用者正在閱讀上方訊息。
+            Object.defineProperties(conversation, {
+                scrollHeight: {
+                    configurable: true,
+                    value: 1200,
+                },
+                clientHeight: {
+                    configurable: true,
+                    value: 400,
+                },
+                scrollTop: {
+                    configurable: true,
+                    writable: true,
+                    value: 100,
+                },
+            })
+
+            fireEvent.scroll(conversation)
+            scrollIntoView.mockClear()
+
+            await act(async () => {
+                finishStream()
+            })
+
+            await screen.findByText(
+                'Finished response while reading earlier messages',
+            )
+            await waitFor(() => {
+                expect(
+                    screen.getByRole('textbox', { name: 'Chat message' }),
+                ).toBeEnabled()
+            })
+
+            expect(scrollIntoView).not.toHaveBeenCalled()
+            expect(conversation.scrollTop).toBe(100)
+
+            await user.click(
+                screen.getByRole('button', { name: 'Jump to latest' }),
+            )
+
+            expect(scrollIntoView).toHaveBeenCalled()
+            expect(
+                screen.queryByRole('button', { name: 'Jump to latest' }),
+            ).not.toBeInTheDocument()
+            expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+        } finally {
+            await act(async () => {
+                finishStream()
+                unmount()
+            })
+        }
+    })
+
+    it('should resume following after scrolling back near the bottom', async () => {
+        const user = userEvent.setup()
+
+        let finishStream!: () => void
+        const streamGate = new Promise<void>((resolve) => {
+            finishStream = resolve
+        })
+
+        streamChatMessageMock.mockImplementationOnce(
+            async function* (): AsyncGenerator<ChatStreamEvent> {
+                yield {
+                    type: 'content_delta',
+                    content: 'Initial content before scrolling back',
+                }
+
+                await streamGate
+
+                yield {
+                    type: 'completed',
+                    response: 'Finished response after scrolling back',
+                }
+            },
+        )
+
+        const scrollIntoView = vi.mocked(Element.prototype.scrollIntoView)
+        const { unmount } = render(<App />)
+
+        try {
+            await screen.findByText('Agent ready')
+
+            await user.type(
+                screen.getByRole('textbox', { name: 'Chat message' }),
+                'Continue this response',
+            )
+            await user.click(screen.getByRole('button', { name: 'Send' }))
+            await screen.findByText('Initial content before scrolling back')
+
+            const conversation = screen.getByRole('log').closest('section')
+
+            if (conversation === null) {
+                throw new Error('Conversation scroll container was not found.')
+            }
+
+            Object.defineProperties(conversation, {
+                scrollHeight: { configurable: true, value: 1200 },
+                clientHeight: { configurable: true, value: 400 },
+                scrollTop: {
+                    configurable: true,
+                    writable: true,
+                    value: 100,
+                },
+            })
+
+            fireEvent.scroll(conversation)
+
+            expect(
+                screen.getByRole('button', { name: 'Jump to latest' }),
+            ).toBeInTheDocument()
+
+            // 距離底部 64px 時，恢復跟隨後續內容。
+            conversation.scrollTop = 736
+            fireEvent.scroll(conversation)
+
+            expect(
+                screen.queryByRole('button', { name: 'Jump to latest' }),
+            ).not.toBeInTheDocument()
+
+            scrollIntoView.mockClear()
+
+            await act(async () => {
+                finishStream()
+            })
+
+            await screen.findByText('Finished response after scrolling back')
+
+            expect(scrollIntoView).toHaveBeenCalled()
+            expect(streamChatMessageMock).toHaveBeenCalledTimes(1)
+        } finally {
+            await act(async () => {
+                finishStream()
+                unmount()
+            })
+        }
+    })
+
+    it('should follow a new conversation after pausing the previous conversation', async () => {
+        const user = userEvent.setup()
+
+        createSessionMock.mockResolvedValueOnce({
+            session_id: 'new-following-session',
+        })
+
+        deleteSessionMock.mockRejectedValueOnce(
+            new Error('Session cleanup failed'),
+        )
+
+        streamChatMessageMock
+            .mockImplementationOnce(
+                async function* (): AsyncGenerator<ChatStreamEvent> {
+                    yield {
+                        type: 'content_delta',
+                        content: 'Previous conversation response',
+                    }
+                    yield {
+                        type: 'completed',
+                        response: 'Previous conversation response',
+                    }
+                },
+            )
+            .mockImplementationOnce(
+                async function* (): AsyncGenerator<ChatStreamEvent> {
+                    yield {
+                        type: 'content_delta',
+                        content: 'New conversation response',
+                    }
+                    yield {
+                        type: 'completed',
+                        response: 'New conversation response',
+                    }
+                },
+            )
+
+        const scrollIntoView = vi.mocked(Element.prototype.scrollIntoView)
+
+        render(<App />)
+
+        await screen.findByText('Agent ready')
+
+        const messageInput = screen.getByRole('textbox', {
+            name: 'Chat message',
+        })
+
+        await user.type(messageInput, 'First conversation message')
+        await user.click(screen.getByRole('button', { name: 'Send' }))
+        await screen.findByText('Previous conversation response')
+
+        await waitFor(() => {
+            expect(messageInput).toBeEnabled()
+        })
+
+        const conversation = screen.getByRole('log').closest('section')
+
+        if (conversation === null) {
+            throw new Error('Conversation scroll container was not found.')
+        }
+
+        Object.defineProperties(conversation, {
+            scrollHeight: { configurable: true, value: 1200 },
+            clientHeight: { configurable: true, value: 400 },
+            scrollTop: {
+                configurable: true,
+                writable: true,
+                value: 100,
+            },
+        })
+
+        fireEvent.scroll(conversation)
+
+        expect(
+            screen.getByRole('button', { name: 'Jump to latest' }),
+        ).toBeInTheDocument()
+
+        await user.click(
+            screen.getByRole('button', { name: 'New conversation' }),
+        )
+
+        await waitFor(() => {
+            expect(
+                screen.queryByText('Previous conversation response'),
+            ).not.toBeInTheDocument()
+            expect(messageInput).toBeEnabled()
+        })
+
+        expect(
+            screen.queryByRole('button', { name: 'Jump to latest' }),
+        ).not.toBeInTheDocument()
+
+        scrollIntoView.mockClear()
+
+        await user.type(messageInput, 'Second conversation message')
+        await user.click(screen.getByRole('button', { name: 'Send' }))
+        await screen.findByText('New conversation response')
+
+        await waitFor(() => {
+            expect(messageInput).toBeEnabled()
+        })
+
+        expect(scrollIntoView).toHaveBeenCalled()
+        expect(streamChatMessageMock).toHaveBeenLastCalledWith(
+            'new-following-session',
+            'Second conversation message',
+            expect.any(AbortSignal),
+        )
+        expect(
+            screen.queryByRole('button', { name: 'Jump to latest' }),
+        ).not.toBeInTheDocument()
+    })
+
     it.each([
         {
             outcome: 'success',

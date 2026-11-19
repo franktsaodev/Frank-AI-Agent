@@ -318,6 +318,11 @@ The composer automatically adjusts its height as text changes, up to
 the draft shrinks the composer, and restoring a draft recalculates its
 height. Resizing the browser window also recalculates the height.
 
+The conversation follows new messages while you are near the bottom.
+Scroll up to read earlier messages without losing your place as a response
+streams. Select **Jump to latest**, or scroll back near the bottom, to
+resume following. A new conversation starts with following enabled.
+
 Each non-empty assistant message has a **Copy** button. It copies the
 message's original text, preserving line breaks and `[Source: ...]`
 markers without the citation badge icons.
